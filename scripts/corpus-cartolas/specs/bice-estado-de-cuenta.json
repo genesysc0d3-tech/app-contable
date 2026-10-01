@@ -1,0 +1,104 @@
+{
+ "id": "bice-estado-de-cuenta",
+ "familia": "BICE 'ESTADO DE CUENTA' (FECHA DESDE/HASTA, FECHA yyyymmdd en texto, SALDO INICIAL/FINAL abajo)",
+ "origen": "real",
+ "evidencia": "3 cartolas reales: capa 4 en prod 4 veces el 2026-09-23; hoy capa 2 y una sella total_banco",
+ "hoja": "cartola",
+ "arriba": [
+  [],
+  [],
+  [],
+  [],
+  [
+   "ESTADO DE CUENTA"
+  ],
+  [
+   "{EMPRESA}"
+  ],
+  [
+   "NOMBRE DEL CLIENTE",
+   "CUENTA"
+  ],
+  [
+   "{TITULAR}",
+   "{CUENTA_GUION}"
+  ],
+  [
+   "FECHA DESDE",
+   "FECHA HASTA"
+  ],
+  [
+   "{FECHA_DESDE_GUION}",
+   "{FECHA_HASTA_GUION}"
+  ],
+  [],
+  [
+   "MOVIMIENTOS DE LA CUENTA"
+  ]
+ ],
+ "titulos": true,
+ "todo_texto": true,
+ "columnas": [
+  {
+   "titulo": "FECHA",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "yyyymmdd"
+  },
+  {
+   "titulo": "DOCUMENTO",
+   "rol": "doc"
+  },
+  {
+   "titulo": "CODIGO",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "DESCRIPCION",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "CARGOS",
+   "rol": "cargo",
+   "celda": "n"
+  },
+  {
+   "titulo": "ABONOS",
+   "rol": "abono",
+   "celda": "n"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "ambas",
+ "pie": [],
+ "abajo": [
+  [],
+  [
+   "",
+   "",
+   "SALDO INICIAL",
+   "SALDO FINAL"
+  ],
+  [
+   "",
+   "",
+   "{SALDO_INICIAL}",
+   "{SALDO_FINAL}"
+  ],
+  [],
+  [
+   "",
+   "",
+   "",
+   "Movimientos al cierre del dia"
+  ]
+ ],
+ "filas_vacias_al_final": [
+  0,
+  3
+ ],
+ "movs": [
+  10,
+  200
+ ]
+}

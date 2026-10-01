@@ -1,0 +1,43 @@
+{
+ "id": "me-planilla-fecha-monto-comision",
+ "familia": "Planilla casera M&E (fecha Excel + monto + comisión, sin glosa, 1.000 filas fantasma)",
+ "origen": "incidente",
+ "evidencia": "memoria project_planillas_caseras_sin_ia (2026-08-22/28): 338 remesas; un Excel de la clienta leyó 68 filas con el MISMO monto y fechas 2009-2091",
+ "hoja": "Hoja1",
+ "arriba": [],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "dd-mm-yyyy"
+  },
+  {
+   "titulo": "Monto",
+   "rol": "monto",
+   "celda": "n",
+   "z": "#,##0"
+  },
+  {
+   "titulo": "Comisión",
+   "rol": "comision",
+   "z": "#,##0"
+  }
+ ],
+ "rango_montos": [
+  20000,
+  400000
+ ],
+ "orden": "asc",
+ "direcciones": "solo_entradas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  600,
+  1005
+ ],
+ "movs": [
+  40,
+  340
+ ]
+}

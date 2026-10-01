@@ -1,0 +1,56 @@
+{
+ "id": "clp-bs-montos-como-fecha",
+ "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+ "origen": "real+incidente",
+ "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+ "hoja": "CLP-Bs 08-26 VZLA",
+ "arriba": [
+  [],
+  [
+   "Ingresos"
+  ],
+  "{BLOQUE_NUMEROS_14}"
+ ],
+ "titulos": false,
+ "columnas": [
+  {
+   "titulo": "",
+   "rol": "monto",
+   "celda": "n",
+   "z": "#,##0.00"
+  },
+  {
+   "titulo": "",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "dd/mm/yyyy"
+  },
+  {
+   "titulo": "",
+   "rol": "tasa",
+   "z": "#,##0.00000"
+  }
+ ],
+ "rango_montos": [
+  20000,
+  60000
+ ],
+ "ancho_vacio": 25,
+ "orden": "asc",
+ "direcciones": "solo_entradas",
+ "pie": [
+  {
+   "tipo": "sum",
+   "rol": "monto",
+   "gap": 6
+  }
+ ],
+ "filas_vacias_al_final": [
+  0,
+  900
+ ],
+ "movs": [
+  60,
+  320
+ ]
+}

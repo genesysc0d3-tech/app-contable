@@ -1,0 +1,1816 @@
+[
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Hash de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds000:core_nuevo_internacional_titulos_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "codigo",
+    "titulo": "Hash de transacción",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró su core a un proveedor internacional (Temenos/Finacle) y el export hereda headers en inglés, fecha ISO y un hash único de transacción, además el orden pasó a ascendente.",
+  "variante": "bci-detallado-invertido~ds000"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Razón social",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_con_rut_y_sucursal"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "nombre",
+    "titulo": "Razón social",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 8,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanza la cartola para empresas: agrega RUT, razón social y sucursal, y manda la glosa al final para que el contador vea primero los datos tributarios.",
+  "variante": "bci-detallado-invertido~ds001"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo acumulado",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds002:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo acumulado",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema entrega un solo campo 'Monto' con signo (abonos positivos, cargos negativos), elimina las columnas separadas y renombra el saldo.",
+  "variante": "bci-detallado-invertido~ds002"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:descarga_csv_punto_y_coma_sin_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo módulo de descargas de la banca en línea exporta CSV con separador punto y coma (para Excel chileno), sin fila de títulos y con fechas dd/mm.",
+  "variante": "bci-detallado-invertido~ds003"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "extras": {
+   "saldo_inicial_fila": true,
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds004:cartola_empresa_con_hoja_resumen_y_subto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión empresa agrega una hoja de resumen antes de los movimientos, fila de saldo inicial y subtotales por día para facilitar el cuadre del contador.",
+  "variante": "bci-detallado-invertido~ds004"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds005:export_solo_ingresos_para_declaracion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco ofrece un export 'Solo ingresos' para la declaración de renta: filtra únicamente abonos y elimina las columnas de egreso y saldo.",
+  "variante": "bci-detallado-invertido~ds005"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds006:legacy_mainframe_xls_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El export sale del mainframe legacy vía un generador que escribe todo como texto con formato chileno ($1.234.567) en .xls antiguo.",
+  "variante": "bci-detallado-invertido~ds006"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "cero"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "cero"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds007:glosa_partida_encabezado_y_filas_vacias"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_cero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco partió la glosa en dos filas (detalle + referencia), antepuso encabezados de emisión de la cartola y el formato de impresión dejó filas vacías intercaladas con ceros.",
+  "variante": "bci-detallado-invertido~ds007"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código transaccional",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Detalle del movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds008:ascendente_renombrado_y_correlativo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "codigo",
+    "titulo": "Código transaccional",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle del movimiento",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema entrega la cartola en orden ascendente, renombra los títulos a la nomenclatura del contrato y antepone una columna correlativa de índice.",
+  "variante": "bci-detallado-invertido~ds008"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds009:libro_con_instrucciones_y_totales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco adjunta una hoja de instrucciones al final del libro, un resumen con totales al pie de los movimientos y combina celdas en el encabezado de la hoja principal.",
+  "variante": "bci-detallado-invertido~ds009"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Cargo",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds100:borra_codigo_y_simplifica_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "codigo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Descripción",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Abono",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "cargo",
+    "titulo": "Cargo",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta no entiende el código de transacción y renombra las columnas con sus propios términos para cuadrar su contabilidad.",
+  "variante": "bci-detallado-invertido~ds100"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds101:filtra_solo_depositos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta filtra la cartola para revisar solo sus ingresos y arma un resumen manual aparte.",
+  "variante": "bci-detallado-invertido~ds101"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds102:agrega_total_y_suma_al_final"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega una fila de totales con fórmula SUMA al final para conciliar contra su libro.",
+  "variante": "bci-detallado-invertido~ds102"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds103:une_cargo_y_abono_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "Monto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta junta ingresos y egresos en una sola columna con signo para alimentar su propia planilla, y descarta el saldo.",
+  "variante": "bci-detallado-invertido~ds103"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds104:pega_como_texto_con_fechas_guion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copia los datos a su plantilla y los pega como texto: fechas dd-mm-yyyy y montos en pesos, perdiendo el formato numérico.",
+  "variante": "bci-detallado-invertido~ds104"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "mutaciones": [
+   "ds105:agrega_indice_y_mueve_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega un número de fila para referenciar movimientos y mueve el saldo al lado de la fecha para leerlo primero.",
+  "variante": "bci-detallado-invertido~ds105"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds106:exporta_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyymmdd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta exporta a CSV con separador ; porque su sistema contable así lo exige, compacta las fechas y agrega una fila total.",
+  "variante": "bci-detallado-invertido~ds106"
+ },
+ {
+  "id": "bci-detallado-invertido",
+  "familia": "BCI Detallado con columnas en orden de Banco de Chile (cargo a la izquierda) y hash como primera columna de texto",
+  "origen": "deepseek-mutacion",
+  "evidencia": "incidente 2026-09-26: la heurística con 'cargo a la izquierda' fija invirtió ingreso/egreso y tomó el hash como glosa",
+  "hoja": "Movimientos Detallado",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   300
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "mutaciones": [
+   "ds107:borra_codigo_ordena_y_agrega_saldo_inici"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "codigo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta elimina el código, ordena de menor a mayor por fecha y antepone una fila con el saldo inicial para su conciliación manual.",
+  "variante": "bci-detallado-invertido~ds107"
+ }
+]

@@ -1,0 +1,64 @@
+{
+ "id": "mis-movimientos-solo-ingresos",
+ "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+ "origen": "real",
+ "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+ "hoja": "Hoja 1",
+ "arriba": [
+  [
+   "",
+   "",
+   "Mis Movimientos"
+  ]
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha Transacción",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Fecha Contable",
+   "rol": "fecha2",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Egreso (-)",
+   "rol": "cargo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Ingreso (+)",
+   "rol": "abono",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  }
+ ],
+ "orden": "desc",
+ "direcciones": "solo_entradas",
+ "filtrada": true,
+ "pie": [
+  {
+   "tipo": "sum",
+   "rol": "abono",
+   "gap": 0,
+   "prob": 0.5
+  }
+ ],
+ "filas_vacias_al_final": [
+  0,
+  900
+ ],
+ "movs": [
+  20,
+  90
+ ]
+}

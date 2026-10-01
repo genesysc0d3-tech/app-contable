@@ -1,0 +1,143 @@
+{
+ "id": "bci-movimientos-detallado",
+ "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+ "origen": "real+incidente",
+ "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+ "hoja": "Hoja 1",
+ "arriba": [],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha de transacción",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Hora transacción",
+   "rol": "hora"
+  },
+  {
+   "titulo": "Fecha contable",
+   "rol": "fecha2",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Código de transacción",
+   "rol": "codigo"
+  },
+  {
+   "titulo": "Código Transferencia",
+   "rol": "doc"
+  },
+  {
+   "titulo": "Tipo de transacción",
+   "rol": "tipo_txt"
+  },
+  {
+   "titulo": "Numero serie",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Glosa detalle",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Ingreso (+)",
+   "rol": "abono",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Egreso (-)",
+   "rol": "cargo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Saldo contable",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Nombre",
+   "rol": "nombre"
+  },
+  {
+   "titulo": "RUT",
+   "rol": "rut"
+  },
+  {
+   "titulo": "N° de Cuenta",
+   "rol": "cuenta_contraparte"
+  },
+  {
+   "titulo": "Tipo de Cuenta",
+   "rol": "sucursal"
+  },
+  {
+   "titulo": "Banco",
+   "rol": "sucursal"
+  },
+  {
+   "titulo": "Correo electrónico",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Comentario transferencia",
+   "rol": "comentario"
+  },
+  {
+   "titulo": "Servicio",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "N° Cliente",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Empresa",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Tipo de compra",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Rubro",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Comuna",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Tipo de movimiento",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Nº de tarjeta",
+   "rol": "vacia"
+  }
+ ],
+ "orden": "desc",
+ "direcciones": "ambas",
+ "pie": [
+  {
+   "tipo": "sum",
+   "rol": "abono",
+   "gap": 0,
+   "prob": 0.7
+  }
+ ],
+ "filas_vacias_al_final": [
+  0,
+  400
+ ],
+ "movs": [
+  30,
+  500
+ ]
+}

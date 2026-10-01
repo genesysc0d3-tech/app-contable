@@ -1,0 +1,90 @@
+{
+ "id": "bci-transferencias-recibidas",
+ "familia": "BCI transferencias recibidas (Ingreso (+) + TOTAL)",
+ "origen": "real",
+ "evidencia": "2 cartolas reales (500 y 141 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono'",
+ "hoja": "Hoja 1",
+ "arriba": [],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha de transacción",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Código Transferencia",
+   "rol": "doc",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Ingreso (+)",
+   "rol": "monto",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Nombre",
+   "rol": "nombre"
+  },
+  {
+   "titulo": "RUT",
+   "rol": "rut"
+  },
+  {
+   "titulo": "Servicio",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "N° Cliente",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Empresa",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Tipo de compra",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Rubro",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Comuna",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Tipo de movimiento",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Nº de tarjeta",
+   "rol": "vacia"
+  }
+ ],
+ "orden": "desc",
+ "direcciones": "solo_entradas",
+ "pie": [
+  {
+   "tipo": "fila_total",
+   "etiqueta": "TOTAL",
+   "col_etiqueta": 1,
+   "roles": [
+    "monto"
+   ],
+   "formula": true,
+   "gap": 2
+  }
+ ],
+ "filas_vacias_al_final": [
+  0,
+  300
+ ],
+ "movs": [
+  40,
+  500
+ ]
+}

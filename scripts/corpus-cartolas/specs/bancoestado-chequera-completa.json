@@ -1,0 +1,77 @@
+{
+ "id": "bancoestado-chequera-completa",
+ "familia": "BancoEstado Chequera Electrónica completa (Cheques / Cargos | Depósitos / Abonos | Saldo)",
+ "origen": "real",
+ "evidencia": "1 cartola real (9 filas): capa 4 en prod el 2026-09-23; hoy capa 3 sin sello (menos de 10 filas)",
+ "hoja": "Movimientos",
+ "base": "bancoestado-chequera-solo-abonos",
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd/mm"
+  },
+  {
+   "titulo": "Sucursal",
+   "rol": "sucursal"
+  },
+  {
+   "titulo": "N° Cuenta",
+   "rol": "cuenta_fija"
+  },
+  {
+   "titulo": "Alias",
+   "rol": "alias_fijo"
+  },
+  {
+   "titulo": "N° Cartola",
+   "rol": "ncartola_fijo"
+  },
+  {
+   "titulo": "N° Operación",
+   "rol": "doc"
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Cheques / Cargos",
+   "rol": "cargo",
+   "celda": "n",
+   "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0",
+   "vacio": "cero"
+  },
+  {
+   "titulo": "Depósitos / Abonos",
+   "rol": "abono",
+   "celda": "n",
+   "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0",
+   "vacio": "cero"
+  },
+  {
+   "titulo": "Saldo",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+  }
+ ],
+ "direcciones": "ambas",
+ "filtrada": false,
+ "ceros_texto": [
+  0,
+  0
+ ],
+ "pie": [
+  {
+   "tipo": "sum",
+   "rol": "abono",
+   "gap": 2
+  }
+ ],
+ "movs": [
+  6,
+  60
+ ]
+}

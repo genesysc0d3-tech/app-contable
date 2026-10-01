@@ -1,0 +1,1577 @@
+[
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Valor",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Importe",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds000:core_nuevo_renombra_columnas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha Valor",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Descripción",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Importe",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migra a un nuevo core bancario (Temenos/Transact) y el export hereda los nombres de los campos del sistema: 'Fecha' pasa a 'Fecha Valor', 'Glosa' a 'Descripción' y 'Monto' a 'Importe'.",
+  "variante": "plantilla-massdte-boletas~ds000"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "otro_texto"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_debitos_creditos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Créditos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para empresas separa débitos y créditos en columnas propias para facilitar la contabilidad, y agrega el saldo al final.",
+  "variante": "plantilla-massdte-boletas~ds001"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds002:export_csv_semicolon_iso"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en_dec",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo exportador del banco entrega CSV con separador punto y coma (configuración regional) y fechas en formato ISO para evitar ambigüedades.",
+  "variante": "plantilla-massdte-boletas~ds002"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Código",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "otro_texto"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds003:version_completa_con_codigo_sucursal_sal"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "codigo",
+    "titulo": "Código",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema para empresas agrega código de operación, sucursal y saldo, reordenando las columnas (glosa queda como segunda columna).",
+  "variante": "plantilla-massdte-boletas~ds003"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds004:version_internacional_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanza una versión del export en inglés para clientes corporativos internacionales, con fechas en formato ISO.",
+  "variante": "plantilla-massdte-boletas~ds004"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds005:glosa_partida_con_detalle"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "Detalle",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema separa la glosa corta del detalle del movimiento y los emite en dos filas con una columna 'Detalle' adicional.",
+  "variante": "plantilla-massdte-boletas~ds005"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds006:cartola_mensual_con_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La cartola mensual rediseñada incluye fila de saldo inicial, subtotales por día y un resumen de totales al pie para el cliente.",
+  "variante": "plantilla-massdte-boletas~ds006"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds007:fechas_excel_reales_montos_signo_sin_tit"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo export formatea las fechas como celdas de fecha reales (dd-mm-yyyy), unifica montos con signo y omite la fila de títulos por configuración del sistema.",
+  "variante": "plantilla-massdte-boletas~ds007"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos_pegado"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "formato": "xls",
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds008:export_xls_antiguo_montos_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos_pegado",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco mantiene una versión legacy en XLS antiguo donde los montos salen como texto (para no perder ceros) y los saldos nulos como guiones.",
+  "variante": "plantilla-massdte-boletas~ds008"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   300,
+   800
+  ],
+  "mutaciones": [
+   "ds009:version_solo_ingresos_filtrada"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "muchas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión 'solo ingresos' para el SII filtra únicamente abonos, elimina la columna de saldo y entrega la cartola completa de un año en orden descendente.",
+  "variante": "plantilla-massdte-boletas~ds009"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Doc",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds100:renombra_y_agrega_rut"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha Doc",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta renombra las columnas a su gusto, agrega el RUT de cada cliente para cuadrar sus registros y deja el monto al final.",
+  "variante": "plantilla-massdte-boletas~ds100"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Concepto",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   },
+   {
+    "titulo": "Obs",
+    "rol": "comentario"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "mutaciones": [
+   "ds101:separa_cargo_y_abono_con_obs"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "Obs",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Concepto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para cuadrar su caja, la clienta parte el Monto en dos columnas (Cargo/Abono) y agrega una columna de observaciones.",
+  "variante": "plantilla-massdte-boletas~ds101"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "F. Emisión",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds102:totales_al_pie"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "F. Emisión",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta calcula el total con la fórmula SUMA de Excel y deja la fila de total al final de la tabla.",
+  "variante": "plantilla-massdte-boletas~ds102"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   4,
+   9
+  ],
+  "mutaciones": [
+   "ds103:filtra_reordena_y_poda"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "pocas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta borra los meses ya cuadrados, deja solo los abonos recientes y los ordena del más nuevo al más antiguo.",
+  "variante": "plantilla-massdte-boletas~ds103"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds104:formatos_a_texto_para_mail"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copia la cartola a un correo: los montos se pegan como texto con signo $ y punto de miles, y las fechas quedan como dd-mm-aaaa.",
+  "variante": "plantilla-massdte-boletas~ds104"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds105:exporta_csv_para_sistema"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El contador pide la cartola en CSV con separador punto y coma, fechas ISO y montos con decimales para importarla a su sistema.",
+  "variante": "plantilla-massdte-boletas~ds105"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy",
+    "span": 2
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds106:hojas_extra_con_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta crea una hoja de resumen antes de la cartola y una de instrucciones al final, y combina celdas del encabezado para que se vea ordenado.",
+  "variante": "plantilla-massdte-boletas~ds106"
+ },
+ {
+  "id": "plantilla-massdte-boletas",
+  "familia": "Plantilla massDTE (Fecha | Glosa | Monto) llenada por la clienta",
+  "origen": "deepseek-mutacion",
+  "evidencia": "10 cartolas reales (3-244 filas): sello 'cliente' por diseño",
+  "hoja": "Boletas",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "m/d/yy"
+   },
+   {
+    "titulo": "Glosa",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Valor",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   3,
+   250
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds107:saldo_inicial_y_glosa_partida"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Valor",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta parte con una fila de saldo inicial, desglosa la glosa en dos líneas para anotar el detalle de la compra y agrega subtotales por día.",
+  "variante": "plantilla-massdte-boletas~ds107"
+ }
+]

@@ -1,0 +1,4653 @@
+[
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Tipo Mov.",
+    "rol": "otro_texto"
+   },
+   {
+    "titulo": "Monto Neto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds000:nuevo_core_monto_firmado"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Monto Neto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "flag",
+    "titulo": "Tipo Mov.",
+    "posicion": 7,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco cambió de core bancario y ahora exporta un único monto con signo en vez de solo abonos, y modernizó títulos y fechas.",
+  "variante": "bancoestado-chequera-solo-abonos~ds000"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "RUT Cliente",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Sucursal / Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Centro de Costo",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds001:version_empresas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT Cliente",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "codigo",
+    "titulo": "Centro de Costo",
+    "posicion": 8,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal / Oficina",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "Total Abonos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanzó una versión para empresas que agrega RUT y centro de costo, renombra sucursal y cierra con total.",
+  "variante": "bancoestado-chequera-solo-abonos~ds001"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds002:version_personas_simplificada"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "otro_texto",
+    "titulo": "Alias",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "N° Cartola",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para personas elimina Alias y N° Cartola, y entrega la fecha como fecha real de Excel y montos numéricos.",
+  "variante": "bancoestado-chequera-solo-abonos~ds002"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds003:cartola_completa_cargo_abono"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Abonos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "Total",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco dejó de filtrar solo abonos y ahora entrega la cartola completa separando cargos y abonos, ordenada de más reciente a más antigua.",
+  "variante": "bancoestado-chequera-solo-abonos~ds003"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "en"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds004:ingles_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Nuevo proveedor internacional exporta títulos en inglés, CSV con separador ';' y fechas ISO.",
+  "variante": "bancoestado-chequera-solo-abonos~ds004"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds005:resumen_arriba_saldo_inicial"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "Total",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Rediseño del layout: el resumen pasa arriba con saldo inicial, fila de total y una fila de título decorativo.",
+  "variante": "bancoestado-chequera-solo-abonos~ds005"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds006:csv_liquidacion_clp"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ","
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Export de liquidación en CSV: montos como texto con formato CLP, ceros como texto y columna de índice.",
+  "variante": "bancoestado-chequera-solo-abonos~ds006"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   300,
+   800
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds007:core_moderno_fechas_yy"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "muchas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core usa fechas dd/mm/yy, montos con decimales, agrega subtotales por día y el export viene con muchísimas filas.",
+  "variante": "bancoestado-chequera-solo-abonos~ds007"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "formato": "xls",
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds008:export_legacy_mainframe"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Migración desde un mainframe: el banco entrega temporalmente un XLS antiguo sin fila de títulos, con basura arriba y filas vacías intercaladas.",
+  "variante": "bancoestado-chequera-solo-abonos~ds008"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "Glosa / Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds009:layout_instrucciones_celdas_combinadas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Glosa / Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Nuevo layout con hoja de instrucciones después, encabezado con celdas combinadas, columna de operación movida al inicio y glosa renombrada.",
+  "variante": "bancoestado-chequera-solo-abonos~ds009"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds100:solo_columnas_utiles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "codigo",
+    "titulo": "N° Cuenta",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_texto",
+    "titulo": "Alias",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_texto",
+    "titulo": "N° Cartola",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta borra las columnas fijas porque siempre repiten el mismo valor y renombra el encabezado del monto para su registro interno.",
+  "variante": "bancoestado-chequera-solo-abonos~ds100"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Movimiento",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds101:descripcion_junto_a_fecha"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha Movimiento",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta mueve la Descripción junto a la Fecha para revisar la cronología de un vistazo y cambia el encabezado de la columna de fecha.",
+  "variante": "bancoestado-chequera-solo-abonos~ds101"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds102:csv_para_contabilidad"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta exporta a CSV con separador punto y coma para subirla a su sistema contable, dejando montos como números puros y fechas en ISO.",
+  "variante": "bancoestado-chequera-solo-abonos~ds102"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds103:resumen_con_titulo_y_total"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega un título arriba con celdas combinadas y una fila de total abajo para imprimir el resumen del mes.",
+  "variante": "bancoestado-chequera-solo-abonos~ds103"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds104:pegado_como_valores"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copia los movimientos a otra hoja y pega 'como valores', quedando las fechas como serial de Excel y los montos como texto con separador de miles.",
+  "variante": "bancoestado-chequera-solo-abonos~ds104"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds105:subtotales_por_dia"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta inserta subtotales por día y una fórmula SUMA al final para cuadrar sus ingresos diarios.",
+  "variante": "bancoestado-chequera-solo-abonos~ds105"
+ },
+ {
+  "id": "bancoestado-chequera-solo-abonos",
+  "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "9 cartolas reales (30-35 filas): 'todo entrada' correcto; celdas '$0' en texto; =SUM al pie; el Resumen (saldo inicial/total abonos/saldo final) está en OTRA hoja",
+  "hoja": "Movimientos",
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "{EMAIL_FICTICIO}"
+     ],
+     [],
+     [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Fecha - Hora {FECHA} {HORA}"
+     ],
+     [],
+     [
+      "Nombre Empresa",
+      "",
+      "",
+      "",
+      "{EMPRESA}"
+     ],
+     [
+      "Rut Empresa",
+      "",
+      "",
+      "",
+      "{RUT}"
+     ],
+     [
+      "Nombre Usuario",
+      "",
+      "",
+      "",
+      "{USUARIO}"
+     ],
+     [
+      "Rut Usuario",
+      "",
+      "",
+      "",
+      "{RUT2}"
+     ],
+     [
+      "Cartóla Histórica de Chequera Electrónica"
+     ],
+     [
+      "N° Cuenta",
+      "",
+      "",
+      "",
+      "{CUENTA}"
+     ],
+     [
+      "Alias",
+      "",
+      "",
+      "",
+      "{ALIAS}"
+     ],
+     [
+      "Fecha Inicio",
+      "",
+      "",
+      "",
+      "{FECHA_DESDE}"
+     ],
+     [
+      "Fecha Final",
+      "",
+      "",
+      "",
+      "{FECHA_HASTA}"
+     ],
+     [
+      "Fecha Emisión",
+      "",
+      "",
+      "",
+      "{FECHA}"
+     ],
+     [
+      "N° Cartola",
+      "",
+      "",
+      "",
+      "{NCARTOLA}"
+     ],
+     [
+      "N° Movimientos",
+      "",
+      "",
+      "",
+      "{N_MOVS_TOTAL}"
+     ],
+     [
+      "Saldo Inicial",
+      "",
+      "",
+      "",
+      "{SALDO_INICIAL|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cargos",
+      "",
+      "",
+      "",
+      "{TOTAL_CARGOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Cheques",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Total Abonos",
+      "",
+      "",
+      "",
+      "{TOTAL_ABONOS|cl_pesos_pegado}"
+     ],
+     [
+      "Total Depósitos",
+      "",
+      "",
+      "",
+      "$0"
+     ],
+     [
+      "Saldo Final",
+      "",
+      "",
+      "",
+      "{SALDO_FINAL|cl_pesos_pegado}"
+     ]
+    ]
+   }
+  ],
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Cuenta",
+    "rol": "cuenta_fija"
+   },
+   {
+    "titulo": "Alias",
+    "rol": "alias_fijo"
+   },
+   {
+    "titulo": "N° Cartola",
+    "rol": "ncartola_fijo"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Depósitos / Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"#,##0;[Red]\\-\"$\"#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "ceros_texto": [
+   0,
+   6
+  ],
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 2
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds106:descendente_con_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta reordena de más reciente a más antigua y agrega una columna índice para referenciar cada movimiento.",
+  "variante": "bancoestado-chequera-solo-abonos~ds106"
+ }
+]

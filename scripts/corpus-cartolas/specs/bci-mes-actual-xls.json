@@ -1,0 +1,96 @@
+{
+ "id": "bci-mes-actual-xls",
+ "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+ "origen": "real",
+ "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+ "hoja": "cartola",
+ "formato": "xls",
+ "arriba": [
+  [
+   "",
+   "Banco de Crédito e Inversiones"
+  ],
+  [],
+  [
+   "",
+   "Nombre",
+   "{TITULAR}"
+  ],
+  [
+   "",
+   "RUT",
+   "{RUT}"
+  ],
+  [
+   "",
+   "Usuario",
+   "{USUARIO}"
+  ],
+  [
+   "",
+   "Fecha",
+   "{FECHA_LARGA}"
+  ],
+  [],
+  [
+   "",
+   "Cartola de Cuenta Corriente N° :",
+   "",
+   "",
+   "{NCARTOLA}"
+  ],
+  [],
+  [],
+  [
+   "",
+   "Movimientos_Mes_Actual"
+  ],
+  []
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd-mm-yyyy"
+  },
+  {
+   "titulo": "Oficina",
+   "rol": "sucursal"
+  },
+  {
+   "titulo": "Movimiento",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "N° Documento",
+   "rol": "doc_corto"
+  },
+  {
+   "titulo": "Abono EXENTAS",
+   "rol": "monto",
+   "celda": "n",
+   "z": "\"$\"\\ #,##0"
+  },
+  {
+   "titulo": "",
+   "rol": "vacia"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "solo_entradas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  4
+ ],
+ "movs": [
+  30,
+  120
+ ]
+}

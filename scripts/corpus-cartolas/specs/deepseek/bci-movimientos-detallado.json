@@ -1,0 +1,3456 @@
+[
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds000:core_nuevo_monto_firmado"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Descripción",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": 8,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "comentario",
+    "titulo": "Comentario",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró a un core bancario en la nube y el nuevo export simplifica a un único monto con signo, glosa renombrada y fechas en ISO.",
+  "variante": "bci-movimientos-detallado~ds000"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión Empresas del portal agrega fila de saldo inicial, resumen de cargos/abonos al pie y fila de totales para la conciliación contable.",
+  "variante": "bci-movimientos-detallado~ds001"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds002:nuevo_sistema_reordena_y_numera"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "vacia",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema numera cada movimiento, junta la fecha contable junto a la de transacción y ordena la cartola ascendente por fecha contable.",
+  "variante": "bci-movimientos-detallado~ds002"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:export_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El portal ahora ofrece descarga CSV con separador de punto y coma; los montos salen como texto '1.234.567' y las fechas en dd/mm/aaaa para no perder formato.",
+  "variante": "bci-movimientos-detallado~ds003"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds004:personas_solo_ingresos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "rut",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para personas físicas del nuevo portal filtra la cartola a solo depósitos y elimina columnas de contraparte (RUT, saldo) que no aplican a cuentas individuales.",
+  "variante": "bci-movimientos-detallado~ds004"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Time",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Value date",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds005:app_movil_resumen_arriba"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo home banking muestra el resumen de saldos arriba, con filas de encabezado/basura previas y los títulos de columna traducidos al inglés.",
+  "variante": "bci-movimientos-detallado~ds005"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds006:core_internacional_fechas_compactas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyymmdd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "Valor",
+    "posicion": 8,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El core internacional entrega fechas compactas YYYYMMDD, un único monto firmado y los montos como número plano sin separadores de miles.",
+  "variante": "bci-movimientos-detallado~ds006"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds007:glosas_partidas_subtotal_diario"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo motor de glosas parte los textos multilínea en dos filas y el portal inserta subtotales por día dentro del estado de cuenta.",
+  "variante": "bci-movimientos-detallado~ds007"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds008:version_contable_glosa_adelante"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para contadores reordena la cartola dejando la glosa al inicio, agrega una hoja de instrucciones al final y ordena ascendente.",
+  "variante": "bci-movimientos-detallado~ds008"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Tipo",
+    "rol": "flag",
+    "flag": {
+     "entrada": "Abono",
+     "salida": "Cargo"
+    }
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds009:xls_antiguo_fechas_nativas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_y_bandera",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": 8,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco conserva un export .xls antiguo con fechas como celdas de fecha nativas de Excel y un único monto con bandera Cargo/Abono en vez de dos columnas.",
+  "variante": "bci-movimientos-detallado~ds009"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds100:compacta_montos_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": 8,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta deja solo lo esencial: une Ingreso y Egreso en un solo Monto con signo (negativos para egresos) y borra las columnas que nunca mira.",
+  "variante": "bci-movimientos-detallado~ds100"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds101:solo_abonos_con_total"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para conciliar solo lo que entró a la cuenta, filtra los egresos y agrega el total de abonos al final.",
+  "variante": "bci-movimientos-detallado~ds101"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds102:resumen_arriba_fechas_iso_asc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Agrega un mini resumen arriba para el contador, reordena de más antiguo a más nuevo y cambia las fechas a ISO para no confundir día/mes.",
+  "variante": "bci-movimientos-detallado~ds102"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "mutaciones": [
+   "ds103:limpieza_con_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Ingreso",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta borra el saldo y todas las columnas vacías de banco, agrega un índice correlativo y renombra 'Ingreso (+)'.",
+  "variante": "bci-movimientos-detallado~ds103"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos_pegado"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos_pegado"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos_pegado"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds104:glosa_partida_y_totales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos_pegado",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Al pegar el detalle desde el visor web, las glosas largas quedaron partidas en dos filas y ella agregó un total abajo.",
+  "variante": "bci-movimientos-detallado~ds104"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds105:csv_con_pesos_y_resumen_abajo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Exportó la hoja a CSV separado por punto y coma, dejó montos en pesos con separador de miles y pegó un resumen al pie.",
+  "variante": "bci-movimientos-detallado~ds105"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Time",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Value date",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds106:hoja_resumen_titulos_ingles_sin_basura"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta preparó una hoja resumen antes de la cartola y tradujo los títulos al inglés para su socio extranjero, quitando columnas vacías.",
+  "variante": "bci-movimientos-detallado~ds106"
+ },
+ {
+  "id": "bci-movimientos-detallado",
+  "familia": "BCI 'Movimientos Detallado' (Ingreso antes que Egreso, hash de glosa)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real + incidente 2026-09-26 (adaptador global con ingreso/egreso invertidos y hash como glosa)",
+  "hoja": "Hoja 1",
+  "arriba": [],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha de transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Hora transacción",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Fecha contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Código de transacción",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Código Transferencia",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Tipo de transacción",
+    "rol": "tipo_txt"
+   },
+   {
+    "titulo": "Numero serie",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Glosa detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Saldo contable",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "N° de Cuenta",
+    "rol": "cuenta_contraparte"
+   },
+   {
+    "titulo": "Tipo de Cuenta",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Banco",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Correo electrónico",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comentario transferencia",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "Servicio",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "N° Cliente",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Empresa",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de compra",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Rubro",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Comuna",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Tipo de movimiento",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Nº de tarjeta",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.7
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "abono",
+     "cargo"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   400
+  ],
+  "movs": [
+   30,
+   500
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "mutaciones": [
+   "ds107:saldo_inicial_fechas_cortas_guion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Puso el saldo inicial arriba para cuadrar, las fechas quedaron solo con día/mes y los vacíos se ven como guiones.",
+  "variante": "bci-movimientos-detallado~ds107"
+ }
+]

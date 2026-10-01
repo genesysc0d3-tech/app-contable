@@ -13,7 +13,10 @@ const guardados: Array<Record<string, unknown>> = [];
 const ops: Array<Record<string, unknown>> = [];
 vi.mock("./adapter-store", () => ({
   getAdapterByFingerprint: async () => null,
+  getAdaptersConfirmadosEmpresa: async () => [],
+  confirmarAdapter: async () => true,
   saveAdapter: async (a: Record<string, unknown>) => { guardados.push(a); return "adapter-test"; },
+  promoverMapaGlobalSiHayConsenso: async () => false,
   incrementAdapterSuccess: async () => {},
   decrementAdapterConfianza: async () => {},
   logParserEvent: async (e: Record<string, unknown>) => { logs.push(e); },
@@ -136,16 +139,19 @@ describe("formato nuevo = provisorio", () => {
     expect(ops.some((o) => o.eventName === "parser_formato_nuevo")).toBe(true);
   });
 
-  it("con el saldo cuadrando en ≥10 filas, el formato se comparte (global)", async () => {
+  // Revisión adversarial 2026-09-30: el sello de saldo confirma el mapa para ESA
+  // empresa; volverlo global exige consenso de 2+ empresas.
+  it("con el saldo cuadrando al peso en ≥10 filas, el formato queda CONFIRMADO para la empresa (no global)", async () => {
     let saldo = 1_000_000;
     const asc: Celda[][] = Array.from({ length: 20 }, (_, i) => {
       const egreso = i % 6 === 2; const m = 10_000 + i * 700;
       saldo += egreso ? -m : m;
       return [dia(1 + (i % 25)), `D5D76EB61DB98F697D346006F73B22F26229444E|${9010716960000 + i}`, `Transferencia recibida de Cliente ${i}`, egreso ? null : m, egreso ? m : null, saldo];
     });
-    await parsear({ "Hoja 1": [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse()] });
+    await parsear({ "Hoja 1": [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse(), ["", "", "Saldo inicial", null, null, 1_000_000]] });
     expect(guardados).toHaveLength(1);
-    expect(guardados[0].empresaId).toBeNull();
+    expect(guardados[0].empresaId).toBe("emp-test");
+    expect(guardados[0].confirmadoPor).toBe("saldo");
   });
 });
 

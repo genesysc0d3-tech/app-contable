@@ -14,6 +14,9 @@ import { ConfianzaGroupSection, classifyConfianza, type Propuesta, type ClienteR
 import VeredictoCard from "./VeredictoCard";
 import VeredictoCartola from "./VeredictoCartola";
 import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
+import { revisarColumnas } from "@/lib/cartola/verificacion";
+import { docParaAbrirSolo, leerYaAbiertos, marcarAbierto } from "./revisar-columnas-auto";
+import { sinDocsRepetidos } from "./mesa-data-util";
 import AtribucionDoc from "./AtribucionDoc";
 // Perf: el editor bulk de cartolas sale del bundle inicial (solo existe dentro
 // del popup); se precarga en idle tras montar la mesa — abrir sigue instantáneo.
@@ -64,7 +67,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   const [aprobandoCartola, setAprobandoCartola] = useState(false);
   const { toast } = useToast();
 
-  const docs = mesa.docsAgregados as DocRow[];
+  // Defensa en profundidad: una mesa vieja en caché también podría traer repetidos.
+  const docs = useMemo(() => sinDocsRepetidos(mesa.docsAgregados as DocRow[]), [mesa.docsAgregados]);
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
 
   // El chat del team puede APUNTAR lo que está abierto en el visor: se deja
@@ -89,6 +93,29 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     }
     return { telegram, massdte, boleta };
   }, [docs]);
+
+  // POPUP "REVISA LAS COLUMNAS" que se abre SOLO (2026-09-30): cuando una
+  // cartola recién subida termina de procesarse sin poder comprobarse, se abre
+  // acá (donde la clienta está mirando) y queda seleccionada en el visor. Una
+  // vez por documento: si lo cierra, queda el aviso en la tarjeta.
+  const vistosProcesando = useRef(new Set<string>());
+  const yaAbiertos = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    for (const d of docs) if (d.estado !== "procesado") vistosProcesando.current.add(d.id);
+    if (mappingDocId || editarCartolaId) return;
+    yaAbiertos.current ??= leerYaAbiertos();
+    const d = docParaAbrirSolo(docs, { vistosProcesando: vistosProcesando.current, yaAbiertos: yaAbiertos.current, ahora: Date.now() });
+    if (!d) return;
+    marcarAbierto(d.id, yaAbiertos.current);
+    // setState en callback (no en el cuerpo del effect), como el resto de la mesa.
+    const t = window.setTimeout(() => { setSelDocId(d.id); setMappingDocId(d.id); }, 0);
+    return () => window.clearTimeout(t);
+  }, [docs, mappingDocId, editarCartolaId]);
+  // Por qué se piden las columnas (una línea arriba del popup), si hace falta.
+  const motivoDe = (id: string | null) => {
+    const c = id ? leerCuadre(docs.find((d) => d.id === id)?.progreso_ia) : null;
+    return c ? revisarColumnas(c).motivo : null;
+  };
 
   // Tx que llega desde Emitir (Por revisar/Bloqueadas): se abre cuando aparece
   // en la mesa. Suscripción a eventos (setState en callback, no en el cuerpo del
@@ -317,7 +344,9 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       {/* ── VISOR (permanente, altura fija) ── */}
       <div style={{ flexShrink: 0, height: "clamp(172px, 24vh, 224px)", minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "thin", borderBottom: "1px solid var(--bg-muted)" }}>
         {/* Microatribución del team: quién hizo qué con este documento (solo con equipo). */}
-        {selDoc && <AtribucionDoc key={selDoc.id} documentoId={selDoc.id} />}
+        {/* key con prefijo: es HERMANO del visor (VeredictoCartola key={selDoc.id});
+            la misma key en los dos daba "two children with the same key". */}
+        {selDoc && <AtribucionDoc key={`atrib-${selDoc.id}`} documentoId={selDoc.id} />}
         {!selDoc ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", color: "var(--text3)" }}>
             <div style={{ maxWidth: 250 }}>
@@ -331,7 +360,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
         ) : tipo === "massdte" && selDoc.estado === "procesado" && (selProps.length > 0 || selCuadreFaltan) ? (
-          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} aMediasIds={aMediasIds} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} />
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} aMediasIds={aMediasIds} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} onRevisarColumnas={() => setMappingDocId(selDoc.id)} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
@@ -377,7 +406,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "0 16px 6px" }}>
                     <button onClick={() => setMappingDocId(selDoc.id)}
                       onMouseEnter={() => prefetchPreview(selDoc.id)} onFocus={() => prefetchPreview(selDoc.id)}
-                      style={{ fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>↔ Mapear</button>
+                      style={{ fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", cursor: "pointer" }}>↔ Columnas</button>
                     {selDoc.estado === "procesado" && <HintSelector documentoId={selDoc.id} current={selDoc.tipo_operacion_hint ?? null} />}
                     <span style={{ fontSize: 9, color: "var(--text3)", marginLeft: "auto" }}>{selDoc.movimientos_detectados ?? 0} mov</span>
                   </div>
@@ -400,11 +429,11 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                         </button>
                         <button onClick={() => setMappingDocId(selDoc.id)}
                           style={{ fontSize: 10, fontWeight: 600, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 7, padding: "6px 12px", cursor: "pointer" }}>
-                          ↔ Mapear columnas
+                          ↔ Revisar columnas
                         </button>
                       </div>
                       <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.5 }}>
-                        Si el formato del banco no se reconoció, usa <b>Mapear columnas</b> para indicar dónde están fecha, monto y descripción.
+                        Si no reconocimos el formato de tu banco, usa <b>Revisar columnas</b> y dinos dónde están la fecha, los montos y la glosa.
                       </div>
                     </div>
                   ) : pend.length === 0 ? (
@@ -433,7 +462,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       />
 
       {mappingDocId && typeof document !== "undefined" && createPortal(
-        <FieldMapper documentoId={mappingDocId} onClose={() => setMappingDocId(null)} onSaved={() => { setMappingDocId(null); reload(); }} />,
+        <FieldMapper documentoId={mappingDocId} motivo={motivoDe(mappingDocId)} onClose={() => setMappingDocId(null)} onSaved={() => { setMappingDocId(null); reload(); }} />,
         document.body,
       )}
       {viewImgDocId && typeof document !== "undefined" && createPortal(
@@ -453,14 +482,14 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M15 18l-6-6 6-6" /></svg>
                     Volver
                   </button>
-                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Mapear columnas</span>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Revisa las columnas</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
                 </>
               ) : (
                 <>
                   <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Editar</span>
                   <span style={{ fontSize: 14.5, fontWeight: 750, letterSpacing: "-.01em", color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
-                  <button onClick={() => setEditarScreen("mapear")} onMouseEnter={() => prefetchPreview(editarCartolaId)} onFocus={() => prefetchPreview(editarCartolaId)} style={{ fontSize: 11, fontWeight: 650, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 99, padding: "7px 14px", cursor: "pointer" }}>↔ Mapear columnas</button>
+                  <button onClick={() => setEditarScreen("mapear")} onMouseEnter={() => prefetchPreview(editarCartolaId)} onFocus={() => prefetchPreview(editarCartolaId)} style={{ fontSize: 11, fontWeight: 650, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 99, padding: "7px 14px", cursor: "pointer" }}>↔ Revisar columnas</button>
                 </>
               )}
               <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} title="Cerrar" style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid var(--border)", background: "transparent", color: "var(--text2)", cursor: "pointer", fontSize: 17, lineHeight: 1 }}>×</button>
@@ -469,6 +498,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
               <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", color: "var(--text)", fontFamily: "var(--font-geist-sans), sans-serif" }}>
                 <FieldMapperBody
                   documentoId={editarCartolaId}
+                  motivo={motivoDe(editarCartolaId)}
                   variant="embedded"
                   onClose={() => setEditarScreen("editar")}
                   onSaved={() => { setEditarScreen("editar"); reload(); }}

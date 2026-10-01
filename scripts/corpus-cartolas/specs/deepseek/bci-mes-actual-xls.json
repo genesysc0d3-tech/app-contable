@@ -1,0 +1,2603 @@
+[
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds000:core_temenos_ingles_iso"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró su core a un proveedor internacional (Temenos/T24) y el export viene con encabezados en inglés, fechas ISO y montos como número plano sin formato moneda.",
+  "variante": "bci-mes-actual-xls~ds000"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "RUT Cliente",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Código",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_rut_y_codigo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT Cliente",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "codigo",
+    "titulo": "Código",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión 'Empresas' del nuevo extracto agrega RUT del cliente y código de operación, y reordena las columnas juntando documento con código.",
+  "variante": "bci-mes-actual-xls~ds001"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha Valor",
+    "rol": "fecha2",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds002:fecha_valor_y_cargo_abono"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "fecha2",
+    "titulo": "Fecha Valor",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema separa fecha valor de fecha transacción y parte la cartola en columnas Cargo/Abono en vez de una sola columna de monto.",
+  "variante": "bci-mes-actual-xls~ds002"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "csv",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:export_csv_semicolon"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El portal renovado exporta directo a CSV con punto y coma, montos como texto con $ y separador de miles, fechas dd/mm/aaaa y celdas vacías como guion.",
+  "variante": "bci-mes-actual-xls~ds003"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds004:resumen_arriba_y_detalle"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El rediseño del extracto antepone un bloque resumen con saldos y renombra la columna 'Movimiento' a 'Detalle'.",
+  "variante": "bci-mes-actual-xls~ds004"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Tarjeta",
+    "rol": "otro_texto"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   4,
+   9
+  ],
+  "mutaciones": [
+   "ds005:ahorro_tarjeta_orden_desc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "otro_texto",
+    "titulo": "N° Tarjeta",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "pocas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La cartola de cuentas de ahorro elimina el N° de documento, agrega N° de tarjeta, ordena de más reciente a más antigua y trae pocos movimientos.",
+  "variante": "bci-mes-actual-xls~ds005"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "otro_texto"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds006:con_saldo_y_subtotales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El extracto corporativo agrega una columna Saldo corrido y subtotales por día para facilitar la conciliación.",
+  "variante": "bci-mes-actual-xls~ds006"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds007:fechas_serial_sin_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "vacia",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El export del nuevo core escribe fechas como fecha real de Excel (serial numérico), omite la fila de títulos, agrega índice y deja montos como número.",
+  "variante": "bci-mes-actual-xls~ds007"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds008:detalle_unificado_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La cartola consolidada junta glosa y documento en una sola columna Detalle y usa una columna única de monto con signo para cargos y abonos.",
+  "variante": "bci-mes-actual-xls~ds008"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds009:nuevo_core_saldo_inicial_total_formula"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core agrega fila de saldo inicial, total al pie calculado con fórmula de suma y una hoja de instrucciones al final del workbook.",
+  "variante": "bci-mes-actual-xls~ds009"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Total Abonos",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds100:quita_vacias_renombra_y_totaliza"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Total Abonos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta limpia el export de BCI: borra las dos columnas vacías, renombra 'Abono EXENTAS' a 'Total Abonos' y agrega una fila de total al pie para cuadrar su caja.",
+  "variante": "bci-mes-actual-xls~ds100"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "csv",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds101:csv_punto_y_coma_con_fechas_diagonal"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta exporta a CSV para su software de contabilidad, con punto y coma como separador, y cambia fechas a dd/mm/yyyy y montos a texto para que no se le desformen.",
+  "variante": "bci-mes-actual-xls~ds101"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "#",
+    "rol": "otro_num"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds102:reordena_indiza_y_ordena_desc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "otro_num",
+    "titulo": "#",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta reacomoda las columnas según su plantilla personal (glosa al inicio), agrega una columna de numeración, elimina el N° de documento y ordena de más reciente a más antigua.",
+  "variante": "bci-mes-actual-xls~ds102"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds103:titulo_resumen_y_saldo_inicial"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta le agrega arriba un encabezado con el nombre del banco y el mes, un recuadro de resumen con totales y una fila de saldo inicial para conciliar.",
+  "variante": "bci-mes-actual-xls~ds103"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "mutaciones": [
+   "ds104:separa_cargo_abono_y_combina_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta quiere una columna de Cargo y otra de Abono para su libro mayor, le combina las celdas del encabezado y elimina la columna vacía del inicio.",
+  "variante": "bci-mes-actual-xls~ds104"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds105:fechas_serial_y_subtotales_diarios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Por un cambio de configuración regional, las fechas quedaron como número de serie de Excel; la clienta dejó los montos como número puro y agregó subtotales por día y una columna de conteo de filas.",
+  "variante": "bci-mes-actual-xls~ds105"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Movimiento",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Abono EXENTAS",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds106:sin_titulos_filas_vacias_y_hoja_instrucc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Al limpiar la planilla, la clienta borró sin querer la fila de títulos, dejó filas en blanco entre los movimientos y agregó al final una hoja con instrucciones de uso.",
+  "variante": "bci-mes-actual-xls~ds106"
+ },
+ {
+  "id": "bci-mes-actual-xls",
+  "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales .xls (91 filas): 'todo entrada' correcto (la clienta dejó solo abonos)",
+  "hoja": "cartola",
+  "formato": "xls",
+  "arriba": [
+   [
+    "",
+    "Banco de Crédito e Inversiones"
+   ],
+   [],
+   [
+    "",
+    "Nombre",
+    "{TITULAR}"
+   ],
+   [
+    "",
+    "RUT",
+    "{RUT}"
+   ],
+   [
+    "",
+    "Usuario",
+    "{USUARIO}"
+   ],
+   [
+    "",
+    "Fecha",
+    "{FECHA_LARGA}"
+   ],
+   [],
+   [
+    "",
+    "Cartola de Cuenta Corriente N° :",
+    "",
+    "",
+    "{NCARTOLA}"
+   ],
+   [],
+   [],
+   [
+    "",
+    "Movimientos_Mes_Actual"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "n",
+    "z": "\"$\"\\ #,##0"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   4
+  ],
+  "movs": [
+   30,
+   120
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds107:ingles_fechas_iso_xls_antiguo_y_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta usa una plantilla en inglés para su contador, cambia las fechas a formato ISO yyyy-mm-dd, guarda en .xls antiguo y pega un resumen de totales al final de la hoja.",
+  "variante": "bci-mes-actual-xls~ds107"
+ }
+]

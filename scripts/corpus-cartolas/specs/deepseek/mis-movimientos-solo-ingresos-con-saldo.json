@@ -1,0 +1,2112 @@
+[
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Value date",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds000:nuevo_core_en_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migra del core legacy a un core nuevo (Temenos) y el export para personas pasa a etiquetas en inglés, fechas ISO y un único monto con signo, antecedido por una banda de encabezado con datos d",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds000"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "RUT Empresa",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Documento",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_detalle"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT Empresa",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "doc",
+    "titulo": "Documento",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanza una versión para empresas del mismo extracto: agrega RUT y documento de la operación, renombra la glosa a 'Detalle' y adelanta la columna de saldo para conciliación contable.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds001"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds002:nuevo_portal_exporta_csv"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo portal web exporta la cartola a CSV con punto y coma, montos como texto formateado en $ (con puntos de miles) y fechas dd/mm/yy; las celdas vacías aparecen como guiones.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds002"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds003:solo_ingresos_con_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El rediseño del extracto filtrado a ingresos elimina la fecha contable y la columna de egresos (ya no aportan por estar filtrado solo a entradas) y agrega un numerador de fila; las glosas largas se pa",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds003"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds004:extracto_con_saldos_y_totales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core emite el extracto con fila de saldo inicial, subtotales por día, fila de total al pie y fórmulas de suma, pensado para auditores.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds004"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Tipo",
+    "rol": "flag",
+    "flag": {
+     "entrada": "Abono",
+     "salida": "Cargo"
+    }
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds005:version_personas_simple"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_y_bandera",
+    "rol": "flag",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para personas del nuevo portal simplifica el extracto a fecha, descripción y monto con bandera (C/D), sin saldo ni fecha contable, ordenado de más antiguo a más reciente.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds005"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds006:paquete_con_resumen_y_manual"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco empaqueta el export con una hoja de resumen al inicio, una hoja de instrucciones al final y un bloque de resumen sobre la tabla de movimientos en la hoja principal.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds006"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "en_dec"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "en_dec"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "en_dec"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds007:proveedor_con_fechas_excel"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo proveedor de core entrega fechas como fechas reales de Excel, montos como texto en formato inglés con decimales y los títulos de bloque con celdas combinadas.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds007"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd.mm.yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Débito",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Crédito",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds008:export_legado_xls"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Crédito",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "cargo",
+    "titulo": "Débito",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd.mm.yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para no forzar la migración, el banco mantiene el export en XLS antiguo (97-2003), renombra 'Ingreso'→'Crédito' y 'Egreso'→'Débito' y usa fechas con puntos dd.mm.yyyy.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds008"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds009:nuevo_orden_de_columnas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El portal rediseñado reordena las columnas (adelanta el saldo, manda la glosa al final), renombra la fecha a 'Fecha' y usa dd/mm/yyyy con ceros a la izquierda.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds009"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds100:solo_ingresos_sin_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Al filtrar la cartola a solo ingresos, la clienta borró la columna Saldo porque quedó desincronizada con el extracto, y acortó los encabezados.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds100"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Tipo Mov",
+    "rol": "otro_texto"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds101:monto_unico_y_bandera_tipo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "flag",
+    "titulo": "Tipo Mov",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta unificó Egreso/Ingreso en un solo Monto con signo y agregó una columna Tipo Mov para distinguir abonos de cargos, dejando la planilla a mano para su contadora.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds101"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds102:totales_y_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agregó un resumen arriba con 'Total Ingresos', una fila de total con fórmula SUM() al pie y dejó los cargos vacíos como guion para revisar antes de subir.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds102"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "mutaciones": [
+   "ds103:copypaste_como_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Copió y pegó como texto desde el portal web: los montos quedaron con separador de miles, la fecha quedó en dd/mm/yyyy, la fecha contable quedó como serial de Excel y el encabezado en una celda combina",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds103"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds104:csv_punto_y_coma_reordenado"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Exportó a CSV con separador punto y coma y movió la columna Saldo junto a la fecha para revisarla primero; el orden de las filas quedó descendente.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds104"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds105:hoja_resumen_sin_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Dejó solo los datos en una hoja 'Resumen' sin fila de encabezados, con un bloque de notas arriba, y guardó en .xls antiguo para su programa de escritorio.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds105"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds106:glosa_partida_y_filas_vacias"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La descripción del banco vino partida en dos filas (detalle y referencia), hay filas en blanco intercaladas que no limpió, agregó un índice y dejó los cargos vacíos como guion.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds106"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos-con-saldo",
+  "familia": "'Mis Movimientos' filtrada a ingresos CON saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (2026-09-11): capa 4 en lector ACTUAL y NUEVO (el validador bota el saldo que salta por los egresos ocultos)",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Value date",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   15,
+   60
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds107:ingles_subtotales_saldo_inicial"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Renombró los encabezados al inglés para una plantilla corporativa, agregó subtotales por día y una fila de saldo inicial, y filtró a solo abonos quitando la columna de egresos.",
+  "variante": "mis-movimientos-solo-ingresos-con-saldo~ds107"
+ }
+]

@@ -1,0 +1,2042 @@
+[
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Value date",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds000:nuevo_core_ingles_monto_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "Amount",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco cambia de core bancario (ej. a Temenos) y el nuevo motor de reportes exporta todo en inglés, con una sola columna de monto con signo y fechas en ISO.",
+  "variante": "mis-movimientos-solo-ingresos~ds000"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc"
+   },
+   {
+    "titulo": "RUT Titular",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds001:version_empresa_columnas_extra"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "doc",
+    "titulo": "N° Documento",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT Titular",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": 7,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El portal 'empresas' del banco agrega columnas de N° de documento, RUT del titular y sucursal, y deja la fecha contable al final del bloque.",
+  "variante": "mis-movimientos-solo-ingresos~ds001"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds002:export_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco habilita la descarga en CSV (separador punto y coma por convención local), con fechas dd/mm/yyyy y montos emitidos como texto con separador de miles.",
+  "variante": "mis-movimientos-solo-ingresos~ds002"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "otro_texto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds003:sin_fecha_contable_con_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core elimina la fecha contable de la cartola para personas y agrega una columna de saldo acumulado, dejando los montos como valores numéricos puros.",
+  "variante": "mis-movimientos-solo-ingresos~ds003"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds004:resumen_arriba_y_total_formula"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo diseño de la cartola parte con un bloque resumen de totales y cierra con una fila de total calculada con fórmula, mezclando texto de cabecera con la tabla.",
+  "variante": "mis-movimientos-solo-ingresos~ds004"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds005:fechas_excel_y_glosa_partida"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo proveedor entrega las fechas como celdas de fecha reales de Excel y las glosas multilínea las separa en dos filas consecutivas.",
+  "variante": "mis-movimientos-solo-ingresos~ds005"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds006:hojas_extra_y_basura_arriba"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El libro exportado ahora trae una hoja de resumen al inicio y una de instrucciones al final, y en la hoja de movimientos se insertan filas de publicidad arriba.",
+  "variante": "mis-movimientos-solo-ingresos~ds006"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fec.",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Det.",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds007:titulos_cortos_ascendente"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fec.",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Det.",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco rediseña el export con títulos abreviados ('Fec.', 'Det.', 'Cargo', 'Abono'), sin fecha contable y con los movimientos en orden ascendente.",
+  "variante": "mis-movimientos-solo-ingresos~ds007"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "formato": "xls",
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds008:xls_antiguo_celdas_combinadas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco aún ofrece el export en .xls antiguo, donde el encabezado usa celdas combinadas y entre movimiento y movimiento quedan filas vacías.",
+  "variante": "mis-movimientos-solo-ingresos~ds008"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds009:subtotales_diarios_y_vacios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión 'solo ingresos' agrega una fila de subtotal por día, representa las celdas vacías con guiones y emite los ceros de la columna de egresos como texto.",
+  "variante": "mis-movimientos-solo-ingresos~ds009"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Depósitos",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds100:depositos_sin_egreso_con_total"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Depósitos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "TOTAL DEPÓSITOS",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta filtra a solo ingresos y, al quedar la columna Egreso totalmente vacía, la borra, renombra 'Ingreso (+)' como 'Depósitos' y agrega una fila total al pie con fórmula de suma.",
+  "variante": "mis-movimientos-solo-ingresos~ds100"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Value date",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds101:ingles_una_columna_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "Amount",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "en",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta traduce los títulos al inglés para su contador externo y pega egreso/ingreso en una sola columna 'Amount' con signo, ordenando ascendentemente.",
+  "variante": "mis-movimientos-solo-ingresos~ds101"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds102:csv_montos_texto_fechas_cortas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta exportó a CSV con punto y coma y al abrirlo en Excel los montos quedaron como texto con separador de miles y las fechas colapsaron a dd/mm/yy.",
+  "variante": "mis-movimientos-solo-ingresos~ds102"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds103:indice_y_glosa_al_inicio"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "Resumen mensual",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega una columna de numeración para auditar y mueve la Descripción al inicio porque es lo que más revisa, con un resumen arriba.",
+  "variante": "mis-movimientos-solo-ingresos~ds103"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0",
+    "vacio": "guion"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "mutaciones": [
+   "ds104:total_abajo_con_guiones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "Total",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega una fila 'Total' al final con fórmula y rellena con guiones las celdas vacías de la columna de montos para que se vea 'completo'.",
+  "variante": "mis-movimientos-solo-ingresos~ds104"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds105:xls_antiguo_sin_titulos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guardó el libro en formato xls antiguo, se le borró la fila de títulos al copiar y encima quedaron dos filas de notas suyas.",
+  "variante": "mis-movimientos-solo-ingresos~ds105"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds106:hoja_resumen_abonos_solo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copia solo las filas con abonos a una hoja nueva y le antepone una hoja resumen con las fechas en formato largo y montos como número.",
+  "variante": "mis-movimientos-solo-ingresos~ds106"
+ },
+ {
+  "id": "mis-movimientos-solo-ingresos",
+  "familia": "'Mis Movimientos' (BIT/BCI) filtrada a ingresos, sin saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "7 cartolas reales (ago-sep 2026), heurística/nombres capa 2-3, todas 'todo entrada'; Egreso (-) 100% vacío",
+  "hoja": "Hoja 1",
+  "arriba": [
+   [
+    "",
+    "",
+    "Mis Movimientos"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Transacción",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd.mm.yyyy"
+   },
+   {
+    "titulo": "Fecha Contable",
+    "rol": "fecha2",
+    "celda": "date",
+    "z": "d/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Egreso (-)",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   },
+   {
+    "titulo": "Ingreso (+)",
+    "rol": "abono",
+    "celda": "n",
+    "z": "[$$]#,##0"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "abono",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   20,
+   90
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds107:subtotal_por_dia_ceros_como_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd.mm.yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega subtotales por día para cuadrar su caja, cambia las fechas a dd.mm.yyyy y los montos en cero quedaron como texto '0'.",
+  "variante": "mis-movimientos-solo-ingresos~ds107"
+ }
+]

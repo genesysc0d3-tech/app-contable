@@ -9,6 +9,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
+import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
 import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 
@@ -107,6 +108,20 @@ export async function aprobarPropuesta(
     recursoId: propuestaId,
     resumen: "Propuesta aprobada",
   });
+  // Juez implícito (lector con juez, 2026-09-30): aprobando FILA A FILA, si la
+  // cartola quedó toda decidida sin editar lo leído y sin alertas, el mapa de
+  // columnas provisorio de la empresa se confirma. Best-effort.
+  try {
+    const { data: prop } = await ctx.sb
+      .from("propuestas_ia")
+      .select("movimientos_raw!inner(documento_id)")
+      .eq("empresa_id", ctx.empresaId)
+      .eq("id", propuestaId)
+      .maybeSingle();
+    const mr = (prop as { movimientos_raw?: { documento_id?: string | null } | { documento_id?: string | null }[] } | null)?.movimientos_raw;
+    const documentoId = Array.isArray(mr) ? mr[0]?.documento_id : mr?.documento_id;
+    if (documentoId) await confirmarMapaPorCheck(ctx.sb, ctx.empresaId, documentoId);
+  } catch { /* el aprendizaje del mapa nunca rompe Aprobar */ }
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
@@ -897,6 +912,8 @@ export async function aprobarCartola(
     accion: "propuestas_aprobadas", recursoTipo: "documento_subido", recursoId: documentoId,
     resumen: `${aprobadas} propuestas de cartola enviadas a emitir`, metadata: { cantidad: aprobadas, documentoId },
   });
+  // "Aprobar cartola" en bloque NO confirma el mapa de columnas (adversarial-2
+  // A4): aprobar todo sin mirar no es prueba. Solo la aprobación fila a fila.
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   const aviso = avisoSeQuedan(sep.intocables);

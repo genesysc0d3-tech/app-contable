@@ -1,0 +1,1965 @@
+[
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Fecha Valor",
+    "rol": "fecha2",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Comprobante",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds000:core_nuevo_con_fecha_valor"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "fecha2",
+    "titulo": "Fecha Valor",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "doc",
+    "titulo": "N° Comprobante",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró a un nuevo core bancario (Temenos/Proven) y el export ahora trae fecha valor y número de comprobante, con formato de fecha y montos internacionales.",
+  "variante": "cartola-cuenta-corriente-simple~ds000"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_sin_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanzó una export para banca empresas que elimina el saldo (lo recalcula el ERP) y agrega RUT y sucursal, empujando la glosa al final.",
+  "variante": "cartola-cuenta-corriente-simple~ds001"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds002:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo proveedor del core emite una sola columna 'Monto' con signo (débito negativo/crédito positivo), fechas sin año y montos con punto de miles.",
+  "variante": "cartola-cuenta-corriente-simple~ds002"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds003:export_internacional_en_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en_dec",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco rediseñó el export para su banca internacional con títulos en inglés, fechas ISO y montos con separador de miles y decimales anglosajón.",
+  "variante": "cartola-cuenta-corriente-simple~ds003"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "mutaciones": [
+   "ds004:resumen_saldos_y_totales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo export del banco antepone un resumen de saldos, parte con la fila de saldo inicial y cierra con filas de totales y fórmulas de suma para el contador.",
+  "variante": "cartola-cuenta-corriente-simple~ds004"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "plano"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "plano"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "plano"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds005:export_preliminar_xls_antiguo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco entregó un borrador del nuevo sistema exportado a XLS antiguo, con encabezado corporativo de basura, sin fila de títulos y montos como texto plano.",
+  "variante": "cartola-cuenta-corriente-simple~ds005"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "Fecha Compensación",
+    "rol": "fecha2",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds006:csv_nuevo_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "fecha2",
+    "titulo": "Fecha Compensación",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema emite CSV con separador punto y coma, agrega fecha de compensación, fechas con guiones y montos chilenos con decimales.",
+  "variante": "cartola-cuenta-corriente-simple~ds006"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds007:glosa_partida_con_subtotales_dia"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco empezó a detallar cada movimiento en dos filas (glosa partida) con la fecha combinada, agregando subtotales por día y guiones donde no hay valor.",
+  "variante": "cartola-cuenta-corriente-simple~ds007"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Débitos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Créditos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds008:debitos_creditos_orden_inverso"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "cargo",
+    "titulo": "Débitos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Créditos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La banca empresas renombró las columnas a Débitos/Créditos, puso los montos antes de la glosa y ordenó la cartola de la más reciente a la más antigua.",
+  "variante": "cartola-cuenta-corriente-simple~ds008"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd.mm.yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   4,
+   9
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds009:vista_ingresos_solo_abonos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "pocas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd.mm.yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco ofrece una vista 'Ingresos' para la declaración de renta que exporta solo abonos, sin saldo, y con fechas con puntos.",
+  "variante": "cartola-cuenta-corriente-simple~ds009"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "F.",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Débito",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds100:renombra_abrevia_y_quita_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "F.",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "cargo",
+    "titulo": "Débito",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta abrevia los encabezados para que la cartola quepa en una página y borra la columna Saldo porque no la usa para conciliar.",
+  "variante": "cartola-cuenta-corriente-simple~ds100"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Depósitos",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds101:filtra_solo_depositos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Depósitos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta solo quiere ver sus ingresos para conciliar el mes, filtra la cartola y renombra la columna de abonos.",
+  "variante": "cartola-cuenta-corriente-simple~ds101"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds102:agrega_total_y_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega un resumen al pie y una fila de totales con SUM() para saber cuánto gastó en el mes.",
+  "variante": "cartola-cuenta-corriente-simple~ds102"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Concepto",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds103:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "",
+    "titulo": "Monto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Concepto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta unifica Cargos y Abonos en una sola columna con signo para poder sumar con su propia fórmula.",
+  "variante": "cartola-cuenta-corriente-simple~ds103"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds104:exporta_csv_con_punto_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guarda el archivo como CSV con separador punto y coma (configuración regional) y pasa las fechas a formato ISO para su sistema contable.",
+  "variante": "cartola-cuenta-corriente-simple~ds104"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "mutaciones": [
+   "ds105:sin_titulos_con_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta borró la fila de encabezados sin darse cuenta y numeró las filas con una columna de índice para no perderse.",
+  "variante": "cartola-cuenta-corriente-simple~ds105"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha Mov.",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds106:hoja_resumen_antes"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha Mov.",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta crea una hoja 'Resumen' antes de los movimientos con la fórmula de totales y renombra el encabezado de la fecha.",
+  "variante": "cartola-cuenta-corriente-simple~ds106"
+ },
+ {
+  "id": "cartola-cuenta-corriente-simple",
+  "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "CARTOLA CUENTA CORRIENTE"
+   ],
+   [
+    "{EMPRESA} · RUT {RUT}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   8,
+   60
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds107:edicion_manual_con_basura"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta edita a mano la planilla antes de subirla: dejó notas arriba, celdas combinadas, los montos quedaron como texto y hay filas en blanco entre bloques.",
+  "variante": "cartola-cuenta-corriente-simple~ds107"
+ }
+]

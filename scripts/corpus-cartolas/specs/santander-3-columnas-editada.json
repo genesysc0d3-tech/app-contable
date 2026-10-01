@@ -1,0 +1,35 @@
+{
+ "id": "santander-3-columnas-editada",
+ "familia": "Santander 'Movimientos CtaCte' editada por la clienta (solo MONTO | DESCRIPCIÓN | FECHA)",
+ "origen": "real",
+ "evidencia": "1 cartola real (547 filas, la misma del export filtrado) con CARGO/ABONO y SALDO borradas",
+ "hoja": "Movimientos CtaCte",
+ "base": "santander-movimientos-ctacte",
+ "columnas": [
+  {
+   "titulo": "MONTO",
+   "rol": "monto",
+   "celda": "n",
+   "z": "#,##0"
+  },
+  {
+   "titulo": "DESCRIPCIÓN MOVIMIENTO",
+   "rol": "glosa",
+   "prefijo_doc": true
+  },
+  {
+   "titulo": "FECHA",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd/mm/yyyy"
+  }
+ ],
+ "arriba_recortar": 3,
+ "direcciones": "solo_entradas",
+ "filtrada": true,
+ "pie": [],
+ "movs": [
+  100,
+  600
+ ]
+}

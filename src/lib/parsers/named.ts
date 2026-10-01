@@ -1,4 +1,5 @@
 import type { AdapterConfig, Row } from "./types";
+import { derivarNumberFormat } from "./numeros";
 import { encabezadoBancario, normalizarTitulo, RE_ENTRADA, RE_SALDO, RE_SALIDA } from "./encabezados";
 
 /**
@@ -116,7 +117,7 @@ export function detectByNames(rows: Row[]): AdapterConfig | null {
         header_row: i,
         skip_rows_before_data: i + 1,
         date_format: "dd/mm/yyyy",
-        number_format: "chilean",
+        number_format: derivarNumberFormat(rows as unknown[][], i + 1, [cargoIdx, abonoIdx, saldoIdx]),
         columns: {
           fecha: fechaIdx,
           descripcion: descIdx,

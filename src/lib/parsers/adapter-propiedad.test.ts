@@ -39,12 +39,14 @@ describe("propiedad de los formatos (adapter-store)", () => {
     const { upsertManualAdapter } = await import("./adapter-store");
     // La búsqueda filtra por dueño = emp-A → no encuentra el global → inserta.
     respuestaSelect = { data: null, error: null };
-    const id = await upsertManualAdapter({ fingerprint: "fp1", empresaId: "emp-A", config: { columns: {} } as never });
+    const id = await upsertManualAdapter({ fingerprint: "fp1", empresaId: "emp-A", config: { columns: {} } as never, confirmadoPor: "cliente" });
     expect(id).toBe("nuevo-id");
     expect(llamadas.some((l) => l.op === "eq" && l.args[0] === "creado_por_empresa_id" && l.args[1] === "emp-A")).toBe(true);
     const ins = llamadas.find((l) => l.op === "insert");
     expect((ins?.args[0] as Record<string, unknown>).creado_por_empresa_id).toBe("emp-A");
     expect((ins?.args[0] as Record<string, unknown>).source).toBe("manual");
+    // Confirmado por el CLIENTE (popup "Revisa las columnas"), solo para su empresa.
+    expect((ins?.args[0] as Record<string, unknown>).confirmado_por).toBe("cliente");
   });
 
   it("saveAdapter guarda el dueño que le pasan (formato provisorio = privado)", async () => {

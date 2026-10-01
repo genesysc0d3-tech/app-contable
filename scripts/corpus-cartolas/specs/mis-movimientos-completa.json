@@ -1,0 +1,62 @@
+{
+ "id": "mis-movimientos-completa",
+ "familia": "'Mis Movimientos' completa (egresos+ingresos+saldo)",
+ "origen": "real",
+ "evidencia": "1 cartola real con columna índice agregada por la clienta a la izquierda; nombres capa 3, saldo no cierra",
+ "hoja": "Hoja 1",
+ "arriba": [
+  [
+   "",
+   "",
+   "Mis Movimientos"
+  ]
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha Transacción",
+   "rol": "fecha",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Fecha Contable",
+   "rol": "fecha2",
+   "celda": "date",
+   "z": "d/mm/yyyy"
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Egreso (-)",
+   "rol": "cargo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Ingreso (+)",
+   "rol": "abono",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  },
+  {
+   "titulo": "Saldo",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "[$$]#,##0"
+  }
+ ],
+ "orden": "desc",
+ "direcciones": "ambas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  900
+ ],
+ "movs": [
+  30,
+  120
+ ]
+}
