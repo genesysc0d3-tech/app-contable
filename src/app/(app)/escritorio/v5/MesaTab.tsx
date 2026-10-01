@@ -16,6 +16,7 @@ import VeredictoCartola from "./VeredictoCartola";
 import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
 import { revisarColumnas } from "@/lib/cartola/verificacion";
 import { docParaAbrirSolo, leerYaAbiertos, marcarAbierto } from "./revisar-columnas-auto";
+import { sinDocsRepetidos } from "./mesa-data-util";
 import AtribucionDoc from "./AtribucionDoc";
 // Perf: el editor bulk de cartolas sale del bundle inicial (solo existe dentro
 // del popup); se precarga en idle tras montar la mesa — abrir sigue instantáneo.
@@ -65,7 +66,8 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   const [aprobandoCartola, setAprobandoCartola] = useState(false);
   const { toast } = useToast();
 
-  const docs = mesa.docsAgregados as DocRow[];
+  // Defensa en profundidad: una mesa vieja en caché también podría traer repetidos.
+  const docs = useMemo(() => sinDocsRepetidos(mesa.docsAgregados as DocRow[]), [mesa.docsAgregados]);
   const selDoc = docs.find((d) => d.id === selDocId) ?? null;
 
   // El chat del team puede APUNTAR lo que está abierto en el visor: se deja

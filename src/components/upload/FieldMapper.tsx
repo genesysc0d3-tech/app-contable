@@ -57,6 +57,26 @@ const ROLE_HEX: Record<Role, string> = {
 const pesos = (n: number) => `$${Math.round(n).toLocaleString("es-CL")}`;
 const ddmm = (iso: string | null) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : null);
 
+/**
+ * Cómo se MUESTRA una celda en la tabla del popup (solo presentación: lo que se
+ * lee y se guarda no cambia). La vista previa trae el valor crudo de Excel: una
+ * fecha llega como serial ("46296.375") y un monto sin formato ("94000").
+ */
+export function celdaLegible(valor: string, rol: Role): string {
+  const v = String(valor ?? "").trim();
+  if (!/^-?\d+(\.\d+)?$/.test(v)) return valor;
+  const n = Number(v);
+  if (rol === "fecha" && n >= 20_000 && n < 80_000) {
+    // Serial de Excel (días desde 1899-12-30), en UTC para no correr el día.
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(n) * 86_400_000);
+    return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+  }
+  if (rol === "cargo" || rol === "abono" || rol === "monto" || rol === "saldo") {
+    return `${n < 0 ? "-" : ""}$${Math.round(Math.abs(n)).toLocaleString("es-CL")}`;
+  }
+  return valor;
+}
+
 // ── Caché de previews (vive por sesión SPA, se limpia con F5) ────────────────
 // El preview de un Excel es DETERMINÍSTICO por documento: se cachea por
 // documentoId y se deduplica el fetch en vuelo (doble montaje de StrictMode y
@@ -512,7 +532,7 @@ function GridContent(props: {
                     return (
                       <td key={c} {...ch(c)}
                         style={{ ...colTint(c), padding: isEmpty ? "9px 4px" : "9px 10px", ...celda, fontSize: 12, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 280 }}>
-                        {isEmpty ? "" : (row[c] ?? "")}
+                        {isEmpty ? "" : celdaLegible(row[c] ?? "", roles[c] ?? "ignorar")}
                       </td>
                     );
                   })}

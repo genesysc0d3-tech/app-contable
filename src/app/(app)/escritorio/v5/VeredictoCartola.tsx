@@ -90,7 +90,12 @@ export default function VeredictoCartola({
   // el total de siempre.
   const cuadre = leerCuadre(doc.progreso_ia);
   const resCuadre = cuadre ? resumenCuadre(cuadre) : null;
+  // REVISIÓN DE COLUMNAS PENDIENTE (fundador 2026-09-30): si no sabemos leerla,
+  // lo único que tiene sentido es revisar → el visor deja UN CTA grande y Editar
+  // /Aprobar se esconden hasta confirmar las columnas. Cualquier otra cartola
+  // (comprobada, ya confirmada, plantilla) mantiene el visor de siempre.
   const columnas = cuadre ? revisarColumnas(cuadre) : null;
+  const revisionPendiente = !!columnas?.abrir && !decidida;
 
   // Split exenta/afecta: del agregado server-side si está, si no lo cuento acá.
   const esExenta = (p: Propuesta) => {
@@ -151,7 +156,7 @@ export default function VeredictoCartola({
       <style>{CB_CSS}</style>
 
       {/* IZQUIERDA: el archivo (chip; Stage 4 = mini-preview del Excel). Click = Editar. */}
-      <button className="vcart-file" onClick={decidida ? undefined : onEditar} title={decidida ? "Cartola enviada a Emitir — para tocarla, devuélvela desde esa pestaña" : "Editar transacciones"}
+      <button className="vcart-file" onClick={decidida ? undefined : revisionPendiente ? onRevisarColumnas : onEditar} title={decidida ? "Cartola enviada a Emitir — para tocarla, devuélvela desde esa pestaña" : "Editar transacciones"}
         style={{ width: "clamp(120px, 17vh, 190px)", flexShrink: 0, alignSelf: "stretch", minHeight: "8em", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-muted)", cursor: decidida ? "default" : "pointer", padding: "0.9em", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.55em", position: "relative", color: "var(--text2)" }}>
         {(() => {
           const { Glifo, color } = FILE_META[extDe(doc.nombre_archivo)];
@@ -210,26 +215,6 @@ export default function VeredictoCartola({
 
         {/* CUADRE: "500 de 500 ✓" o "Faltan N por $X" con la lista y Agregarlos. */}
         {resCuadre && <CuadreCartolaLinea documentoId={doc.id} resumen={resCuadre} onAgregado={onCuadreAgregado} />}
-
-        {/* REVISA LAS COLUMNAS (2026-09-30): sin prueba y formato nuevo, o un
-            chequeo de ESTE archivo que falla. El popup se abre solo una vez al
-            terminar de procesar (MesaTab); si la clienta lo cerró, este aviso de
-            una línea lo vuelve a abrir. Advertir sí, bloquear jamás. */}
-        {columnas?.abrir && !decidida && (
-          <div data-testid="aviso-columnas" title={columnas.motivo ?? undefined}
-            style={{ marginTop: "0.6em", display: "flex", alignItems: "center", gap: 8, padding: "0.45em 0.5em 0.45em 0.8em", borderRadius: 9, background: "color-mix(in srgb, var(--amber) 9%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 28%, transparent)", fontSize: "0.85em", lineHeight: 1.4, color: "var(--text)" }}>
-            <span style={{ width: "0.5em", height: "0.5em", borderRadius: "50%", background: "var(--amber)", flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              <b>Revisa las columnas</b>
-              <span style={{ color: "var(--text3)" }}> · {columnas.otraVez ? columnas.motivo : "no pudimos comprobar esta cartola solos"}</span>
-            </span>
-            {onRevisarColumnas && (
-              <button onClick={onRevisarColumnas} style={{ flexShrink: 0, border: "1px solid color-mix(in srgb, var(--amber) 45%, transparent)", borderRadius: 8, background: "transparent", color: "var(--text)", fontSize: "0.95em", fontWeight: 700, padding: "0.3em 0.8em", cursor: "pointer" }}>
-                Revisar
-              </button>
-            )}
-          </div>
-        )}
 
         {/* FILAS QUE NO ENTRARON (2026-09-03): el processor de plantillas
             siempre las guardó en progreso_ia.errores_filas, pero el visor solo
@@ -304,7 +289,27 @@ export default function VeredictoCartola({
       {/* ACCIONES — decidida: la cartola ya se fue a Emitir; acá no hay nada que
           editar/aprobar/eliminar (Eliminar borraría aprobadas comprometidas). El
           único gesto es IR a Emitir, donde vive la última mirada y el Devolver. */}
-      {decidida ? (
+      {revisionPendiente ? (
+        <div data-testid="cta-columnas" style={{ width: "clamp(180px, 34%, 320px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.75em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
+          <div title={columnas?.motivo ?? undefined} style={{ fontSize: "0.92em", color: "var(--text2)", lineHeight: 1.4, textAlign: "center", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {columnas?.otraVez ? columnas.motivo : "No pudimos comprobar esta cartola solos: dinos qué es cada columna y listo."}
+          </div>
+          <button className="vcart-cb" onClick={onRevisarColumnas} disabled={!onRevisarColumnas || busy}
+            style={{ background: "var(--accent)", color: "#fff", fontSize: "1.15em", padding: "1.2em 1em" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9 4v16M15 4v16" /></svg>
+            Revisar columnas
+          </button>
+          <div style={{ fontSize: "0.78em", color: "var(--text3)", textAlign: "center", lineHeight: 1.4 }}>
+            Editar y aprobar se activan cuando confirmes las columnas.
+          </div>
+          {onEliminar && (
+            <button onClick={onEliminar} disabled={busy}
+              style={{ alignSelf: "center", border: "none", background: "transparent", color: eliminarArmado ? "var(--red)" : "var(--text3)", fontSize: "0.82em", fontWeight: 600, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
+              {eliminarArmado ? "¿Seguro? Eliminar todo" : "Eliminar cartola"}
+            </button>
+          )}
+        </div>
+      ) : decidida ? (
         <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.9em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
           <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: "1em", fontWeight: 800, color: "var(--blue)" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>

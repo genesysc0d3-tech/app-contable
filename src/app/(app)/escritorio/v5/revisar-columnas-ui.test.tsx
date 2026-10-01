@@ -33,7 +33,7 @@ describe("la tarjeta 'Así la leímos' ya no existe", () => {
     const html = renderToStaticMarkup(createElement(VeredictoCartola, props(cuadre)));
     expect(html).toContain('data-testid="cta-columnas"');
     expect(html).toContain("Revisar columnas");
-    expect(html).toContain("no pudimos comprobar");
+    expect(html).toMatch(/no pudimos comprobar/i);
     expect(html).not.toMatch(/>\s*Editar\s*</);
     expect(html).not.toContain("Aprobar");
     expect(html).not.toContain("Así la leímos");
