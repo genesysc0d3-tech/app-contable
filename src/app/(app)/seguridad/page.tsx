@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useBloqueoActualizacion } from "@/lib/actualizacion/hooks";
 
 type Factor = { id: string; friendly_name?: string | null; status: string };
 type Enrolling = { factorId: string; qr: string; secret: string };
@@ -15,6 +16,9 @@ export default function SeguridadPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Actualización invisible: con el QR en pantalla (la clienta escanea con el teléfono,
+  // sin tocar la página) o confirmando, una recarga invalidaría el factor recién creado.
+  useBloqueoActualizacion(enrolling != null || busy, "mfa");
   // Confirmación de dos pasos para "Quitar": id del factor en confirmación (expira sola).
   const [confirmingRemove, setConfirmingRemove] = useState<string | null>(null);
 

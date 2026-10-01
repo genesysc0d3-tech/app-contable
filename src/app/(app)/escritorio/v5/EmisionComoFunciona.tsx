@@ -180,6 +180,7 @@ export default function EmisionComoFunciona() {
         <div className="ecf-emit">Emitir 43</div>
 
         {/* popup de subir cartola: aprietas MassDTE → subes → procesa */}
+        {/* actualizacion-libre: maqueta animada de la guía, sin datos */}
         {enPopup && (
           <div className="ecf-pop">
             <div className="ecf-pop-head">

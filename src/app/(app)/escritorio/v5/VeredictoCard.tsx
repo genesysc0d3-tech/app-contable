@@ -57,7 +57,7 @@ function ComprobanteLightbox({ url, origin, onClose }: { url: string; origin: DO
   }, [origin]);
 
   return createPortal(
-    <div onClick={handleClose} style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 28, background: "transparent" }}>
+    <div onClick={handleClose} data-actualizacion-espera="" style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 28, background: "transparent" }}>
       <style>{`@keyframes lbCerrar{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img ref={imgRef} onClick={(e) => e.stopPropagation()} src={url} alt="comprobante"

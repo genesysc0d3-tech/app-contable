@@ -357,7 +357,7 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
       )}
 
       {open && (
-        <div className="md-overlay">
+        <div className="md-overlay" data-actualizacion-espera="">
           <div className="md-panel" style={{ maxHeight: "90vh" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
               <button aria-label="Cerrar" onClick={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 16 }}>×</button>

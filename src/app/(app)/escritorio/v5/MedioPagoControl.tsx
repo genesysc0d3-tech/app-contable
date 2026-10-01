@@ -146,7 +146,7 @@ export default function MedioPagoControl({
 
       {open && pos && typeof document !== "undefined" && createPortal(
         <div
-          ref={menuRef}
+          ref={menuRef} data-actualizacion-espera=""
           role="listbox"
           aria-label="Método de pago"
           style={{

@@ -97,6 +97,7 @@ export default function PreviewBoletaButton({ id }: { id: string }) {
       {open && b && createPortal(
         <div
           onClick={() => setOpen(false)}
+          data-actualizacion-espera=""
           style={{ position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", padding: 18, background: "rgba(0,0,0,.55)", backdropFilter: "blur(6px)" }}
         >
           <div

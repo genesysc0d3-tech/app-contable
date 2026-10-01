@@ -101,6 +101,7 @@ export default function VisualizarArchivo({
   return createPortal(
     <div
       onClick={onClose}
+      data-actualizacion-espera=""
       style={{
         position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center", padding: 28,
         background: "rgba(0,0,0,.5)",

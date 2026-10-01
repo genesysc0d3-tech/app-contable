@@ -76,6 +76,7 @@ export default function MultiempresaComoFunciona() {
         @media (prefers-reduced-motion:reduce){.mef-emp,.mef-emp .chk,.mef-cursor,.mef-desk-brand{transition:none;animation:none}}
       `}</style>
 
+      {/* actualizacion-libre: maqueta animada de la guía, sin datos */}
       <div className="mef-stage" data-fase={fase} aria-hidden>
         <div className="mef-pop">
           <div className="mef-pop-h">Tus empresas · 2 de 3</div>

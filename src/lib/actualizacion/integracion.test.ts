@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { CABECERA_VERSION } from "./version";
@@ -48,10 +49,17 @@ describe("momentos NO seguros declarados", () => {
     expect(fuente(V5 + "revisar-shared.tsx")).toMatch(/"edicion_glosa"\)/);
   });
 
-  it("los popups con formulario marcan data-actualizacion-espera", () => {
-    for (const f of [V5 + "EmitirLoteModal.tsx", V5 + "EditorAmpliado.tsx", V5 + "EleccionEmpresaModal.tsx", V5 + "MesaTab.tsx", V5 + "LeftQuickActions.tsx", V5 + "EmitirTabContent.tsx", V5 + "EmitirDirectaView.tsx", "src/components/mapping/CartolaMapperDragDrop.tsx"]) {
-      expect(fuente(f), f).toMatch(/data-actualizacion-espera/);
-    }
+  it("INVENTARIO automático: todo overlay/portal/dialog/popover de la app lleva marca (o se declara libre)", () => {
+    // Revisión adversarial A1 (2026-10-01): un popup sin marca perdía lo escrito al
+    // recargar. Este test recorre TODOS los .tsx de la app y falla si aparece uno nuevo
+    // sin `data-actualizacion-espera` / aria-modal="true" (o un comentario
+    // `actualizacion-libre: <motivo>` para lo que de verdad no guarda nada).
+    const faltan = inventarioOverlaysSinMarca();
+    expect(faltan).toEqual([]);
+  });
+
+  it("MFA: enrolando (QR en pantalla) no se recarga", () => {
+    expect(fuente("src/app/(app)/seguridad/page.tsx")).toMatch(/useBloqueoActualizacion\([^)]*enrolling[^)]*"mfa"\)/);
   });
 });
 
@@ -69,3 +77,43 @@ describe("estado que se restaura", () => {
     expect(src).toMatch(/SCRIPT_ANTES_DE_PINTAR/);
   });
 });
+
+// ── Inventario de overlays ──────────────────────────────────────────────────────
+function tsxDe(dir: string): string[] {
+  const out: string[] = [];
+  for (const n of readdirSync(dir)) {
+    const p = join(dir, n);
+    if (statSync(p).isDirectory()) out.push(...tsxDe(p));
+    else if (p.endsWith(".tsx") && !/\.test\.tsx$/.test(p)) out.push(p);
+  }
+  return out;
+}
+
+export function inventarioOverlaysSinMarca(raices = ["src/app/(app)", "src/components"]): string[] {
+  const archivos = raices.flatMap(tsxDe);
+  // Clases CSS que en cualquier archivo se definen como velo de pantalla completa.
+  const clasesVelo = new Set<string>();
+  for (const f of archivos) {
+    for (const m of fuente(f).matchAll(/\.([\w-]+)\s*\{\s*position:\s*fixed;\s*inset:\s*0/g)) clasesVelo.add(m[1]);
+  }
+  const SITIO = [
+    /createPortal\(/,
+    /position:\s*"fixed",\s*inset:\s*0\b/,
+    /role="dialog"/,
+  ];
+  const CLASE_SITIO = /(overlay|-pop|popup|modal|velo|veil)$/;
+  const MARCA = /data-actualizacion-espera|aria-modal="true"|actualizacion-libre:/;
+  const faltan: string[] = [];
+  for (const f of archivos) {
+    const lineas = fuente(f).split("\n");
+    lineas.forEach((l, i) => {
+      const usaClaseVelo = [...l.matchAll(/className=\{?[`"]([^`"]*)[`"]/g)].some((m) => m[1].split(/\s+/).some((c) => clasesVelo.has(c) || CLASE_SITIO.test(c)));
+      if (!usaClaseVelo && !SITIO.some((r) => r.test(l))) return;
+      const ventana = lineas.slice(Math.max(0, i - 2), i + 4).join("\n");
+      // Portal de un COMPONENTE (<FieldMapper …/>): su overlay se inventaría en su archivo.
+      if (/createPortal\(/.test(l) && /createPortal\(\s*\n?\s*<[A-Z]/.test(lineas.slice(i, i + 3).join("\n"))) return;
+      if (!MARCA.test(ventana)) faltan.push(`${f}:${i + 1}`);
+    });
+  }
+  return faltan;
+}
