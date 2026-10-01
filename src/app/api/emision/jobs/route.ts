@@ -38,6 +38,7 @@ import {
   pausaActivaParaEmpresa,
 } from "@/lib/ops/emision-pausas";
 import { enviarAlertaCritica } from "@/lib/ops/alertas";
+import { CABECERA_ACTUALIZAR } from "@/lib/actualizacion/version";
 
 type Provider = "sii_local" | "simpleapi";
 type CloseEstado = "failed" | "cancelled" | "revision_pendiente";
@@ -511,7 +512,10 @@ export async function POST(request: Request) {
           enviados
             ? { ok: false, error: "DATOS_CAMBIARON", campos: cmp.campos, detalle: textoDatosCambiaron((propDatos as PropuestaDatos | null)?.mesa) }
             : { ok: false, error: "DATOS_CAMBIARON", code: "EMISION_PAUSADA", campos: cmp.campos, detalle: DETALLE_DATOS_FALTAN },
-          { status: 409 },
+          // Actualización invisible (2026-09-30): la pestaña vieja ignora esta cabecera
+          // (sigue con la pausa limpia de arriba); una con el actualizador se pone al
+          // día sola cuando la emisión termina, sin pedirle a la clienta que recargue.
+          { status: 409, headers: enviados ? undefined : { [CABECERA_ACTUALIZAR]: "1" } },
         );
       }
     }

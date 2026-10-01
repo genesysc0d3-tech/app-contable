@@ -1,0 +1,66 @@
+// Lo que la clienta está viendo, guardado justo antes de la recarga automática y
+// restaurado al volver: sessionStorage (por pestaña), con TTL corto y atado a la
+// MISMA ruta (mes/día/vista/mesa viajan en la URL). Si algo no calza, se descarta.
+import type { StorageLike } from "./anti-bucle";
+
+export const CLAVE_ESTADO = "massdte:actualizacion:estado";
+export const TTL_ESTADO_MS = 2 * 60_000;
+export const FORMATO_ESTADO = 1;
+
+export type ScrollGuardado = { clave: string; top: number; left: number };
+export type EstadoGuardado = {
+  formato: typeof FORMATO_ESTADO;
+  /** Versión desde la que se recargó (diagnóstico). */
+  desde: string;
+  at: number;
+  /** pathname + search al guardar. */
+  ruta: string;
+  piezas: Record<string, unknown>;
+  scroll: ScrollGuardado[];
+  /** id del elemento con foco (si tenía id). */
+  foco: string | null;
+  ventana: { x: number; y: number };
+};
+
+export function guardarEstado(s: StorageLike, e: EstadoGuardado): boolean {
+  try { s.setItem(CLAVE_ESTADO, JSON.stringify(e)); return true; } catch { return false; }
+}
+
+/** Lee y CONSUME el estado (una sola restauración). null si no hay o no sirve. */
+export function leerEstado(s: StorageLike, { ahora, ruta }: { ahora: number; ruta: string }): EstadoGuardado | null {
+  let raw: string | null = null;
+  try {
+    raw = s.getItem(CLAVE_ESTADO);
+    if (raw) s.removeItem(CLAVE_ESTADO);
+  } catch { return null; }
+  if (!raw) return null;
+  try {
+    const e = JSON.parse(raw) as EstadoGuardado;
+    if (!e || e.formato !== FORMATO_ESTADO || typeof e.at !== "number") return null;
+    // Fecha futura (reloj movido) o vencido: fuera.
+    if (e.at > ahora + 5_000 || ahora - e.at > TTL_ESTADO_MS) return null;
+    if (e.ruta !== ruta) return null;
+    return {
+      ...e,
+      piezas: e.piezas && typeof e.piezas === "object" ? e.piezas : {},
+      scroll: Array.isArray(e.scroll) ? e.scroll.filter((x) => x && typeof x.clave === "string" && Number.isFinite(x.top)) : [],
+      foco: typeof e.foco === "string" ? e.foco : null,
+      ventana: e.ventana && Number.isFinite(e.ventana.y) ? e.ventana : { x: 0, y: 0 },
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Script inline (antes de pintar): si hay un estado vigente para ESTA ruta de la
+ * mesa, marca <html> para que la silueta (MesaSkeleton) tape la página mientras
+ * se restaura lo que la clienta veía — sin el parpadeo de la pestaña por defecto.
+ * Con tope propio: a los 8 s se destapa pase lo que pase. Fuera de la mesa no
+ * hay nada que tapar (solo scroll), así que no se marca.
+ */
+export const ATRIBUTO_RESTAURANDO = "data-massdte-restaurando";
+export const TOPE_TAPADO_MS = 8_000;
+export const SCRIPT_ANTES_DE_PINTAR = `try{if(location.pathname==="/massdte"){var r=sessionStorage.getItem(${JSON.stringify(CLAVE_ESTADO)});if(r){var e=JSON.parse(r),n=Date.now();if(e&&e.formato===${FORMATO_ESTADO}&&n-e.at<${TTL_ESTADO_MS}&&e.at<=n+5000&&e.ruta===location.pathname+location.search){var d=document.documentElement;d.setAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)},"");setTimeout(function(){d.removeAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)})},${TOPE_TAPADO_MS})}}}}catch(_){}`;
+export const CLASE_TAPA = "massdte-tapa-restaurando";
+export const ESTILO_RESTAURANDO = `.${CLASE_TAPA}{display:none}html[${ATRIBUTO_RESTAURANDO}] .${CLASE_TAPA}{display:block;position:fixed;inset:0;z-index:2147483000;overflow:hidden;background:var(--background)}`;
