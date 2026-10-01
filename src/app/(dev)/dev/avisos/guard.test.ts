@@ -56,7 +56,7 @@ describe("guard de /dev → Avisos", () => {
   it("con operador: crea con creado_por = su correo y deja auditoría", async () => {
     operador = { ok: true, sb, userId: "op", email: "genesysc0d3@gmail.com" };
     const { guardarAviso } = await import("./actions");
-    const r = await guardarAviso(null, input);
+    const r = await guardarAviso(null, input, { confirmadoParaTodas: true });
     expect(r).toEqual({ ok: true, id: "nuevo-id" });
     expect(escrituras[0]).toMatchObject({ tabla: "avisos_app", op: "insert" });
     expect(escrituras[0].payload).toMatchObject({ tipo: "urgente", formato: "popup", creado_por: "genesysc0d3@gmail.com", activo: true });
@@ -69,17 +69,30 @@ describe("guard de /dev → Avisos", () => {
     expect(await guardarAviso("no-uuid", input)).toEqual({ error: "Aviso inválido" });
     expect("error" in (await guardarAviso(null, { ...input, tipo: "novedad" }))).toBe(true); // popup no urgente
     const id = "8f0e3c1a-1b2c-4d5e-8f90-a1b2c3d4e5f6";
-    expect(await guardarAviso(id, input)).toEqual({ ok: true, id });
+    expect(await guardarAviso(id, input, { confirmadoParaTodas: true })).toEqual({ ok: true, id });
     expect(escrituras.at(-1)).toMatchObject({ op: "update", filtros: [["id", id]] });
     expect(await desactivarAviso(id)).toEqual({ ok: true });
     expect(escrituras.at(-1)).toMatchObject({ op: "update", payload: expect.objectContaining({ activo: false }) });
     expect(eventos.map((e) => e.eventName)).toEqual(["aviso_editado", "aviso_desactivado"]);
+    // B8: la edición audita antes y después
+    expect(eventos[0].metadata).toMatchObject({ antes: expect.anything(), despues: expect.objectContaining({ titulo: input.titulo }) });
+  });
+
+  it("B8: un popup urgente para TODAS las empresas exige confirmación explícita (sin tocar la base)", async () => {
+    operador = { ok: true, sb, userId: "op", email: "genesysc0d3@gmail.com" };
+    const { guardarAviso } = await import("./actions");
+    const r = await guardarAviso(null, input);
+    expect(r).toEqual({ error: expect.stringMatching(/confirma/i) });
+    expect(escrituras).toEqual([]);
+    // dirigido a empresas puntuales no necesita la confirmación
+    const r2 = await guardarAviso(null, { ...input, empresaIds: ["8f0e3c1a-1b2c-4d5e-8f90-a1b2c3d4e5f6"] });
+    expect(r2).toEqual({ ok: true, id: "nuevo-id" });
   });
 
   it("el payload nunca se esparce: campos fuera de la allowlist no llegan a la base", async () => {
     operador = { ok: true, sb, userId: "op", email: "genesysc0d3@gmail.com" };
     const { guardarAviso } = await import("./actions");
-    await guardarAviso(null, { ...input, activo: false, creado_por: "otro", id: "x" } as typeof input);
+    await guardarAviso(null, { ...input, activo: false, creado_por: "otro", id: "x" } as typeof input, { confirmadoParaTodas: true });
     const p = escrituras[0].payload as Record<string, unknown>;
     expect(p.creado_por).toBe("genesysc0d3@gmail.com");
     expect(p).not.toHaveProperty("id");

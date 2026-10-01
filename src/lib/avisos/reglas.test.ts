@@ -26,7 +26,6 @@ function aviso(p: Partial<AvisoApp> = {}): AvisoApp {
     formato: "toast",
     desde: "2026-10-01T00:00:00Z",
     hasta: "2026-10-08T00:00:00Z",
-    empresa_ids: null,
     mesa: null,
     version_min: null,
     created_at: "2026-10-01T00:00:00Z",
@@ -50,10 +49,10 @@ describe("vigencia", () => {
 
 describe("audiencia", () => {
   it("empresa_ids null = todas; con lista, solo esas", () => {
-    expect(avisoParaEmpresa(aviso(), "e1")).toBe(true);
-    expect(avisoParaEmpresa(aviso({ empresa_ids: ["e1", "e2"] }), "e2")).toBe(true);
-    expect(avisoParaEmpresa(aviso({ empresa_ids: ["e1"] }), "e9")).toBe(false);
-    expect(avisoParaEmpresa(aviso({ empresa_ids: ["e1"] }), null)).toBe(false);
+    expect(avisoParaEmpresa({ empresa_ids: null }, "e1")).toBe(true);
+    expect(avisoParaEmpresa({ empresa_ids: ["e1", "e2"] }, "e2")).toBe(true);
+    expect(avisoParaEmpresa({ empresa_ids: ["e1"] }, "e9")).toBe(false);
+    expect(avisoParaEmpresa({ empresa_ids: ["e1"] }, null)).toBe(false);
   });
   it("mesa null = en cualquier parte; con mesa, solo mirando esa mesa", () => {
     expect(avisoParaMesa(aviso(), null)).toBe(true);
@@ -70,17 +69,19 @@ describe("audiencia", () => {
 });
 
 describe("versión mínima (novedades de esta versión)", () => {
-  const pestana = { version: "abc123def456", builtAt: "2026-10-01T12:00:00.000Z" };
+  // M6: el orden lo da la fecha del COMMIT (determinista: un redeploy de un commit
+  // viejo no la adelanta, y server y cliente del mismo build la ven igual).
+  const pestana = { version: "abc123def456", fechaCommit: "2026-10-01T12:00:00.000Z" };
   it("sin versión mínima: siempre", () => {
     expect(versionCumple(null, pestana)).toBe(true);
     expect(versionCumple("  ", pestana)).toBe(true);
   });
-  it("por fecha de build: la pestaña igual o más nueva cumple; la vieja espera", () => {
+  it("por fecha de commit: la pestaña igual o más nueva cumple; la vieja espera", () => {
     expect(versionCumple("2026-10-01T12:00:00.000Z", pestana)).toBe(true);
     expect(versionCumple("2026-10-01T11:00:00Z", pestana)).toBe(true);
     expect(versionCumple("2026-10-01T13:00:00Z", pestana)).toBe(false);
-    // pestaña sin fecha de build (build viejo): no se le muestran novedades que quizás no tiene
-    expect(versionCumple("2026-10-01T11:00:00Z", { version: "x", builtAt: null })).toBe(false);
+    // pestaña sin fecha de commit: no se le muestran novedades que quizás no tiene
+    expect(versionCumple("2026-10-01T11:00:00Z", { version: "x", fechaCommit: null })).toBe(false);
   });
   it("por commit: solo esa versión exacta (prefijo de al menos 7)", () => {
     expect(versionCumple("abc123d", pestana)).toBe(true);
@@ -120,6 +121,10 @@ describe("markdown mínimo (negritas y links), sin HTML", () => {
   it("links peligrosos quedan como texto; el HTML no se interpreta", () => {
     expect(partesMarkdown("[x](javascript:alert(1))")).toEqual([{ t: "texto", v: "[x](javascript:alert(1))" }]);
     expect(partesMarkdown("[x](//evil.com)")).toEqual([{ t: "texto", v: "[x](//evil.com)" }]);
+    // B2: "/\\evil.com" el navegador lo trata como "//evil.com"; http plano tampoco.
+    expect(partesMarkdown("[x](/\\evil.com)")).toEqual([{ t: "texto", v: "[x](/\\evil.com)" }]);
+    expect(partesMarkdown("[x](/-raro)")).toEqual([{ t: "texto", v: "[x](/-raro)" }]);
+    expect(partesMarkdown("[x](http://massdte.cl)")).toEqual([{ t: "texto", v: "[x](http://massdte.cl)" }]);
     expect(partesMarkdown("<b>hola</b>")).toEqual([{ t: "texto", v: "<b>hola</b>" }]);
   });
 });

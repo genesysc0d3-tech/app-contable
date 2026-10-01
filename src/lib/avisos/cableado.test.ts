@@ -51,6 +51,34 @@ describe("inventario de overlays", () => {
     const src = fuente(VISTA);
     expect(src).toMatch(/role="dialog"[^>]*aria-modal="true"[^>]*data-actualizacion-espera/);
   });
+  it("M3: toast y tarjeta van BAJO los modales (z-index < 100); el popup urgente encima", () => {
+    const src = fuente(VISTA);
+    for (const cls of ["av-toast", "av-tarjeta"]) {
+      const z = new RegExp(`\\.${cls}\\{[^}]*z-index:(\\d+)`).exec(src);
+      expect(z, cls).not.toBeNull();
+      expect(Number(z![1]), cls).toBeLessThan(100);
+    }
+  });
+
+  it("M2: el popup usa la espera estricta con las escrituras del actualizador y la última liberación de bloqueo", () => {
+    const src = fuente(APP);
+    expect(src).toMatch(/motivoEsperaAviso\(/);
+    expect(src).toMatch(/estadoEscrituras\(\)/);
+    expect(src).toMatch(/msDesdeUltimaLiberacion\(\)/);
+    expect(fuente("src/components/ActualizadorInvisible.tsx")).toMatch(/anotarEscritura\(/);
+  });
+
+  it("M4: vistos locales con la clave del usuario", () => {
+    expect(fuente(APP)).toMatch(/leerVistosLocales\(storage, userId\)/);
+  });
+
+  it("M6: next.config fecha la versión por el COMMIT (git), no por la hora del build", () => {
+    const cfg = fuente("next.config.ts");
+    expect(cfg).toMatch(/NEXT_PUBLIC_APP_COMMIT_AT/);
+    expect(cfg).toMatch(/git (show|log)[^\n]*%cI/);
+    expect(cfg).not.toMatch(/NEXT_PUBLIC_APP_BUILD_AT/);
+  });
+
   it("toast y tarjeta se declaran libres con motivo", () => {
     const src = fuente(VISTA);
     const libres = src.match(/actualizacion-libre: \S.*/g) ?? [];

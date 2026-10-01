@@ -54,9 +54,21 @@ describe("RLS", () => {
     expect(p).toMatch(/empresa_ids is null or \(select public\.empresa_autorizada\(\)\) = any\(empresa_ids\)/);
   });
 
-  it("nadie fuera del service role escribe avisos", () => {
+  it("nadie fuera del service role escribe avisos; B3: se revoca TODO (también references/trigger/maintain)", () => {
     expect(sql).not.toMatch(/on public\.avisos_app\s+for (insert|update|delete|all)/);
-    expect(sql).toMatch(/revoke insert, update, delete, truncate on public\.avisos_app from anon, authenticated/);
+    expect(sql).toMatch(/revoke all on public\.avisos_app from anon, authenticated;/);
+    expect(sql).toMatch(/revoke all on public\.avisos_vistos from anon, authenticated;/);
+    expect(sql).not.toMatch(/grant (all|insert|update|delete)[^;]*on public\.avisos_app/);
+  });
+
+  it("B1: la clienta lee SOLO columnas mínimas (sin creado_por ni empresa_ids de otras empresas)", () => {
+    const g = /grant select \(([^)]*)\) on public\.avisos_app to authenticated;/.exec(sql);
+    expect(g).not.toBeNull();
+    const cols = g![1].split(",").map((c) => c.trim());
+    expect(cols).toEqual(expect.arrayContaining(["id", "tipo", "titulo", "cuerpo", "formato", "desde", "hasta", "mesa", "version_min", "activo"]));
+    expect(cols).not.toContain("creado_por");
+    expect(cols).not.toContain("empresa_ids");
+    expect(sql).not.toMatch(/grant select on public\.avisos_app to authenticated/);
   });
 
   it("vistos: cada uno lee y marca SOLO lo suyo, y solo avisos que puede ver", () => {
@@ -68,9 +80,8 @@ describe("RLS", () => {
     expect(marca).toMatch(/user_id = \(select auth\.uid\(\)\)/);
     // el EXISTS corre con el RLS de quien llama: solo avisos vigentes de su audiencia
     expect(marca).toMatch(/exists \(select 1 from public\.avisos_app a where a\.id = aviso_id\)/);
-    expect(sql).toMatch(/revoke update, delete, truncate on public\.avisos_vistos from anon, authenticated/);
-    expect(sql).toMatch(/revoke all on public\.avisos_app from anon/);
-    expect(sql).toMatch(/revoke all on public\.avisos_vistos from anon/);
+    expect(sql).toMatch(/grant select, insert on public\.avisos_vistos to authenticated;/);
+    expect(sql).not.toMatch(/grant [^;]*(update|delete)[^;]*on public\.avisos_vistos/);
   });
 });
 

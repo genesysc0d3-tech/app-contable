@@ -6,7 +6,8 @@ import { _reiniciarCacheAvisos, avisosPendientes } from "./servidor";
 
 type Llamada = { tabla: string; select?: string; filtros: [string, string, unknown][] };
 
-function fakeSb(respuesta: () => { data: unknown; error: unknown }) {
+type Resp = { data: unknown; error: unknown };
+function fakeSb(respuesta: () => Resp | Promise<Resp>) {
   const llamadas: Llamada[] = [];
   const sb = {
     from(tabla: string) {
@@ -51,7 +52,32 @@ describe("avisosPendientes", () => {
     ]));
   });
 
-  it("lo ya visto por ESTE usuario no viaja; lo de otra empresa tampoco", async () => {
+  it("B1: con el cliente de la SESIÓN no pide empresa_ids ni creado_por (el RLS filtra la empresa; columnas mínimas)", async () => {
+    const { sb, llamadas } = fakeSb(() => ({ data: [fila()], error: null }));
+    await avisosPendientes(sb, { userId: "u1", empresaId: "e1", cliente: "sesion", now: NOW });
+    expect(llamadas[0].select).not.toMatch(/empresa_ids|creado_por/);
+  });
+
+  it("B1: lo que viaja al navegador nunca lleva empresa_ids (ni con service role)", async () => {
+    const { sb, llamadas } = fakeSb(() => ({ data: [fila({ empresa_ids: ["e1", "e-otra"] })], error: null }));
+    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", cliente: "servicio", now: NOW });
+    expect(llamadas[0].select).toMatch(/empresa_ids/);
+    expect(r).toHaveLength(1);
+    expect(r[0]).not.toHaveProperty("empresa_ids");
+  });
+
+  it("M5: si la consulta tarda más que el tope, la mesa sigue sin avisos (y no se cachea el vacío)", async () => {
+    let n = 0;
+    const { sb, llamadas } = fakeSb(() => { n++; return n === 1 ? new Promise<Resp>(() => {}) : { data: [fila()], error: null }; });
+    const t0 = Date.now();
+    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW, timeoutMs: 30 })).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(1_000);
+    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW, timeoutMs: 30 });
+    expect(r.map((a) => a.id)).toEqual(["a1"]);
+    expect(llamadas).toHaveLength(2);
+  });
+
+  it("lo ya visto por ESTE usuario no viaja; lo de otra empresa tampoco (service role)", async () => {
     const { sb } = fakeSb(() => ({
       data: [
         fila({ id: "visto", avisos_vistos: [{ user_id: "u1" }] }),
@@ -60,7 +86,7 @@ describe("avisosPendientes", () => {
       ],
       error: null,
     }));
-    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW });
+    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", cliente: "servicio", now: NOW });
     expect(r.map((a) => a.id)).toEqual(["mia"]);
     // no viaja el embebido al cliente
     expect(r[0]).not.toHaveProperty("avisos_vistos");
