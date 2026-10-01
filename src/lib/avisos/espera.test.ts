@@ -22,7 +22,11 @@ describe("motivoEsperaAviso", () => {
     expect(motivoEsperaAviso("popup", libre)).toBe(null);
   });
   it("toast/tarjeta no esperan el margen ni las escrituras (no tapan nada: van bajo los modales)", () => {
-    expect(motivoEsperaAviso("toast", { ...libre, msDesdeLiberacion: 1_000, escriturasEnVuelo: 2, toastDeLaApp: true })).toBe(null);
+    expect(motivoEsperaAviso("toast", { ...libre, msDesdeLiberacion: 1_000, escriturasEnVuelo: 2 })).toBe(null);
+    expect(motivoEsperaAviso("tarjeta", { ...libre, msDesdeLiberacion: 1_000, escriturasEnVuelo: 2, toastDeLaApp: true })).toBe(null);
+  });
+  it("N3: el toast de aviso espera si hay un toast de la app a la vista (no se superponen)", () => {
+    expect(motivoEsperaAviso("toast", { ...libre, toastDeLaApp: true })).toBe("toast_de_la_app");
   });
   it("margen entre 10 y 15 s", () => {
     expect(MARGEN_POPUP_TRAS_LIBERAR_MS).toBeGreaterThanOrEqual(10_000);

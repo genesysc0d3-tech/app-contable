@@ -125,6 +125,12 @@ describe("markdown mínimo (negritas y links), sin HTML", () => {
     expect(partesMarkdown("[x](/\\evil.com)")).toEqual([{ t: "texto", v: "[x](/\\evil.com)" }]);
     expect(partesMarkdown("[x](/-raro)")).toEqual([{ t: "texto", v: "[x](/-raro)" }]);
     expect(partesMarkdown("[x](http://massdte.cl)")).toEqual([{ t: "texto", v: "[x](http://massdte.cl)" }]);
+    // N5: por parseo de URL: https sin credenciales en el host
+    expect(partesMarkdown("[x](https://massdte.cl@evil.com)")).toEqual([{ t: "texto", v: "[x](https://massdte.cl@evil.com)" }]);
+    expect(partesMarkdown("[x](https://user:pw@evil.com/a)")).toEqual([{ t: "texto", v: "[x](https://user:pw@evil.com/a)" }]);
+    expect(partesMarkdown("[x](https:evil.com)")).toEqual([{ t: "texto", v: "[x](https:evil.com)" }]);
+    expect(partesMarkdown("[x](/a/../..//evil.com)")).toEqual([{ t: "texto", v: "[x](/a/../..//evil.com)" }]);
+    expect(partesMarkdown("[ayuda](https://massdte.cl/ayuda?x=1#y)")).toEqual([{ t: "link", v: "ayuda", href: "https://massdte.cl/ayuda?x=1#y" }]);
     expect(partesMarkdown("<b>hola</b>")).toEqual([{ t: "texto", v: "<b>hola</b>" }]);
   });
 });

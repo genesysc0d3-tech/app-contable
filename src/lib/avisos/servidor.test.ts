@@ -40,7 +40,7 @@ describe("avisosPendientes", () => {
   it("UNA consulta: activo + vigencia (índice) + vistos del usuario embebidos", async () => {
     const { sb, llamadas } = fakeSb(() => ({ data: [fila()], error: null }));
     const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW });
-    expect(r.map((a) => a.id)).toEqual(["a1"]);
+    expect(r!.map((a) => a.id)).toEqual(["a1"]);
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].tabla).toBe("avisos_app");
     expect(llamadas[0].select).toMatch(/avisos_vistos\(/);
@@ -52,44 +52,40 @@ describe("avisosPendientes", () => {
     ]));
   });
 
-  it("B1: con el cliente de la SESIÓN no pide empresa_ids ni creado_por (el RLS filtra la empresa; columnas mínimas)", async () => {
-    const { sb, llamadas } = fakeSb(() => ({ data: [fila()], error: null }));
-    await avisosPendientes(sb, { userId: "u1", empresaId: "e1", cliente: "sesion", now: NOW });
-    expect(llamadas[0].select).not.toMatch(/empresa_ids|creado_por/);
-  });
-
-  it("B1: lo que viaja al navegador nunca lleva empresa_ids (ni con service role)", async () => {
-    const { sb, llamadas } = fakeSb(() => ({ data: [fila({ empresa_ids: ["e1", "e-otra"] })], error: null }));
-    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", cliente: "servicio", now: NOW });
+  it("N2: UNA sola regla de empresa (avisoParaEmpresa) en el server, sin modos: layout y /api/mesa filtran igual", async () => {
+    const { sb, llamadas } = fakeSb(() => ({ data: [fila({ id: "otra", empresa_ids: ["e2"] }), fila({ id: "mia", empresa_ids: ["e1"] }), fila({ id: "todas" })], error: null }));
+    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW });
+    expect(r!.map((a) => a.id)).toEqual(["mia", "todas"]);
     expect(llamadas[0].select).toMatch(/empresa_ids/);
-    expect(r).toHaveLength(1);
-    expect(r[0]).not.toHaveProperty("empresa_ids");
+    expect(llamadas[0].select).not.toMatch(/creado_por/);
   });
 
-  it("M5: si la consulta tarda más que el tope, la mesa sigue sin avisos (y no se cachea el vacío)", async () => {
+  it("B1: lo que viaja al navegador nunca lleva empresa_ids", async () => {
+    const { sb } = fakeSb(() => ({ data: [fila({ empresa_ids: ["e1", "e-otra"] })], error: null }));
+    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW });
+    expect(r).toHaveLength(1);
+    expect(r![0]).not.toHaveProperty("empresa_ids");
+  });
+
+  it("N1/M5: si la consulta tarda más que el tope → undefined (\"no sé\"), sin cachear", async () => {
     let n = 0;
     const { sb, llamadas } = fakeSb(() => { n++; return n === 1 ? new Promise<Resp>(() => {}) : { data: [fila()], error: null }; });
     const t0 = Date.now();
-    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW, timeoutMs: 30 })).toEqual([]);
+    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW, timeoutMs: 30 })).toBeUndefined();
     expect(Date.now() - t0).toBeLessThan(1_000);
     const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW, timeoutMs: 30 });
-    expect(r.map((a) => a.id)).toEqual(["a1"]);
+    expect(r!.map((a) => a.id)).toEqual(["a1"]);
     expect(llamadas).toHaveLength(2);
   });
 
-  it("lo ya visto por ESTE usuario no viaja; lo de otra empresa tampoco (service role)", async () => {
+  it("lo ya visto por ESTE usuario no viaja", async () => {
     const { sb } = fakeSb(() => ({
-      data: [
-        fila({ id: "visto", avisos_vistos: [{ user_id: "u1" }] }),
-        fila({ id: "otra", empresa_ids: ["e2"] }),
-        fila({ id: "mia", empresa_ids: ["e1"] }),
-      ],
+      data: [fila({ id: "visto", avisos_vistos: [{ user_id: "u1" }] }), fila({ id: "nuevo" })],
       error: null,
     }));
-    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", cliente: "servicio", now: NOW });
-    expect(r.map((a) => a.id)).toEqual(["mia"]);
-    // no viaja el embebido al cliente
-    expect(r[0]).not.toHaveProperty("avisos_vistos");
+    const r = await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW });
+    expect(r!.map((a) => a.id)).toEqual(["nuevo"]);
+    expect(r![0]).not.toHaveProperty("avisos_vistos");
   });
 
   it("caché corta por usuario+empresa: la 2.ª carga no consulta; pasado el minuto, sí", async () => {
@@ -103,18 +99,20 @@ describe("avisosPendientes", () => {
     expect(llamadas).toHaveLength(3);
   });
 
-  it("FAIL-SAFE sin tabla: devuelve [] y no reintenta en cada carga (caché negativa)", async () => {
+  it("FAIL-SAFE sin tabla: undefined y no reintenta en cada carga (5 min)", async () => {
     const { sb, llamadas } = fakeSb(() => ({ data: null, error: { code: "PGRST205", message: "Could not find the table 'public.avisos_app'" } }));
-    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW })).toEqual([]);
-    expect(await avisosPendientes(sb, { userId: "u2", empresaId: "e2", now: NOW })).toEqual([]);
+    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW })).toBeUndefined();
+    expect(await avisosPendientes(sb, { userId: "u2", empresaId: "e2", now: NOW })).toBeUndefined();
     expect(llamadas).toHaveLength(1);
   });
 
-  it("FAIL-SAFE ante excepción o error cualquiera: [] (la mesa jamás se cae por un aviso)", async () => {
+  it("N1: excepción o error cualquiera → undefined y NO se cachea (la próxima carga reintenta)", async () => {
     const { sb } = fakeSb(() => { throw new Error("socket"); });
-    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW })).toEqual([]);
-    const otro = fakeSb(() => ({ data: null, error: { code: "42501", message: "permission denied" } }));
-    expect(await avisosPendientes(otro.sb, { userId: "u3", empresaId: "e1", now: NOW })).toEqual([]);
+    expect(await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW })).toBeUndefined();
+    let n = 0;
+    const otro = fakeSb(() => (++n === 1 ? { data: null, error: { code: "42501", message: "permission denied" } } : { data: [fila()], error: null }));
+    expect(await avisosPendientes(otro.sb, { userId: "u3", empresaId: "e1", now: NOW })).toBeUndefined();
+    expect((await avisosPendientes(otro.sb, { userId: "u3", empresaId: "e1", now: NOW }))!.map((a) => a.id)).toEqual(["a1"]);
   });
 
   it("sin usuario o sin empresa no consulta", async () => {

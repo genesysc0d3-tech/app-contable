@@ -89,6 +89,17 @@ describe("guard de /dev → Avisos", () => {
     expect(r2).toEqual({ ok: true, id: "nuevo-id" });
   });
 
+  it("N6: CUALQUIER urgente para todas (también toast o tarjeta) exige la confirmación", async () => {
+    operador = { ok: true, sb, userId: "op", email: "genesysc0d3@gmail.com" };
+    const { guardarAviso } = await import("./actions");
+    for (const formato of ["toast", "tarjeta"]) {
+      expect(await guardarAviso(null, { ...input, formato })).toEqual({ error: expect.stringMatching(/confirma/i) });
+    }
+    expect(escrituras).toEqual([]);
+    // una novedad para todas no la necesita
+    expect(await guardarAviso(null, { ...input, tipo: "novedad", formato: "toast" })).toEqual({ ok: true, id: "nuevo-id" });
+  });
+
   it("el payload nunca se esparce: campos fuera de la allowlist no llegan a la base", async () => {
     operador = { ok: true, sb, userId: "op", email: "genesysc0d3@gmail.com" };
     const { guardarAviso } = await import("./actions");

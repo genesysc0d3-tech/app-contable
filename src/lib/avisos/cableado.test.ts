@@ -22,7 +22,7 @@ describe("entrega sin gasto extra", () => {
   it("/api/mesa los suma a su respuesta normal (en paralelo, sin modo soporte) y la mesa los publica", () => {
     // /api/mesa devuelve tal cual lo que arma cargarMesa
     expect(fuente("src/app/api/mesa/route.ts")).toMatch(/NextResponse\.json\(res,/);
-    expect(fuente("src/app/(app)/escritorio/v5/actions.ts")).toMatch(/ctx\.supportMode \? Promise\.resolve\(\[\] as AvisoApp\[\]\) : avisosPendientes\(ctx\.sb, \{ userId: ctx\.userId, empresaId: ctx\.empresaId, cliente: "servicio" \}\)/);
+    expect(fuente("src/app/(app)/escritorio/v5/actions.ts")).toMatch(/ctx\.supportMode \? Promise\.resolve\(\[\] as AvisoApp\[\]\) : avisosPendientes\(ctx\.sb, \{ userId: ctx\.userId, empresaId: ctx\.empresaId \}\)/);
     expect(fuente("src/app/(app)/escritorio/v5/MesaController.tsx")).toMatch(/publicarAvisos\(/);
   });
 
@@ -66,6 +66,23 @@ describe("inventario de overlays", () => {
     expect(src).toMatch(/estadoEscrituras\(\)/);
     expect(src).toMatch(/msDesdeUltimaLiberacion\(\)/);
     expect(fuente("src/components/ActualizadorInvisible.tsx")).toMatch(/anotarEscritura\(/);
+  });
+
+  it("N2: layout y /api/mesa usan el MISMO camino (service role + avisoParaEmpresa en servidor.ts)", () => {
+    const layout = fuente("src/app/(app)/layout.tsx");
+    const acciones = fuente("src/app/(app)/escritorio/v5/actions.ts");
+    expect(layout).toMatch(/avisosPendientes\(clienteServicioAvisos\(\)/);
+    expect(acciones).toMatch(/avisosPendientes\(ctx\.sb, \{ userId: ctx\.userId, empresaId: ctx\.empresaId \}\)/);
+    expect(fuente("src/lib/avisos/servidor.ts")).not.toMatch(/cliente\?: "sesion"/);
+  });
+
+  it("N1: el layout no convierte un fallo en [] (undefined = la cola queda como está)", () => {
+    expect(fuente("src/app/(app)/layout.tsx")).not.toMatch(/catch\(\(\) => \[\]\)/);
+  });
+
+  it("N3: el toast de aviso abajo a la IZQUIERDA (no encima de la zona de toasts ni de los botones del visor)", () => {
+    const src = fuente(VISTA);
+    expect(src).toMatch(/\.av-toast\{position:fixed;left:20px;bottom:20px;/);
   });
 
   it("M4: vistos locales con la clave del usuario", () => {
