@@ -1,9 +1,27 @@
+import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
 
 // Versión de la app ("shader cache" del fundador): una sola fuente de verdad
 // para el build ID de Next, el Service Worker y el cliente. En Vercel es el
 // commit; en build local, un timestamp (cada build local = versión nueva).
 const APP_VERSION = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? `local-${Date.now().toString(36)}`;
+// Fecha del COMMIT: los SHAs no tienen orden, la fecha del commit sí, y es
+// determinista (dos evaluaciones del config dan lo mismo; un redeploy de un commit
+// viejo NO la adelanta, al revés que la hora del build). La usan los avisos
+// "novedades de esta versión" (version_min ≤ versión de la pestaña). Sin git en el
+// build → vacío: /dev propone entonces el SHA exacto en vez de una fecha.
+function fechaDelCommit(): string {
+  try {
+    const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? "";
+    const ref = /^[0-9a-f]{7,40}$/i.test(sha) ? sha : "HEAD";
+    const out = execSync(`git show -s --format=%cI ${ref}`, { stdio: ["ignore", "pipe", "ignore"], timeout: 5_000 }).toString().trim();
+    const ms = Date.parse(out);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
+  } catch {
+    return "";
+  }
+}
+const APP_COMMIT_AT = fechaDelCommit();
 
 const nextConfig: NextConfig = {
   // Build ID = commit: navegaciones de Next detectan build nuevo y recargan
@@ -11,6 +29,7 @@ const nextConfig: NextConfig = {
   generateBuildId: () => APP_VERSION,
   env: {
     NEXT_PUBLIC_APP_VERSION: APP_VERSION,
+    NEXT_PUBLIC_APP_COMMIT_AT: APP_COMMIT_AT,
   },
   // Legal canónico: los documentos viven en el LANDING (decisión fundador —
   // junto a Confianza). Las rutas /legal/* de la app redirigen allá; los links

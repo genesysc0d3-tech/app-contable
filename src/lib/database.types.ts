@@ -110,6 +110,83 @@ export type Database = {
           },
         ]
       }
+      avisos_app: {
+        Row: {
+          activo: boolean
+          creado_por: string | null
+          created_at: string
+          cuerpo: string
+          desde: string
+          empresa_ids: string[] | null
+          formato: string
+          hasta: string
+          id: string
+          mesa: string | null
+          tipo: string
+          titulo: string
+          updated_at: string | null
+          version_min: string | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_por?: string | null
+          created_at?: string
+          cuerpo?: string
+          desde?: string
+          empresa_ids?: string[] | null
+          formato: string
+          hasta: string
+          id?: string
+          mesa?: string | null
+          tipo: string
+          titulo: string
+          updated_at?: string | null
+          version_min?: string | null
+        }
+        Update: {
+          activo?: boolean
+          creado_por?: string | null
+          created_at?: string
+          cuerpo?: string
+          desde?: string
+          empresa_ids?: string[] | null
+          formato?: string
+          hasta?: string
+          id?: string
+          mesa?: string | null
+          tipo?: string
+          titulo?: string
+          updated_at?: string | null
+          version_min?: string | null
+        }
+        Relationships: []
+      }
+      avisos_vistos: {
+        Row: {
+          aviso_id: string
+          user_id: string
+          visto_en: string
+        }
+        Insert: {
+          aviso_id: string
+          user_id?: string
+          visto_en?: string
+        }
+        Update: {
+          aviso_id?: string
+          user_id?: string
+          visto_en?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avisos_vistos_aviso_id_fkey"
+            columns: ["aviso_id"]
+            isOneToOne: false
+            referencedRelation: "avisos_app"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boletas_caf_mock: {
         Row: {
           created_at: string
