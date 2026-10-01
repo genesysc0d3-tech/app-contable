@@ -24,6 +24,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { DECLARAR_SIN_RESPUESTA_TRAS_MS } from "./lapida";
 
 type Sb = SupabaseClient<Database>;
 
@@ -37,6 +38,79 @@ export function esLapidaBoletaUnica(job: JobBoletaUnica): boolean {
   if (job.propuesta_id) return false; // el lote tiene su propia lápida (lapida.ts)
   if (job.estado !== "revision_pendiente") return false;
   return Date.parse(job.created_at) >= Date.parse(BOLETA_UNICA_LAPIDA_DESDE);
+}
+
+// ── ¿Alcanzó a apretar EMITIR? (auditoría oct-2026, hallazgo 2) ───────────────
+//
+// Hueco: la lápida solo nacía de un aviso explícito de la extensión. Si la pestaña
+// moría DESPUÉS de mandar FILL_AND_EMIT, el job quedaba `running`, vencía y nadie lo
+// cerraba: el candado vencido se borra al pedir otro (locks.ts) y la empresa podía
+// emitir otra boleta → doble boleta. Y el «liberar candado» (cancelStaleLock) lo
+// cerraba `cancelled` sin mirar si ya había apretado EMITIR.
+//
+// No hay columna "disparado": la señal es `estado_visible`, que el latido (PATCH de
+// /api/emision/jobs) pisa con el ÚLTIMO status de la extensión. La extensión manda
+// "submitting" justo antes de FILL_AND_EMIT (background.js) y nunca manda
+// "cancelled"/"closed" después del clic. Mismo criterio que ESTADOS_POSIBLE_CLIC de
+// EmitirDirectaView (+ los de la factura: firmar es el clic). Un job que nunca pasó
+// de opening_sii / sii_page_ready / waiting_sii_login sí se cancela libre.
+// Límite conocido: si la PÁGINA muere entre el "submitting" de la extensión y su
+// latido, el server no se entera (queda como pre-clic). Lo cubre la extensión.
+// MONÓTONA (rev. adversarial #3): tras firmar una factura la extensión sigue mandando
+// "fact_drive", "retrying", "working"… y el latido pisaba la marca. El latido usa
+// marcarEstadoVisibleLatido: una vez post-clic, estado_visible no vuelve a pre-clic.
+export const ESTADOS_VISIBLES_POSIBLE_CLIC: ReadonlySet<string> = new Set([
+  "submitting", "capturing_result", "result_awaiting_ack", "result_needs_review", "emitted",
+  "firmar_click", "signing", "fact_sign_poll",
+]);
+
+export type JobBoletaUnicaAbierta = JobBoletaUnica & { estado_visible?: string | null; expires_at?: string | null };
+
+/**
+ * Campos de estado_visible para el UPDATE PRINCIPAL del latido (vuelta 2, B1): un
+ * status post-clic va ahí mismo (una sola query, atómica con la renovación); uno
+ * pre-clic no — ese pasa por marcarEstadoVisibleLatido, con su condición monótona.
+ */
+export function estadoVisibleEnLatidoPrincipal(estado: string): { estado_visible?: string } {
+  return ESTADOS_VISIBLES_POSIBLE_CLIC.has(estado) ? { estado_visible: estado } : {};
+}
+
+/**
+ * Latido (PATCH de /api/emision/jobs), status PRE-clic: escribe el status de la extensión en el job sin
+ * BORRAR una marca de posible clic. Un status post-clic se escribe siempre; uno
+ * pre-clic solo si el job no estaba ya post-clic — condición en el mismo UPDATE
+ * (atómica por fila: dos latidos cruzados no pierden la marca). Solo jobs abiertos.
+ */
+export async function marcarEstadoVisibleLatido(sb: Sb, jobId: string, estado: string): Promise<{ error: { message: string } | null }> {
+  let q = sb
+    .from("emision_jobs")
+    .update({ estado_visible: estado })
+    .eq("job_id", jobId)
+    .in("estado", ["created", "running"]);
+  if (!ESTADOS_VISIBLES_POSIBLE_CLIC.has(estado)) {
+    q = q.or(`estado_visible.is.null,estado_visible.not.in.(${[...ESTADOS_VISIBLES_POSIBLE_CLIC].join(",")})`);
+  }
+  const { error } = await q;
+  return { error: error ? { message: error.message } : null };
+}
+
+/** Boleta única (posterior al corte) cuyo último status conocido es post-clic. */
+export function posibleClicBoletaUnica(job: { propuesta_id: string | null; created_at: string; estado_visible?: string | null }): boolean {
+  if (job.propuesta_id) return false;
+  if (!(Date.parse(job.created_at) >= Date.parse(BOLETA_UNICA_LAPIDA_DESDE))) return false;
+  return ESTADOS_VISIBLES_POSIBLE_CLIC.has(String(job.estado_visible ?? ""));
+}
+
+/**
+ * Boleta única SIN RESPUESTA: abierta (created/running), vencida y con posible clic.
+ * Es un resultado desconocido, igual que la "sin respuesta" del lote (lapida.ts): se
+ * sella como lápida, nunca se deja vencer en silencio.
+ */
+export function esSinRespuestaBoletaUnica(job: JobBoletaUnicaAbierta, ahora: Date = new Date()): boolean {
+  if (job.estado !== "created" && job.estado !== "running") return false;
+  if (!job.expires_at) return false;
+  if (Date.parse(job.expires_at) > ahora.getTime()) return false;
+  return posibleClicBoletaUnica(job);
 }
 
 // ── Intento: lo que se mandó al SII ─────────────────────────────────────────
@@ -171,8 +245,10 @@ export function detalleBoletaAMedias(intento: IntentoBoletaUnica | null, creadaA
 }
 
 /** ¿La empresa tiene una boleta única a medias sin resolver? Fail-closed. */
-export async function buscarLapidaBoletaUnica(sb: Sb, empresaId: string): Promise<ResultadoLapida> {
+export async function buscarLapidaBoletaUnica(sb: Sb, empresaId: string, ahora: Date = new Date()): Promise<ResultadoLapida> {
   // `*`: trae `intento` si la migración está aplicada, sin romper si no lo está.
+  // + los ABIERTOS (created/running): uno vencido con posible clic es una boleta sin
+  // respuesta (esSinRespuestaBoletaUnica) y también bloquea.
   const { data, error } = await sb
     .from("emision_jobs")
     .select("*")
@@ -181,14 +257,46 @@ export async function buscarLapidaBoletaUnica(sb: Sb, empresaId: string): Promis
     // Solo boletas únicas de verdad: una lápida del LOTE cuya propuesta se borró
     // (FK ON DELETE SET NULL) no es una boleta única a medias.
     .eq("origin", ORIGIN_BOLETA_UNICA)
-    .eq("estado", "revision_pendiente")
+    .in("estado", ["revision_pendiente", "created", "running"])
     .gte("created_at", BOLETA_UNICA_LAPIDA_DESDE)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(20);
   if (error) return { ok: false, status: 500, error: "LAPIDA_QUERY_FAILED", detalle: error.message };
-  const job = (data ?? []).find((j) => esLapidaBoletaUnica(j as JobBoletaUnica)) as
-    | { job_id: string; created_at: string; usuario_id?: string | null; intento?: unknown }
-    | undefined;
+  type FilaJob = JobBoletaUnicaAbierta & { job_id: string; usuario_id?: string | null; intento?: unknown };
+  const filas = (data ?? []) as unknown as FilaJob[];
+  let job: FilaJob | undefined = filas.find((j) => esLapidaBoletaUnica(j));
+  if (!job) {
+    // Sin respuesta → se SELLA a medias (UPDATE condicional: solo si sigue abierta y
+    // vencida; si entre medio llegó su folio o un latido la renovó, 0 filas y no
+    // bloquea). Así el resto del camino (folio a mano, «no salió», levantar al
+    // registrar el folio) funciona igual que con cualquier lápida.
+    for (const j of filas.filter((f) => esSinRespuestaBoletaUnica(f, ahora))) {
+      // Su folio YA puede estar registrado (rev. adversarial #2): venció `running`, la
+      // extensión entregó el folio por la red anti-pérdida y nadie cerró el job. Se
+      // cierra `completed` y no bloquea. Fail-closed si la consulta falla.
+      const { data: suya, error: errSuya } = await sb
+        .from("boletas_emitidas")
+        .select("id")
+        .eq("empresa_id", empresaId)
+        .eq("proveedor_respuesta->>job_id", j.job_id)
+        .limit(1);
+      if (errSuya) return { ok: false, status: 500, error: "LAPIDA_QUERY_FAILED", detalle: errSuya.message };
+      if ((suya ?? []).length > 0) {
+        await levantarLapidaBoletaUnica(sb, j.job_id);
+        continue;
+      }
+      const { data: selladas, error: errSello } = await sb
+        .from("emision_jobs")
+        // status_message marca que nació SIN RESPUESTA: «no salió» espera como el lote (#8).
+        .update({ estado: "revision_pendiente", estado_visible: "revision_pendiente", status_message: SELLO_SIN_RESPUESTA })
+        .eq("job_id", j.job_id)
+        .in("estado", ["created", "running"])
+        .lte("expires_at", ahora.toISOString())
+        .select("job_id");
+      if (errSello) return { ok: false, status: 500, error: "LAPIDA_QUERY_FAILED", detalle: errSello.message };
+      if ((selladas ?? []).length > 0) { job = j; break; }
+    }
+  }
   if (!job) return { ok: true };
   const intento = leerIntento(job.intento);
   return {
@@ -210,7 +318,9 @@ export async function levantarLapidaBoletaUnica(sb: Sb, jobId: string | null | u
       .from("emision_jobs")
       .update({ estado: "completed", estado_visible: "completed", updated_at: new Date().toISOString() })
       .eq("job_id", jobId)
-      .eq("estado", "revision_pendiente")
+      // + abiertos (rev. adversarial #2): un job que venció `running` y cuyo folio llegó
+      // por la red anti-pérdida también queda cerrado (como liftRevisionTombstone del lote).
+      .in("estado", ["revision_pendiente", "created", "running"])
       .is("propuesta_id", null);
     await sb.from("emision_locks").delete().eq("job_id", jobId);
   } catch {
@@ -221,19 +331,54 @@ export async function levantarLapidaBoletaUnica(sb: Sb, jobId: string | null | u
 // ── «Revisé el SII y no salió» ──────────────────────────────────────────────
 
 export const SELLO_NO_SALIO = "Declarado por la persona: revisó el SII y la boleta no salió";
+/** status_message de una boleta única sellada a medias por vencer sin respuesta tras el clic. */
+export const SELLO_SIN_RESPUESTA = "Sin respuesta: venció después de apretar EMITIR";
+
+/**
+ * ¿Este folio del stash prueba que la boleta salió? (rev. adversarial #7) Un folio
+ * rechazado por ser de OTRO documento no es de este intento: no puede dejar la lápida
+ * sin salida (FOLIO_CAPTURADO para siempre). Todo otro folio (débil, gate fallido,
+ * huérfana RCV sin monto, chequeo fallido) sí bloquea.
+ */
+export function folioBloqueaNoSalio(fila: { folio?: unknown; status?: string | null; error?: string | null }): boolean {
+  if (fila.folio == null) return false;
+  return !(fila.status === "rejected" && fila.error === "FOLIO_DE_OTRO_DOCUMENTO");
+}
+
+type FilaStash = { folio?: unknown; status?: string | null; error?: string | null };
+
+/**
+ * La fila del stash que bloquea «no salió», mirando el FOLIO y no fila por fila (rev.
+ * adversarial vuelta 2, M1): rememberResult INSERTA, así que un mismo folio deja
+ * residuos (job_gate_failed, FOLIO_CHECK_FAILED de un intento anterior) junto a la fila
+ * que lo declaró de OTRO documento. Si un folio tiene al menos una fila
+ * rejected/FOLIO_DE_OTRO_DOCUMENTO, TODAS sus filas se ignoran: ese número no es de
+ * este intento. Cualquier otro folio bloquea.
+ */
+export function folioQueBloqueaNoSalio<T extends FilaStash>(filas: readonly T[]): T | undefined {
+  const ajenos = new Set(filas.filter((f) => f.folio != null && !folioBloqueaNoSalio(f)).map((f) => String(f.folio)));
+  return filas.find((f) => f.folio != null && !ajenos.has(String(f.folio)));
+}
 /** Espera desde el último signo de vida (mismo criterio que la verificación del lote). */
 export const NO_SALIO_TRAS_MS = 10 * 60 * 1000;
 
 type JobDeclarable = {
   job_id: string; cuenta_id: string; estado: string; propuesta_id: string | null; created_at: string;
-  expires_at?: string | null; updated_at?: string | null;
+  expires_at?: string | null; updated_at?: string | null; status_message?: string | null;
 };
 
-/** Desde cuándo se acepta «no salió»: máx(expires_at, updated_at + 10 min). */
+/**
+ * Desde cuándo se acepta «no salió»: máx(expires_at, updated_at + 10 min). Si la
+ * lápida nació SIN RESPUESTA (sellada al vencer tras el clic), además expires_at +
+ * 30 min, igual que el lote (lapida.ts, rev. adversarial #8): pudo seguir viva.
+ */
 export function plazoDeclararBoletaUnica(job: JobDeclarable): number {
   const exp = job.expires_at ? Date.parse(job.expires_at) : NaN;
   const upd = Date.parse(job.updated_at ?? job.created_at) + NO_SALIO_TRAS_MS;
-  return Math.max(Number.isFinite(exp) ? exp : -Infinity, Number.isFinite(upd) ? upd : -Infinity);
+  const sinResp = (job.status_message ?? "").startsWith(SELLO_SIN_RESPUESTA) && Number.isFinite(exp)
+    ? exp + DECLARAR_SIN_RESPUESTA_TRAS_MS
+    : -Infinity;
+  return Math.max(Number.isFinite(exp) ? exp : -Infinity, Number.isFinite(upd) ? upd : -Infinity, sinResp);
 }
 
 /** ¿Este job se cerró por la declaración humana «no salió»? (alerta si después llega su folio). */
@@ -265,12 +410,12 @@ export async function declararNoSalioBoletaUnica(sb: Sb, job: JobDeclarable, aho
   }
   const { data: conFolio, error: errRes } = await sb
     .from("sii_local_resultados")
-    .select("folio")
+    .select("folio, status, error")
     .eq("job_id", job.job_id)
     .not("folio", "is", null)
-    .limit(1);
+    .limit(50);
   if (errRes) return { ok: false, status: 500, error: "RESULTADOS_QUERY_FAILED", detalle: errRes.message };
-  const folio = (conFolio ?? [])[0] as { folio?: number } | undefined;
+  const folio = folioQueBloqueaNoSalio((conFolio ?? []) as Array<{ folio?: number; status?: string | null; error?: string | null }>);
   if (folio) {
     return {
       ok: false, status: 409, error: "FOLIO_CAPTURADO",

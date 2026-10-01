@@ -85,3 +85,24 @@ export async function descargarDocumento(
   if (provider === "r2") return getFileR2(path);
   return supabaseDownload(path);
 }
+
+/**
+ * ¿Este path de storage pertenece a ESTA empresa? (auditoría 2026-10-01)
+ *
+ * /api/archivo baja con service role el storage_path (y los del álbum) que dice la
+ * fila de documentos_subidos — y esa fila la puede escribir el propio usuario por
+ * PostgREST. Sin este candado, poner en su fila el path de OTRA empresa le servía
+ * el archivo ajeno. Todo path legítimo nace con el prefijo `{empresaId}/`:
+ * buildStorageKey (R2: `{empresa}/{kind}/{año}/…`), subir-procesar e ingesta de
+ * Telegram en Supabase (`{empresa}/{docId}/{nombre}`), PDFs del SII
+ * (`{empresa}/boletas-sii-local/…`, `{empresa}/simpleapi-dte/…`).
+ * Los marcadores sin archivo ("memoria", "album", "boleta-lote://…",
+ * "sii-local-pdf-pendiente/…") no pasan — tampoco tenían bytes que servir.
+ */
+export function esPathDeEmpresa(path: unknown, empresaId: unknown): path is string {
+  if (typeof path !== "string" || typeof empresaId !== "string" || !empresaId) return false;
+  if (!path.startsWith(`${empresaId}/`)) return false;
+  // Sin escapes del prefijo: ni "..", ni ".", ni separadores raros ni controles.
+  if (/[\\\u0000-\u001f]/.test(path)) return false;
+  return path.split("/").every((seg) => seg !== ".." && seg !== ".");
+}

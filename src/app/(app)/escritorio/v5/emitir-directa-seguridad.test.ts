@@ -86,4 +86,10 @@ describe("EmitirDirectaView — cierres de la revisión adversarial", () => {
     const hb = src.indexOf("async function heartbeatEmissionJob(");
     expect(src.slice(hb, hb + 3500)).toContain('"revision_pendiente"');
   });
+  it("carrera DELETE vs PATCH: el cierre failed/cancelled espera el latido con el último status", () => {
+    const lat = src.indexOf('const latido = heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");');
+    expect(lat).toBeGreaterThan(0);
+    const cierre = src.indexOf("void latido.finally(() => closeEmissionJobEvent(jobCerrar, estadoCerrar));", lat);
+    expect(cierre).toBeGreaterThan(lat);
+  });
 });

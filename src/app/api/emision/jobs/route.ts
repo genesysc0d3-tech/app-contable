@@ -4,7 +4,7 @@ import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock, renovarLeaseCuenta } from "@/lib/emission/locks";
-import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA } from "@/lib/emission/boleta-unica-lapida";
+import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA, estadoVisibleEnLatidoPrincipal, marcarEstadoVisibleLatido } from "@/lib/emission/boleta-unica-lapida";
 import {
   DETALLE_DATOS_FALTAN,
   SELECT_PROPUESTA_DATOS,
@@ -842,7 +842,9 @@ export async function DELETE(request: Request) {
 
   const { data: job, error } = await service.service
     .from("emision_jobs")
-    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, provider, propuesta_id, created_at, expires_at")
+    // estado_visible: último status de la extensión (latido) → ¿alcanzó a apretar
+    // EMITIR? Decide si un `cancelled` de boleta única se sella lápida (cierre-seguro.ts).
+    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, estado_visible, provider, propuesta_id, created_at, expires_at")
     .eq("job_id", jobId)
     .maybeSingle();
   if (error) {
@@ -921,6 +923,15 @@ export async function DELETE(request: Request) {
     } catch {
       // best-effort: la caja negra no debe romper el cierre del job
     }
+  }
+  // Boleta única sellada a medias por este cierre (un `cancelled` con posible clic):
+  // la vista muestra su lápida con QUÉ boleta buscar en el SII. `*` no rompe sin la migración.
+  if (estado === "revision_pendiente" && !job.propuesta_id) {
+    const { data: full } = await service.service.from("emision_jobs").select("*").eq("job_id", job.job_id).maybeSingle();
+    return NextResponse.json({
+      ok: true, estado,
+      intento: leerIntento((full as { intento?: unknown } | null)?.intento), creada_at: job.created_at,
+    });
   }
   return NextResponse.json({ ok: true, estado });
 }
@@ -1048,7 +1059,10 @@ export async function PATCH(request: Request) {
   const now = new Date().toISOString();
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
-    .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
+    // estado_visible: un status post-clic va en ESTE update (atómico, vuelta 2 B1); uno
+    // pre-clic va aparte (marcarEstadoVisibleLatido, abajo) para no borrar la marca de
+    // posible clic que decide la lápida de la boleta única (rev. adversarial #3).
+    .update({ estado: "running", heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion, ...estadoVisibleEnLatidoPrincipal(estado) })
     .eq("job_id", job.job_id)
     // Cinturón y tiradores: aunque el corte de arriba ya cubre los estados
     // terminales, gateamos el UPDATE a solo activos para que ningún estado
@@ -1070,6 +1084,18 @@ export async function PATCH(request: Request) {
       metadata: { estado_visible: estado },
     });
     return NextResponse.json({ ok: false, error: "JOB_UPDATE_FAILED", detalle: updateJobError.message }, { status: 500 });
+  }
+  // Monótona: un status pre-clic no pisa uno post-clic. Best-effort como la caja negra:
+  // si falla, el latido ya renovó el job y el candado.
+  const marca = estadoVisibleEnLatidoPrincipal(estado).estado_visible
+    ? { error: null }
+    : await marcarEstadoVisibleLatido(service.service, job.job_id, estado);
+  if (marca.error) {
+    await recordOpsError({
+      sb: service.service, severity: "error", source: "emision", eventName: "emission_job_estado_visible_failed",
+      summary: "No se pudo anotar el estado visible del latido", cuentaId: job.cuenta_id, usuarioId: user.id,
+      resourceType: "emision_job", resourceId: job.job_id, error: marca.error.message, metadata: { estado_visible: estado },
+    });
   }
 
   return NextResponse.json({ ok: true, estado, heartbeat_at: now });

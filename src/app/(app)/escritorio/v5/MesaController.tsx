@@ -12,12 +12,13 @@ import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
 import { publicarAvisos } from "@/lib/avisos/bus";
-import { cadenciaDocs, crearEspaciador, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
+import { cadenciaDocs, cargandoTras, cargarSiSigueVigente, crearEspaciador, mismaMesa, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
 
 // La MESA es parte de la clave (bug transversal 2026-08-27): sin ella, boletas y
 // facturas del mismo día/rango compartían entrada de caché y una le servía a la
 // otra datos ajenos — la mesa "se vaciaba" o mostraba lo que no era.
 const keyOf = (view: string, date: string, month: string, mesa: "boleta" | "factura") => `${view}|${date}|${month}|${mesa}`;
+const keyDeMesa = (m: MesaDateDependent) => keyOf(m.workMode, m.selDate, `${m.calendar.y}-${m.calendar.m}`, m.mesaActiva);
 
 // Avisa a los slots estáticos (card de Registros) los nuevos números del rango,
 // para que Ventas/Actividad sigan al calendario maestro.
@@ -78,7 +79,9 @@ export default function MesaController({
   leftColumn: ReactNode;
 }) {
   const [mesa, setMesa] = useState(initialMesa);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  // Rango cuya carga ATENÚA la mesa: solo el último pedido (ver cargandoTras).
+  const [cargandoKey, setCargandoKey] = useState<string | null>(null);
   // Cache en memoria sembrada con el estado inicial (evita re-fetch al volver a él).
   // `vieja` (2026-09-28): tras una recarga los OTROS rangos se marcan viejos en vez de
   // borrarse — antes se vaciaba todo y la precarga volvía a pedir las otras dos vistas
@@ -123,8 +126,18 @@ export default function MesaController({
       return res.ok ? res.mesa : null;
     },
     aplicar: (p, fresca) => {
+      const k = keyOf(p.view, p.date, p.month, p.mesa);
+      // Los OTROS rangos se envejecen SIEMPRE: el evento que gatilló la recarga pudo
+      // cambiar un rango que no es el visible (emisión de otro día) aunque el visible
+      // salga idéntico. Frescura antes que ahorrar llamadas (coordinación 2026-10-01).
       for (const v of cacheRef.current.values()) v.vieja = true;
-      cacheRef.current.set(keyOf(p.view, p.date, p.month, p.mesa), { mesa: fresca, vieja: false });
+      // Visible idéntico (típico de la vigilancia post-subida y los sondeos): no se
+      // re-renderiza ni se re-difunde — solo se re-siembra su entrada como fresca.
+      if (keyDeMesa(mesaRef.current) === k && mismaMesa(mesaRef.current, fresca)) {
+        cacheRef.current.set(k, { mesa: mesaRef.current, vieja: false });
+        return;
+      }
+      cacheRef.current.set(k, { mesa: fresca, vieja: false });
       aplicarMesa(fresca);
     },
     });
@@ -138,6 +151,10 @@ export default function MesaController({
   }, [recargador]);
 
 
+  // Último rango PEDIDO por el calendario (bug fundador 2026-10-01): una respuesta
+  // lenta de un rango anterior ya no pisa el que el usuario eligió después.
+  const ultimoPedidoRef = useRef<string | null>(null);
+
   const navigate = useCallback((patch: NavParams) => {
     const params = {
       date: patch.date ?? mesa.selDate,
@@ -150,17 +167,30 @@ export default function MesaController({
     // URL sigue siendo la verdad (para refresh/compartir) — sin navegar.
     window.history.replaceState(null, "", `/massdte?date=${params.date}&month=${params.month}&view=${params.view}&mesa=${params.mesa}`);
     const key = keyOf(params.view, params.date, params.month, params.mesa);
+    ultimoPedidoRef.current = key;
     const cached = cacheRef.current.get(key);
     if (cached) {
+      setCargandoKey(null); // el último pedido ya está servido: nada que atenuar
       aplicarMesa(cached.mesa);
       // Vieja: se muestra al tiro y se trae la fresca por detrás (el recargador
       // descarta la respuesta si el usuario siguió navegando).
       if (cached.vieja) window.setTimeout(() => recargador().pedir(), 0);
       return;
     }
+    setCargandoKey(key);
     startTransition(async () => {
-      const res = await cargarMesa(params);
-      if (res.ok) { cacheRef.current.set(key, { mesa: res.mesa, vieja: false }); aplicarMesa(res.mesa); }
+      // La respuesta siempre siembra la caché, pero solo se APLICA si este sigue
+      // siendo el último rango pedido (clic en 5 → clic en 6: la de 5 llega tarde).
+      try {
+        await cargarSiSigueVigente({
+          vigente: () => ultimoPedidoRef.current ?? "",
+          cargar: async () => { const res = await cargarMesa(params); return res.ok ? res.mesa : null; },
+          guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
+          aplicar: aplicarMesa,
+        });
+      } finally {
+        setCargandoKey((c) => cargandoTras(c, key));
+      }
     });
   }, [mesa, recargador, aplicarMesa]);
 
@@ -259,10 +289,17 @@ export default function MesaController({
       // quedaba pegado mientras el procesamiento de fondo competía). subir-procesar
       // deja el doc en "procesando"; entra al toque y el poll de DocCardList lo lleva
       // a "procesado" sin volver a atenuar.
-      void (async () => {
-        const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva });
-        if (res.ok) { cacheRef.current.set(key, { mesa: res.mesa, vieja: false }); aplicarMesa(res.mesa); }
-      })();
+      // Solo se APLICA si el rango vigente sigue siendo el que había al pedir (bug
+      // fundador 2026-10-01): si el usuario navegó a otra fecha mientras cargaba, no
+      // se lo devuelve al día de la subida. La caché del día queda sembrada igual.
+      void cargarSiSigueVigente({
+        // Incluye el último rango PEDIDO (revisión adversarial B-A1): un clic a una fecha
+        // aún en vuelo cuenta como navegar, aunque la mesa todavía no haya cambiado.
+        vigente: () => `${keyDeMesa(mesaRef.current)}#${ultimoPedidoRef.current ?? ""}`,
+        cargar: async () => { const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva }); return res.ok ? res.mesa : null; },
+        guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
+        aplicar: (fresca) => { ultimoPedidoRef.current = key; setCargandoKey(null); aplicarMesa(fresca); },
+      });
     };
 
     // VIGILANCIA post-subida (bug 2026-08-31, cazado con cartola real): la
@@ -272,18 +309,26 @@ export default function MesaController({
     // navegador con el server 100% sano), la mesa queda congelada hasta F5.
     // Serie de recargas silenciosas con backoff: garantiza que el doc aparezca
     // y que su término se vea aunque la IA tarde minutos y Realtime esté muerto.
+    // Cada paso recarga el rango VIGENTE (recargador: descarta respuestas de un rango
+    // que el usuario ya dejó) — NUNCA el día de la subida. Antes cada paso hacía
+    // recargarDia(fecha) y, hasta 3,5 min después de subir, devolvía al usuario a
+    // "hoy" aunque hubiera navegado a otra fecha (bug fundador 2026-10-01).
     const VIGILANCIA_MS = [4_000, 12_000, 30_000, 60_000, 100_000, 150_000, 210_000];
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const vigilar = (date: string) => {
+    const vigilar = () => {
       for (const t of timers) clearTimeout(t);
       timers.length = 0;
-      for (const ms of VIGILANCIA_MS) timers.push(setTimeout(() => recargarDia(date), ms));
+      for (const ms of VIGILANCIA_MS) timers.push(setTimeout(() => recargador().pedir(), ms));
     };
 
     const onUploaded = (e: Event) => {
+      // El evento llegó a ESTE controlador: el flag del remount ya no hace falta.
+      // Sin borrarlo, un remonte dentro de 120 s (F5, ActualizadorInvisible, cambio de
+      // empresa/mesa) re-armaba la carga al día de la subida y toda la escalera.
+      try { sessionStorage.removeItem("massdte:uploaded-at"); } catch { /* sin sessionStorage */ }
       const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesaRef.current.selDate;
       recargarDia(date);
-      vigilar(date);
+      vigilar();
     };
     window.addEventListener("massdte:uploaded", onUploaded);
 
@@ -297,7 +342,7 @@ export default function MesaController({
         if (Date.now() - at < 120_000) {
           sessionStorage.removeItem("massdte:uploaded-at");
           recargarDia(date ?? mesaRef.current.selDate);
-          vigilar(date ?? mesaRef.current.selDate);
+          vigilar();
         } else {
           sessionStorage.removeItem("massdte:uploaded-at");
         }
@@ -310,7 +355,7 @@ export default function MesaController({
     };
   // Deps estables (2026-09-28): con [mesa], el primer recargarDia → setMesa → cleanup
   // cancelaba TODA la escalera de vigilancia (quedaba muerta desde el primer paso).
-  }, [aplicarMesa]);
+  }, [aplicarMesa, recargador]);
 
   // ── COLUMNA VERTEBRAL DE FRESCURA (patrón Linear/Figma/Notion) ───────────────
   // UNA suscripción Realtime en el contenedor SIEMPRE montado (MesaController vive
@@ -448,7 +493,7 @@ export default function MesaController({
           empresaLogoUrl={empresaLogoUrl}
           defaultContent={
             <MesaReloadContext.Provider value={reloadMesa}>
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, opacity: isPending ? 0.55 : 1, transition: "opacity .18s ease" }}>
+              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, opacity: cargandoKey !== null ? 0.55 : 1, transition: "opacity .18s ease" }}>
                 <Mesa mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaRazon={empresaRazon} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} />
               </div>
             </MesaReloadContext.Provider>

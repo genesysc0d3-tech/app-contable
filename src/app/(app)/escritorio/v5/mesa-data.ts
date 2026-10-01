@@ -6,6 +6,7 @@ import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import type { ActividadItem } from "./ActividadView";
 import { sinDocsRepetidos } from "./mesa-data-util";
+import { traerTodasLasFilas } from "@/lib/supabase/paginar";
 import { FILTRO_TIPOS_REGISTRO_EMISION, boletasUnicasSinDocumento } from "@/lib/emission/registros-emision";
 
 // ── Helpers de fecha (compartidos con el render del escritorio) ──────────────
@@ -156,7 +157,10 @@ export async function fetchMesaDateDependent(
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).eq("estado", "aprobado").gte("created_at", workStart).lt("created_at", workEnd),
     supabase.from("boletas_emitidas").select("id,folio,tipo_dte,fecha_emision,created_at,receptor_rut,receptor_razon_social,monto_total,monto_neto,monto_exento,iva,estado,detalles,propuesta_id,ref").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr).order("created_at", { ascending: false }).order("folio", { ascending: false }).limit(300),
     supabase.rpc("documento_pipeline_counts", { p_empresa: empresaId, p_desde: workStart, p_hasta: workEnd }),
-    supabase.from("boletas_emitidas").select("monto_total").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay),
+    // PAGINADO (auditoría 2026-10-01): PostgREST corta en 1000 sin avisar y en sept
+    // 2026 dos empresas tuvieron 1437 y 1188 boletas → el total de ventas del mes
+    // salía subdeclarado. Orden por id para que las páginas no se solapen.
+    traerTodasLasFilas<{ monto_total: number | null }>((desde, hasta) => supabase.from("boletas_emitidas").select("id,monto_total").eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).neq("estado", "anulada").gte("fecha_emision", fiscalStartDay).lt("fecha_emision", fiscalEndDay).order("id").range(desde, hasta)),
     supabase.from("boletas_emitidas").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).in("tipo_dte", tiposDteMesa).or(boletasRangeOr),
     supabase.from("empresas").select("boletas_emision_proveedor,facturas_emision_proveedor,emision_proveedor").eq("id", empresaId).maybeSingle(),
     supabase.from("propuestas_ia").select("id", { count: "exact", head: true }).eq("empresa_id", empresaId).eq("mesa", mesaActiva).gte("created_at", workStart).lt("created_at", workEnd),
@@ -183,7 +187,11 @@ export async function fetchMesaDateDependent(
   const propuestasTotal = propsCountRes.count ?? (propsData.data?.length ?? 0);
   const propuestasTruncadas = propuestasTotal > (propsData.data?.length ?? 0);
   // Ventas del rango (registro de ventas atado al calendario maestro).
-  const ventasRows = (ventasRangoRes.data ?? []) as { monto_total: number | null }[];
+  if (ventasRangoRes.error) console.error("[mesa] ventas del rango: lectura incompleta", ventasRangoRes.error);
+  // Tope del paginador (50 páginas = 50.000 boletas en el rango): el total quedaría
+  // corto. Nunca en silencio — que salte en los logs.
+  if (ventasRangoRes.truncado) console.error("[mesa] ventas del rango TRUNCADAS en el tope del paginador — el total está incompleto", { empresaId, desde: fiscalStartDay, hasta: fiscalEndDay, filas: ventasRangoRes.data.length });
+  const ventasRows = ventasRangoRes.data;
   const ventasDocs = ventasRows.length;
   const ventasTotal = ventasRows.reduce((s, b) => s + (b.monto_total ?? 0), 0);
 

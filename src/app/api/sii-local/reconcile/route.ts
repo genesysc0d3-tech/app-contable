@@ -4,6 +4,7 @@ import { requireSesionSegura } from "@/lib/api/sesion-segura";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { validarAccesoCuenta } from "@/lib/entitlements";
+import { traerTodasLasFilas } from "@/lib/supabase/paginar";
 
 
 /**
@@ -56,6 +57,9 @@ export async function POST(request: Request) {
   let body: { rows?: ReconRow[]; desde?: string; hasta?: string } = {};
   try { body = await request.json(); } catch { return NextResponse.json({ ok: false, error: "BODY_INVALIDO" }, { status: 400 }); }
 
+  // Tipos que trae el Resumen de Ventas que reconcilia este endpoint (boletas).
+  const TIPOS_RESUMEN = [39, 41];
+
   // Tope de filas por request: cada fila válida hace un INSERT secuencial en
   // boletas_emitidas; sin cap, un body enorme puede colgar la función. El Resumen de
   // Ventas de un mes cabe de sobra en 500 (emitir-lote usa el mismo orden de tope).
@@ -90,12 +94,30 @@ export async function POST(request: Request) {
   if (!empresa) return NextResponse.json({ ok: false, error: "EMPRESA_NO_ENCONTRADA" }, { status: 404 });
 
   // Lo que la app ya tiene (vigente) para esta empresa, por (tipo, folio).
-  const { data: existentes } = await sb
-    .from("boletas_emitidas")
-    .select("tipo_dte, folio, fecha_emision")
-    .eq("empresa_id", empresaId)
-    .neq("estado", "anulada");
-  const enApp = new Set((existentes ?? []).map((b) => `${b.tipo_dte}:${b.folio}`));
+  // Antes: TODO el historial de la empresa sin paginar → PostgREST cortaba en 1000
+  // y, pasado ese número, enApp quedaba incompleto: folios que SÍ estaban se
+  // respaldaban otra vez (duplicados) y los fantasmas se contaban mal (auditoría
+  // 2026-10-01). Ahora el dedup consulta SOLO los folios que trae el Resumen (por
+  // folio y no por fecha: la fecha guardada puede diferir un día de la del SII y un
+  // filtro por rango dejaría pasar un duplicado), en trozos y paginado.
+  const folios = [...new Set(rows.map((r) => r.folio))];
+  const TROZO_FOLIOS = 200; // la lista va en la URL del GET de PostgREST
+  const existentesDedup: { tipo_dte: number; folio: number }[] = [];
+  for (let i = 0; i < folios.length; i += TROZO_FOLIOS) {
+    const trozo = folios.slice(i, i + TROZO_FOLIOS);
+    const res = await traerTodasLasFilas((desde, hasta) => sb
+      .from("boletas_emitidas")
+      .select("id, tipo_dte, folio")
+      .eq("empresa_id", empresaId)
+      .neq("estado", "anulada")
+      .in("folio", trozo)
+      .order("id")
+      .range(desde, hasta));
+    // Sin el dedup completo NO se respalda nada: insertar a ciegas duplicaría boletas.
+    if (res.error) return NextResponse.json({ ok: false, error: "LECTURA_FALLIDA" }, { status: 500 });
+    existentesDedup.push(...res.data);
+  }
+  const enApp = new Set(existentesDedup.map((b) => `${b.tipo_dte}:${b.folio}`));
   const enSii = new Set(rows.map((r) => `${r.tipo_dte}:${r.folio}`));
 
   // Backfill de los que están en el SII pero no en la app.
@@ -149,13 +171,30 @@ export async function POST(request: Request) {
   // Fantasmas: boletas de la app que NO aparecen en el Resumen del SII. Solo
   // tiene sentido DENTRO del rango que trae el Resumen — comparar todo el
   // historial contra un rango daría falsos por cada boleta fuera de rango.
-  const desde = typeof body.desde === "string" ? body.desde.slice(0, 10) : null;
-  const hasta = typeof body.hasta === "string" ? body.hasta.slice(0, 10) : null;
+  // Formato validado: ahora van a la consulta (antes solo se comparaban en memoria).
+  const fechaOk = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.slice(0, 10)) ? v.slice(0, 10) : null);
+  const desde = fechaOk(body.desde);
+  const hasta = fechaOk(body.hasta);
   let fantasmas = 0;
   if (desde && hasta) {
-    for (const b of existentes ?? []) {
-      const f = String(b.fecha_emision || "").slice(0, 10);
-      if (f >= desde && f <= hasta && !enSii.has(`${b.tipo_dte}:${b.folio}`)) fantasmas += 1;
+    // Filtrado por el rango del Resumen EN la consulta y paginado (antes: todo el
+    // historial en memoria, cortado en 1000).
+    const enRango = await traerTodasLasFilas((d, h) => sb
+      .from("boletas_emitidas")
+      .select("id, tipo_dte, folio, fecha_emision")
+      .eq("empresa_id", empresaId)
+      .neq("estado", "anulada")
+      // Solo lo que el Resumen puede traer: este endpoint normaliza toda fila a 39|41
+      // (ver el map de arriba). Una factura 33/34 nunca viene → contarla como
+      // "fantasma" era un falso positivo seguro (auditoría 2026-10-01).
+      .in("tipo_dte", TIPOS_RESUMEN)
+      .gte("fecha_emision", desde)
+      .lte("fecha_emision", hasta)
+      .order("id")
+      .range(d, h));
+    if (enRango.error) return NextResponse.json({ ok: false, error: "LECTURA_FALLIDA", respaldados, errores }, { status: 500 });
+    for (const b of enRango.data) {
+      if (!enSii.has(`${b.tipo_dte}:${b.folio}`)) fantasmas += 1;
     }
   }
 

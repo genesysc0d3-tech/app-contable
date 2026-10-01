@@ -5,6 +5,7 @@ import { getPendientesEmision, type EmpresaCtx } from "@/lib/intermediario/pendi
 import { clientIpFromRequest, rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
 import { chileDateString } from "@/lib/chile-date";
+import { traerTodasLasFilas } from "@/lib/supabase/paginar";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { clasificarIntocables, contarIntocables } from "@/lib/emission/propuestas-intocables";
 import { LIMITE_FILAS_LECTURA, LIMITE_ESCRITURAS_POR_DIA, MESES_HACIA_ATRAS_MAX, PAGINA_MAX, frenarEscritura, frenarLectura, mensajeDeFreno, paginaAOffset, ventanaDelMes, type Freno } from "@/lib/mcp/manguera";
@@ -168,17 +169,20 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
       },
       run: async () => {
         const mes = chileDateString().slice(0, 7);
-        const { data, error } = await ctx.svc
+        // PAGINADO (auditoría 2026-10-01): el `.limit(2000)` de antes igual cortaba en
+        // 1000 (max-rows de PostgREST) y posiblemente_truncado nunca se encendía → el
+        // cuadre salía corto en silencio. Tope de 20 páginas (20.000 filas/mes): un
+        // Business a tope (3.000/mes) entra holgado; si se alcanza, se avisa.
+        const { data, error, truncado } = await traerTodasLasFilas((desde, hasta) => ctx.svc
           .from("boletas_emitidas")
-          .select("monto_total, tipo_dte, estado, folio, fecha_emision")
+          .select("id, monto_total, tipo_dte, estado, folio, fecha_emision")
           .eq("empresa_id", ctx.empresaId)
           .gte("fecha_emision", `${mes}-01`)
-          .limit(2000);
+          .order("id")
+          .range(desde, hasta), { topePaginas: 20 });
         if (error) throw new Error("No se pudo leer lo emitido del mes");
-        // Tope de 2.000 filas: un Business a tope (3.000/mes) lo pasa. Antes se
-        // cortaba en silencio y el cuadre salía mal sin avisar (2ª auditoría).
-        const posiblemente_truncado = (data ?? []).length >= 2000;
-        const emitidas = (data ?? []).filter((b) => b.estado !== "anulada");
+        const posiblemente_truncado = truncado;
+        const emitidas = data.filter((b) => b.estado !== "anulada");
         const total = emitidas.reduce((sum, b) => sum + (typeof b.monto_total === "number" ? b.monto_total : 0), 0);
         const porTipo: Record<string, number> = {};
         for (const b of emitidas) {
@@ -191,7 +195,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           monto_total: total,
           por_tipo_dte: porTipo,
           posiblemente_truncado,
-          ...(posiblemente_truncado ? { nota: "Este resumen considera las primeras 2.000 emisiones del mes; el cuadre completo está en la app (RCV)." } : {}),
+          ...(posiblemente_truncado ? { nota: "Este resumen considera las primeras 20.000 emisiones del mes; el cuadre completo está en la app (RCV)." } : {}),
         };
       },
     },
