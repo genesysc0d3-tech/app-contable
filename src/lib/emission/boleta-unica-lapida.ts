@@ -67,7 +67,16 @@ export const ESTADOS_VISIBLES_POSIBLE_CLIC: ReadonlySet<string> = new Set([
 export type JobBoletaUnicaAbierta = JobBoletaUnica & { estado_visible?: string | null; expires_at?: string | null };
 
 /**
- * Latido (PATCH de /api/emision/jobs): escribe el status de la extensión en el job sin
+ * Campos de estado_visible para el UPDATE PRINCIPAL del latido (vuelta 2, B1): un
+ * status post-clic va ahí mismo (una sola query, atómica con la renovación); uno
+ * pre-clic no — ese pasa por marcarEstadoVisibleLatido, con su condición monótona.
+ */
+export function estadoVisibleEnLatidoPrincipal(estado: string): { estado_visible?: string } {
+  return ESTADOS_VISIBLES_POSIBLE_CLIC.has(estado) ? { estado_visible: estado } : {};
+}
+
+/**
+ * Latido (PATCH de /api/emision/jobs), status PRE-clic: escribe el status de la extensión en el job sin
  * BORRAR una marca de posible clic. Un status post-clic se escribe siempre; uno
  * pre-clic solo si el job no estaba ya post-clic — condición en el mismo UPDATE
  * (atómica por fila: dos latidos cruzados no pierden la marca). Solo jobs abiertos.
@@ -335,6 +344,21 @@ export function folioBloqueaNoSalio(fila: { folio?: unknown; status?: string | n
   if (fila.folio == null) return false;
   return !(fila.status === "rejected" && fila.error === "FOLIO_DE_OTRO_DOCUMENTO");
 }
+
+type FilaStash = { folio?: unknown; status?: string | null; error?: string | null };
+
+/**
+ * La fila del stash que bloquea «no salió», mirando el FOLIO y no fila por fila (rev.
+ * adversarial vuelta 2, M1): rememberResult INSERTA, así que un mismo folio deja
+ * residuos (job_gate_failed, FOLIO_CHECK_FAILED de un intento anterior) junto a la fila
+ * que lo declaró de OTRO documento. Si un folio tiene al menos una fila
+ * rejected/FOLIO_DE_OTRO_DOCUMENTO, TODAS sus filas se ignoran: ese número no es de
+ * este intento. Cualquier otro folio bloquea.
+ */
+export function folioQueBloqueaNoSalio<T extends FilaStash>(filas: readonly T[]): T | undefined {
+  const ajenos = new Set(filas.filter((f) => f.folio != null && !folioBloqueaNoSalio(f)).map((f) => String(f.folio)));
+  return filas.find((f) => f.folio != null && !ajenos.has(String(f.folio)));
+}
 /** Espera desde el último signo de vida (mismo criterio que la verificación del lote). */
 export const NO_SALIO_TRAS_MS = 10 * 60 * 1000;
 
@@ -391,7 +415,7 @@ export async function declararNoSalioBoletaUnica(sb: Sb, job: JobDeclarable, aho
     .not("folio", "is", null)
     .limit(50);
   if (errRes) return { ok: false, status: 500, error: "RESULTADOS_QUERY_FAILED", detalle: errRes.message };
-  const folio = ((conFolio ?? []) as Array<{ folio?: number; status?: string | null; error?: string | null }>).find(folioBloqueaNoSalio);
+  const folio = folioQueBloqueaNoSalio((conFolio ?? []) as Array<{ folio?: number; status?: string | null; error?: string | null }>);
   if (folio) {
     return {
       ok: false, status: 409, error: "FOLIO_CAPTURADO",

@@ -11,7 +11,7 @@ import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 import { requireEmisionJob } from "@/lib/emission/jobs";
 import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
-import { datosFolioBoletaUnica, declararNoSalioBoletaUnica, esLapidaBoletaUnica, folioBloqueaNoSalio, fueDeclaradoNoSalio, levantarLapidaBoletaUnica, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
+import { datosFolioBoletaUnica, declararNoSalioBoletaUnica, esLapidaBoletaUnica, folioQueBloqueaNoSalio, fueDeclaradoNoSalio, levantarLapidaBoletaUnica, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { cleanRut } from "@/lib/sii/validation";
@@ -604,7 +604,7 @@ async function calceReportesVetado(
 /**
  * Error con que queda en el stash un folio rechazado por ajeno. Una huérfana del RCV
  * SIN monto no se enlaza sola pero PUDO ser este intento: su código distinto mantiene
- * bloqueado «no salió» (folioBloqueaNoSalio); la salida es el folio a mano.
+ * bloqueado «no salió» (folioQueBloqueaNoSalio); la salida es el folio a mano.
  */
 function errorRechazoFolio(d: DecisionFolioExistente | null): string {
   return d?.tipo === "ajeno" && d.motivo === "MONTO_DESCONOCIDO" ? ERROR_FOLIO_HUERFANO_SIN_MONTO : "FOLIO_DE_OTRO_DOCUMENTO";
@@ -1157,7 +1157,8 @@ export async function POST(request: Request) {
         .not("folio", "is", null)
         .limit(50);
       if (errRes) return NextResponse.json({ ok: false, error: "RESULTADOS_QUERY_FAILED" }, { status: 500 });
-      const folioQueBloquea = (conFolio ?? []).find(folioBloqueaNoSalio);
+      // Por FOLIO, no por fila (vuelta 2, M1): residuos del mismo folio no reviven el bloqueo.
+      const folioQueBloquea = folioQueBloqueaNoSalio(conFolio ?? []);
       if (folioQueBloquea) {
         return NextResponse.json(
           { ok: false, error: "FOLIO_CAPTURADO", detalle: `El SII devolvió el folio ${folioQueBloquea.folio} para este intento: la boleta sí salió. Regístrala con ese folio.` },

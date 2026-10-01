@@ -12,7 +12,9 @@ import {
   cierreBoletaUnicaPorStatus,
   declararNoSalioBoletaUnica,
   esLapidaBoletaUnica,
+  estadoVisibleEnLatidoPrincipal,
   folioBloqueaNoSalio,
+  folioQueBloqueaNoSalio,
   levantarLapidaBoletaUnica,
   marcarEstadoVisibleLatido,
   plazoDeclararBoletaUnica,
@@ -254,5 +256,39 @@ describe("marcarEstadoVisibleLatido — la marca de posible clic es monótona (r
     expect(or).toContain("estado_visible.is.null");
     expect(or).toContain("estado_visible.not.in.(");
     for (const st of ["submitting", "signing", "fact_sign_poll", "capturing_result"]) expect(or).toContain(st);
+  });
+});
+
+describe("«no salió» mira el FOLIO, no la fila (vuelta 2, M1)", () => {
+  it("residuos del mismo folio (job_gate_failed, FOLIO_CHECK_FAILED) no bloquean si una fila lo declaró ajeno", () => {
+    const filas = [
+      { folio: 77, status: "job_gate_failed", error: "EMISION_JOB_EXPIRED" },
+      { folio: 77, status: "rejected", error: "FOLIO_CHECK_FAILED" },
+      { folio: 77, status: "rejected", error: "FOLIO_DE_OTRO_DOCUMENTO" },
+    ];
+    expect(folioQueBloqueaNoSalio(filas)).toBeUndefined();
+  });
+  it("otro folio distinto del ajeno sigue bloqueando", () => {
+    const filas = [
+      { folio: 77, status: "rejected", error: "FOLIO_DE_OTRO_DOCUMENTO" },
+      { folio: 78, status: "job_gate_failed", error: "EMISION_JOB_EXPIRED" },
+    ];
+    expect(folioQueBloqueaNoSalio(filas)).toMatchObject({ folio: 78 });
+  });
+  it("boleta única: residuos de un folio ajeno no dejan la lápida sin salida", async () => {
+    const job = { job_id: "J1", cuenta_id: "C1", estado: "revision_pendiente", propuesta_id: null, created_at: nuevo, expires_at: "2026-09-30T12:15:00Z", updated_at: "2026-09-30T12:01:00Z" };
+    const { sb } = fakeSb((l) => (l.tabla === "sii_local_resultados"
+      ? { data: [{ folio: 77, status: "job_gate_failed", error: "EMISION_JOB_EXPIRED" }, { folio: 77, status: "rejected", error: "FOLIO_DE_OTRO_DOCUMENTO" }], error: null }
+      : l.op === "update" ? { data: [{ job_id: "J1" }], error: null } : { data: null, error: null }));
+    expect(await declararNoSalioBoletaUnica(sb, job, new Date("2026-09-30T13:00:00Z"))).toEqual({ ok: true });
+  });
+});
+
+describe("latido: estado_visible post-clic va en el UPDATE principal (vuelta 2, B1)", () => {
+  it("post-clic → en el update principal; pre-clic → nada (va por el UPDATE condicional)", () => {
+    expect(estadoVisibleEnLatidoPrincipal("submitting")).toEqual({ estado_visible: "submitting" });
+    expect(estadoVisibleEnLatidoPrincipal("signing")).toEqual({ estado_visible: "signing" });
+    expect(estadoVisibleEnLatidoPrincipal("fact_drive")).toEqual({});
+    expect(estadoVisibleEnLatidoPrincipal("opening_sii")).toEqual({});
   });
 });

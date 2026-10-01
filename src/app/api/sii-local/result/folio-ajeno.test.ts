@@ -105,7 +105,7 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
   });
 
   it("«no salió» del lote ignora folios rechazados por ajenos (rev. adversarial #7)", () => {
-    expect(src).toContain("const folioQueBloquea = (conFolio ?? []).find(folioBloqueaNoSalio);");
+    expect(src).toContain("const folioQueBloquea = folioQueBloqueaNoSalio(conFolio ?? []);");
   });
 
   it("solo el folio a mano acepta una huérfana RCV sin monto", () => {

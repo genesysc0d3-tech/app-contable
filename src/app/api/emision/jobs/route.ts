@@ -4,7 +4,7 @@ import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock, renovarLeaseCuenta } from "@/lib/emission/locks";
-import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA, marcarEstadoVisibleLatido } from "@/lib/emission/boleta-unica-lapida";
+import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA, estadoVisibleEnLatidoPrincipal, marcarEstadoVisibleLatido } from "@/lib/emission/boleta-unica-lapida";
 import {
   DETALLE_DATOS_FALTAN,
   SELECT_PROPUESTA_DATOS,
@@ -1059,9 +1059,10 @@ export async function PATCH(request: Request) {
   const now = new Date().toISOString();
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
-    // estado_visible va aparte (marcarEstadoVisibleLatido, abajo): no puede borrar la
-    // marca de posible clic que decide la lápida de la boleta única (rev. adversarial #3).
-    .update({ estado: "running", heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
+    // estado_visible: un status post-clic va en ESTE update (atómico, vuelta 2 B1); uno
+    // pre-clic va aparte (marcarEstadoVisibleLatido, abajo) para no borrar la marca de
+    // posible clic que decide la lápida de la boleta única (rev. adversarial #3).
+    .update({ estado: "running", heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion, ...estadoVisibleEnLatidoPrincipal(estado) })
     .eq("job_id", job.job_id)
     // Cinturón y tiradores: aunque el corte de arriba ya cubre los estados
     // terminales, gateamos el UPDATE a solo activos para que ningún estado
@@ -1086,7 +1087,9 @@ export async function PATCH(request: Request) {
   }
   // Monótona: un status pre-clic no pisa uno post-clic. Best-effort como la caja negra:
   // si falla, el latido ya renovó el job y el candado.
-  const marca = await marcarEstadoVisibleLatido(service.service, job.job_id, estado);
+  const marca = estadoVisibleEnLatidoPrincipal(estado).estado_visible
+    ? { error: null }
+    : await marcarEstadoVisibleLatido(service.service, job.job_id, estado);
   if (marca.error) {
     await recordOpsError({
       sb: service.service, severity: "error", source: "emision", eventName: "emission_job_estado_visible_failed",

@@ -59,4 +59,13 @@ describe("cableado del DELETE de /api/emision/jobs (auditoría oct-2026 #2)", ()
     expect(sel).toBeGreaterThan(del);
     expect(decide).toBeGreaterThan(sel);
   });
+  it("PATCH: post-clic en el UPDATE principal (una query) y el condicional solo para pre-clic (vuelta 2, B1)", () => {
+    const patch = src.indexOf("export async function PATCH(");
+    const principal = src.indexOf("...estadoVisibleEnLatidoPrincipal(estado) })", patch);
+    const condicional = src.indexOf("await marcarEstadoVisibleLatido(service.service, job.job_id, estado)", patch);
+    expect(principal).toBeGreaterThan(patch);
+    expect(condicional).toBeGreaterThan(principal);
+    expect(src.slice(principal, condicional)).toContain("estadoVisibleEnLatidoPrincipal(estado).estado_visible");
+  });
 });
+
