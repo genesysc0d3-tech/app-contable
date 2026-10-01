@@ -1,5 +1,7 @@
 import { getAppEmpresaContext } from "@/lib/dal";
 import DevSupportBanner, { type BannerIntervencion } from "./escritorio/v5/DevSupportBanner";
+import ActualizadorInvisible from "@/components/ActualizadorInvisible";
+import { ESTILO_RESTAURANDO, SCRIPT_ANTES_DE_PINTAR } from "@/lib/actualizacion/estado-guardado";
 
 export default async function AppLayout({
   children,
@@ -20,6 +22,13 @@ export default async function AppLayout({
 
   return (
     <>
+      {/* Actualización invisible: si esta carga viene de una recarga automática y la
+          vista guardada difiere de la por defecto, la página queda invisible ANTES de
+          pintar (el navegador sostiene el último cuadro) hasta restaurar lo que la
+          clienta veía. Solo en la app con sesión: /auth, /legal y las públicas no usan
+          este layout. */}
+      <style dangerouslySetInnerHTML={{ __html: ESTILO_RESTAURANDO }} />
+      <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANTES_DE_PINTAR }} />
       {supportMode && (
         <div style={{ padding: "12px 12px 0" }}>
           <DevSupportBanner
@@ -30,6 +39,7 @@ export default async function AppLayout({
         </div>
       )}
       {children}
+      <ActualizadorInvisible />
     </>
   );
 }

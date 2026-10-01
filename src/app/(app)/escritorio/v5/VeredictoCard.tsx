@@ -57,12 +57,12 @@ function ComprobanteLightbox({ url, origin, onClose }: { url: string; origin: DO
   }, [origin]);
 
   return createPortal(
-    <div onClick={handleClose} style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 28, background: "transparent" }}>
+    <div onClick={handleClose} data-actualizacion-espera="" style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 28, background: "transparent" }}>
       <style>{`@keyframes lbCerrar{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img ref={imgRef} onClick={(e) => e.stopPropagation()} src={url} alt="comprobante"
         style={{ maxWidth: "74vw", maxHeight: "78vh", borderRadius: 16, objectFit: "contain", boxShadow: "0 30px 90px rgba(0,0,0,.5)", display: "block", willChange: "transform" }} />
-      <button onClick={handleClose}
+      <button onClick={handleClose} data-actualizacion-espera=""
         style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid color-mix(in srgb, var(--text) 16%, transparent)", background: "color-mix(in srgb, var(--bg) 40%, transparent)", color: "var(--text)", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", ...(closing ? { animation: "none", opacity: 0, transition: "opacity .2s ease", pointerEvents: "none" } : { animation: "lbCerrar .32s ease .06s both" }) }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>Cerrar
       </button>

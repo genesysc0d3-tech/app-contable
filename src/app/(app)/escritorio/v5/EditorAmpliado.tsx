@@ -179,8 +179,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   const field = { width: "100%", fontSize: 13, padding: "8px 11px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--text)", outline: "none" } as const;
 
   return createPortal(
-    <div onClick={() => cerrar(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.45)" }}>
-      <div ref={boxRef} data-editor-ampliado onClick={(e) => e.stopPropagation()}
+    <div onClick={() => cerrar(false)} data-actualizacion-espera="" style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.45)" }}>
+      <div ref={boxRef} data-editor-ampliado data-actualizacion-espera="" onClick={(e) => e.stopPropagation()}
         style={{ position: "fixed", inset: insetTo, borderRadius: 16, background: "var(--bg)", overflow: "hidden", display: "flex", flexDirection: "column", border: "1px solid var(--border)", boxShadow: "0 40px 120px rgba(0,0,0,.55)", willChange: "inset" }}>
         {/* HEADER */}
         <div style={{ height: 52, flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", borderBottom: "1px solid var(--border)" }}>

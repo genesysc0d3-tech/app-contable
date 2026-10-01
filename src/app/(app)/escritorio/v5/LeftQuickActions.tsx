@@ -195,7 +195,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       )}
 
       {open && (
-        <div className="ed-overlay">
+        <div className="ed-overlay" data-actualizacion-espera="">
           <div className="ed-panel">
             <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} mesaFactura={esFacturas} onClose={closeWithSavedPulse} />
           </div>
@@ -357,7 +357,7 @@ export function MassDTEAction({ readOnlyReason, mesa = "boleta" }: { empresaId: 
       )}
 
       {open && (
-        <div className="md-overlay">
+        <div className="md-overlay" data-actualizacion-espera="">
           <div className="md-panel" style={{ maxHeight: "90vh" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
               <button aria-label="Cerrar" onClick={() => setOpen(false)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text2)", fontSize: 16 }}>×</button>
@@ -526,7 +526,7 @@ export function HeaderActionsRow({ enCuentaAjena = false, cuentaActualNombre = "
     `}</style>
     <div style={{display:"flex",flexDirection:"row",gap:8,alignItems:"center"}}>
       {dashboardOpen && (
-        <div style={{position:"fixed",left:"50%",top:20,transform:"translateX(-50%)",zIndex:65,width:560,maxWidth:"48vw",minWidth:420,height:38}}>
+        <div data-actualizacion-espera="" style={{position:"fixed",left:"50%",top:20,transform:"translateX(-50%)",zIndex:65,width:560,maxWidth:"48vw",minWidth:420,height:38}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",color:"var(--text3)",pointerEvents:"none"}}><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input ref={searchRef} value={searchQuery} onChange={(e) => updateSearchQuery(e.target.value)} placeholder="Buscar historial..." style={{width:"100%",height:38,padding:"0 58px 0 36px",borderRadius:12,border:"1px solid rgba(232,85,62,.22)",background:"var(--surface)",color:"var(--text)",boxShadow:"inset 0 1px 0 var(--border),0 8px 32px var(--shadow)",outline:"none",fontSize:12,fontWeight:650}} />
           <span style={{position:"absolute",right: searchQuery ? 36 : 12,top:"50%",transform:"translateY(-50%)",fontSize:9,fontWeight:850,color:"var(--text3)"}}>⌘K</span>

@@ -37,7 +37,7 @@ export default function EleccionEmpresaModal({
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 400, display: "grid", placeItems: "center", background: "rgba(0,0,0,.66)", backdropFilter: "blur(6px)", padding: 16 }}>
+    <div data-actualizacion-espera="" style={{ position: "fixed", inset: 0, zIndex: 400, display: "grid", placeItems: "center", background: "rgba(0,0,0,.66)", backdropFilter: "blur(6px)", padding: 16 }}>
       <div style={{ width: "min(440px, 100%)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", padding: 22, boxShadow: "0 40px 120px rgba(0,0,0,.5)" }}>
         <div style={{ fontSize: 15, fontWeight: 850 }}>Tu plan cambió</div>
         {esTitular ? (

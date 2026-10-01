@@ -211,7 +211,7 @@ export default function EmpresaBrand({
       )}
 
       {open && canSwitch && (
-        <div className="eb-pop" style={{ position: "absolute", left: 0, top: size + 10, zIndex: 90, width: `min(${agregando ? 340 : 320}px, calc(100vw - 28px))`, padding: 8, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 var(--border)", color: "var(--text)", whiteSpace: "normal", transformOrigin: "top left" }}>
+        <div className="eb-pop" data-actualizacion-espera="" style={{ position: "absolute", left: 0, top: size + 10, zIndex: 90, width: `min(${agregando ? 340 : 320}px, calc(100vw - 28px))`, padding: 8, borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 var(--border)", color: "var(--text)", whiteSpace: "normal", transformOrigin: "top left" }}>
           {/* Prefetch COMPLETO de la otra mesa mientras el popup está abierto
               (invisible, 1×1px: los botones visibles quedan intactos). */}
           <Link href={`/massdte?mesa=${otraMesa}`} prefetch={true} aria-hidden tabIndex={-1}

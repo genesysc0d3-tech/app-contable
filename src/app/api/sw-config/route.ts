@@ -7,6 +7,18 @@
 //  - Vercel previews (VERCEL_ENV=preview) => SIEMPRE off (un SW registrado en
 //    un preview contaminaría el dominio del preview).
 //  - Build local con `next start` (sin VERCEL_ENV) => on, para poder probarlo.
+//
+// Actualización invisible (2026-09-30): esta ruta queda FUERA del proxy, así que
+// estampa ella misma la versión publicada. Es la ruta liviana que la pestaña toca
+// con un HEAD al volver tras >30 min oculta (sin auth, sin DB).
+import { CABECERA_VERSION, versionPublicadaDelServidor } from "@/lib/actualizacion/version";
+
+function cabeceras(): Record<string, string> {
+  const h: Record<string, string> = { "Cache-Control": "no-cache, no-store, must-revalidate" };
+  const version = versionPublicadaDelServidor();
+  if (version) h[CABECERA_VERSION] = version;
+  return h;
+}
 
 export function GET() {
   const env = process.env.VERCEL_ENV; // "production" | "preview" | "development" | undefined (local)
@@ -16,6 +28,10 @@ export function GET() {
 
   return Response.json(
     { enabled, version: process.env.NEXT_PUBLIC_APP_VERSION ?? "dev" },
-    { headers: { "Cache-Control": "no-cache, no-store, must-revalidate" } },
+    { headers: cabeceras() },
   );
+}
+
+export function HEAD() {
+  return new Response(null, { status: 200, headers: cabeceras() });
 }

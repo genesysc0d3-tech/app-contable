@@ -624,7 +624,7 @@ export default function EmpresaPopup({
         }
       `}</style>
 
-      <div className="ep-background-app">
+      <div className="ep-background-app" data-actualizacion-espera="">
         <aside className="ep-fake-sidebar">
           <div className="ep-fake-logo"></div>
           <div className="ep-fake-line"></div>
@@ -640,7 +640,7 @@ export default function EmpresaPopup({
         </main>
       </div>
 
-      <div className="ep-overlay">
+      <div className="ep-overlay" data-actualizacion-espera="">
         <section
           ref={ref}
           className="ep-modal"

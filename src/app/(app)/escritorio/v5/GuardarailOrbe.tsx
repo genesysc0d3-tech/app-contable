@@ -342,8 +342,8 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
 
       {apuntando && (
         <>
-          <div className="ap-veil" aria-hidden />
-          <div className="ap-hint" role="status">Toca lo que quieres que vea <b>{apuntando.para}</b> · Esc para salir</div>
+          <div className="ap-veil" aria-hidden data-actualizacion-espera="" />
+          <div className="ap-hint" data-actualizacion-espera="" role="status">Toca lo que quieres que vea <b>{apuntando.para}</b> · Esc para salir</div>
         </>
       )}
 
@@ -381,7 +381,7 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
         })}
       </button>
 
-      <div ref={bubbleRef} className={`gr-bubble${open ? " gr-show" : ""}`} style={cssVars} role="dialog" aria-label={modo.tipo === "avisos" ? "Pendientes por emitir" : "Team"}>
+      <div ref={bubbleRef} className={`gr-bubble${open ? " gr-show" : ""}`} style={cssVars} data-actualizacion-espera={open ? "" : undefined} role="dialog" aria-label={modo.tipo === "avisos" ? "Pendientes por emitir" : "Team"}>
         <span ref={tailRef} className="gr-tail" />
 
         {modo.tipo === "avisos" && hayAvisos && hero && (

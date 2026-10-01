@@ -116,6 +116,7 @@ export default function HintSelector({
       {open && pos && typeof document !== "undefined" && createPortal(
         <div
           ref={menuRef}
+          data-actualizacion-espera=""
           style={{
             position: "fixed",
             top: pos.top,

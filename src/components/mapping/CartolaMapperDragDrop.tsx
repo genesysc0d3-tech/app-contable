@@ -155,7 +155,7 @@ export default function CartolaMapperDragDrop({ onClose, onSaved, previewData }:
   const dataRows = preview ? preview.rows.slice(1, 6) : [];
 
   return (
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} data-actualizacion-espera="" style={{
       position: "fixed", inset: 0, zIndex: 100,
       display: "grid", placeItems: "center", padding: 32,
       background: "rgba(0,0,0,.46)", backdropFilter: "blur(13px)",
