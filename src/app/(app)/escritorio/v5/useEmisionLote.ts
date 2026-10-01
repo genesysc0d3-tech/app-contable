@@ -23,7 +23,7 @@ import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 import { datosParaJob } from "@/lib/emission/datos-job-cliente";
 import { useBloqueoActualizacion } from "@/lib/actualizacion/hooks";
-import { CABECERA_ACTUALIZAR } from "@/lib/actualizacion/version";
+import { pestanaQuedoVieja, versionDelCliente } from "@/lib/actualizacion/version";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
 export interface ItemLoteEmision extends ItemLote {
@@ -216,9 +216,10 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
       const c = clasificarStartJob(res.status, json);
       switch (c.tipo) {
         case "ok": return { jobId: c.jobId, expiresAt: c.expiresAt, emisorRut: c.emisorRut, foliosHoy: c.foliosHoy };
-        // Pestaña vieja (el server lo marca con CABECERA_ACTUALIZAR): el actualizador
-        // ya la va a poner al día sola al cerrar este aviso; no se pide recargar a mano.
-        case "pausada": return { pausada: true, detalle: res.headers.get(CABECERA_ACTUALIZAR) === "1" ? DETALLE_PONIENDOSE_AL_DIA : c.detalle };
+        // Pestaña vieja (el server lo marca y su versión es OTRA): el actualizador la pone
+        // al día sola al cerrar este aviso; no se pide recargar a mano. Con la misma
+        // versión eso sería mentira (A3): va el detalle del server.
+        case "pausada": return { pausada: true, detalle: pestanaQuedoVieja(res.headers, versionDelCliente()) ? DETALLE_PONIENDOSE_AL_DIA : c.detalle };
         case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId, boletaCreatedAt: c.boletaCreatedAt };
         case "frenada": return { frenada: true, motivo: c.motivo };
         case "a_medias": return { yaAMedias: true };

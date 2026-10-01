@@ -1,7 +1,8 @@
 // Anti-bucle de la actualización invisible: si el server alterna versiones durante
 // el rollout (instancias viejas y nuevas a la vez) o un cache sirve el HTML viejo,
 // la pestaña NO puede quedar recargando en loop.
-//  - Máximo UNA recarga automática por versión (por pestaña: sessionStorage).
+//  - UNA recarga automática por versión; una 2.ª solo tras el enfriamiento (la 1.ª
+//    cayó en HTML viejo, o rollback y re-promoción). Nunca una 3.ª (por pestaña).
 //  - Tras una recarga, 10 min sin reintentar aunque la versión siga distinta.
 
 export type RegistroRecargas = { intentos: Array<{ version: string; at: number }> };
@@ -10,9 +11,10 @@ export type StorageLike = { getItem(k: string): string | null; setItem(k: string
 export const CLAVE_RECARGAS = "massdte:actualizacion:recargas";
 export const ESPERA_TRAS_RECARGA_MS = 10 * 60_000;
 const MAX_INTENTOS = 8;
+const MAX_POR_VERSION = 2;
 
 export function decidirRecarga(reg: RegistroRecargas, version: string, ahora: number): { ok: true } | { ok: false; motivo: "ya_intentada" | "enfriando" } {
-  if (reg.intentos.some((i) => i.version === version)) return { ok: false, motivo: "ya_intentada" };
+  if (reg.intentos.filter((i) => i.version === version).length >= MAX_POR_VERSION) return { ok: false, motivo: "ya_intentada" };
   const ultimo = reg.intentos.reduce((m, i) => Math.max(m, i.at), -Infinity);
   if (ahora - ultimo < ESPERA_TRAS_RECARGA_MS) return { ok: false, motivo: "enfriando" };
   return { ok: true };

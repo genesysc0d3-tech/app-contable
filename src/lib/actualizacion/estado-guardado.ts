@@ -20,7 +20,25 @@ export type EstadoGuardado = {
   /** id del elemento con foco (si tenía id). */
   foco: string | null;
   ventana: { x: number; y: number };
+  /** La vista restaurada difiere de la que pinta el server → taparla hasta restaurar. */
+  tapar?: boolean;
 };
+
+const POR_DEFECTO: Record<string, unknown> = { "mesa.tab": "subidos", "check.doc": null, "derecha.vista": "dashboard" };
+/**
+ * ¿Hace falta tapar al recargar? Solo si lo restaurado cambia lo que se ve (otra
+ * pestaña, un doc abierto, otra vista, scroll). Si la vista guardada es la que el
+ * server ya pinta, se muestra directo: cero destello (revisión adversarial M2).
+ */
+export function necesitaTapar(piezas: Record<string, unknown>, scroll: ScrollGuardado[]): boolean {
+  if (scroll.some((x) => x.top > 0)) return true;
+  for (const [k, v] of Object.entries(piezas)) {
+    if (k in POR_DEFECTO) { if (v !== POR_DEFECTO[k] && v != null) return true; continue; }
+    if (k === "emitir.vista") continue; // solo existe si la pestaña ya no es la por defecto
+    if (v != null) return true;
+  }
+  return false;
+}
 
 export function guardarEstado(s: StorageLike, e: EstadoGuardado): boolean {
   try { s.setItem(CLAVE_ESTADO, JSON.stringify(e)); return true; } catch { return false; }
@@ -54,13 +72,12 @@ export function leerEstado(s: StorageLike, { ahora, ruta }: { ahora: number; rut
 
 /**
  * Script inline (antes de pintar): si hay un estado vigente para ESTA ruta de la
- * mesa, marca <html> para que la silueta (MesaSkeleton) tape la página mientras
- * se restaura lo que la clienta veía — sin el parpadeo de la pestaña por defecto.
- * Con tope propio: a los 8 s se destapa pase lo que pase. Fuera de la mesa no
- * hay nada que tapar (solo scroll), así que no se marca.
+ * mesa y la vista restaurada difiere de la por defecto, marca <html> y la página
+ * queda INVISIBLE (sin contenido que pintar, Chrome sostiene el último cuadro de la
+ * página anterior — "paint holding") hasta restaurar: sin silueta ni destello.
+ * Con tope propio: a los 8 s se destapa pase lo que pase.
  */
 export const ATRIBUTO_RESTAURANDO = "data-massdte-restaurando";
 export const TOPE_TAPADO_MS = 8_000;
-export const SCRIPT_ANTES_DE_PINTAR = `try{if(location.pathname==="/massdte"){var r=sessionStorage.getItem(${JSON.stringify(CLAVE_ESTADO)});if(r){var e=JSON.parse(r),n=Date.now();if(e&&e.formato===${FORMATO_ESTADO}&&n-e.at<${TTL_ESTADO_MS}&&e.at<=n+5000&&e.ruta===location.pathname+location.search){var d=document.documentElement;d.setAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)},"");setTimeout(function(){d.removeAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)})},${TOPE_TAPADO_MS})}}}}catch(_){}`;
-export const CLASE_TAPA = "massdte-tapa-restaurando";
-export const ESTILO_RESTAURANDO = `.${CLASE_TAPA}{display:none}html[${ATRIBUTO_RESTAURANDO}] .${CLASE_TAPA}{display:block;position:fixed;inset:0;z-index:2147483000;overflow:hidden;background:var(--background)}`;
+export const SCRIPT_ANTES_DE_PINTAR = `try{if(location.pathname==="/massdte"){var r=sessionStorage.getItem(${JSON.stringify(CLAVE_ESTADO)});if(r){var e=JSON.parse(r),n=Date.now();if(e&&e.tapar===true&&e.formato===${FORMATO_ESTADO}&&n-e.at<${TTL_ESTADO_MS}&&e.at<=n+5000&&e.ruta===location.pathname+location.search){var d=document.documentElement;d.setAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)},"");setTimeout(function(){d.removeAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)})},${TOPE_TAPADO_MS})}}}}catch(_){}`;
+export const ESTILO_RESTAURANDO = `html[${ATRIBUTO_RESTAURANDO}] body>*{visibility:hidden!important}`;

@@ -462,7 +462,8 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
       if (typeof v.status === "string") setStatusFilter(v.status);
       if (typeof v.tipo === "string") setTypeFilter(v.tipo);
       if (Array.isArray(v.expandidos)) setExpandedDocs(new Set(v.expandidos));
-      if (typeof v.popup === "string" || v.popup === null) setPopupDoc(v.popup);
+      // Solo si esa cartola sigue con algo por revisar (si no, el popup saldría vacío).
+      if (typeof v.popup === "string" && (porRevisarByDoc.get(v.popup)?.length ?? 0) > 0) setPopupDoc(v.popup);
       if (Array.isArray(v.seleccion)) setSelected(new Set(v.seleccion));
     });
   useEffect(() => {

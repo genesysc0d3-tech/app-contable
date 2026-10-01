@@ -41,6 +41,16 @@ export function versionPublicadaDelServidor(): string | null {
   });
 }
 
+/**
+ * El server marcó la respuesta con "pestaña vieja" (CABECERA_ACTUALIZAR) Y su versión
+ * es otra que la de esta pestaña: recién ahí es verdad que "se está poniendo al día".
+ * Con la misma versión la marca no la arregla una recarga (revisión adversarial A3).
+ */
+export function pestanaQuedoVieja(h: { get(nombre: string): string | null }, versionPropia: string): boolean {
+  const v = h.get(CABECERA_VERSION);
+  return h.get(CABECERA_ACTUALIZAR) === "1" && !!v && v !== versionPropia;
+}
+
 /** Lado cliente: la versión con la que se construyó ESTA pestaña. En dev, fija. */
 export function versionDelCliente(): string {
   if (process.env.NODE_ENV !== "production") return VERSION_DEV;

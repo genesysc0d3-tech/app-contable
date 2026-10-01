@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CABECERA_ACTUALIZAR, CABECERA_VERSION, versionPublicada } from "./version";
-import { crearActualizador, rutaPermiteRecarga, type DepsActualizador } from "./actualizador";
+import { CABECERA_ACTUALIZAR, CABECERA_VERSION, pestanaQuedoVieja, versionPublicada } from "./version";
+import { crearActualizador, QUIETUD_VISIBLE_MS, rutaPermiteRecarga, tocaConsultarVersion, type DepsActualizador } from "./actualizador";
 import { _reiniciarBloqueos, motivoOcupado, tomarBloqueo, bloqueosActivos } from "./ocupado";
 import { anotarRecarga, decidirRecarga, ESPERA_TRAS_RECARGA_MS, leerRegistro, guardarRegistro } from "./anti-bucle";
-import { ATRIBUTO_RESTAURANDO, CLAVE_ESTADO, guardarEstado, leerEstado, SCRIPT_ANTES_DE_PINTAR, TTL_ESTADO_MS, type EstadoGuardado } from "./estado-guardado";
+import { ATRIBUTO_RESTAURANDO, CLAVE_ESTADO, guardarEstado, leerEstado, necesitaTapar, SCRIPT_ANTES_DE_PINTAR, TTL_ESTADO_MS, type EstadoGuardado } from "./estado-guardado";
 import { _reiniciarPiezas, capturarPiezas, estadoARestaurar, piezasPorRestaurar, registrarPieza } from "./piezas";
 import { aplicarScroll, capturarScroll } from "./scroll";
 
@@ -60,10 +60,17 @@ describe("detección por cabecera (cero pedidos extra)", () => {
     expect(recargar).not.toHaveBeenCalled();
   });
 
-  it("la marca del server 'esta pestaña es vieja' fuerza la puesta al día aunque la versión calce", () => {
+  it("A3: la marca 'pestaña vieja' con la MISMA versión no recarga (recargar no arreglaría nada)", () => {
     const { act, recargar } = armar();
     act.observar(cab({ [CABECERA_VERSION]: "aaa111", [CABECERA_ACTUALIZAR]: "1" }));
-    expect(recargar).toHaveBeenCalledTimes(1);
+    expect(recargar).not.toHaveBeenCalled();
+  });
+
+  it("A3: 'se está poniendo al día' solo si de verdad cambió la versión", () => {
+    expect(pestanaQuedoVieja(cab({ [CABECERA_VERSION]: "bbb222", [CABECERA_ACTUALIZAR]: "1" }), "aaa111")).toBe(true);
+    expect(pestanaQuedoVieja(cab({ [CABECERA_VERSION]: "aaa111", [CABECERA_ACTUALIZAR]: "1" }), "aaa111")).toBe(false);
+    expect(pestanaQuedoVieja(cab({ [CABECERA_ACTUALIZAR]: "1" }), "aaa111")).toBe(false);
+    expect(pestanaQuedoVieja(cab({ [CABECERA_VERSION]: "bbb222" }), "aaa111")).toBe(false);
   });
 
   it("el server publica su versión; kill switch y dev con valor fijo", () => {
@@ -88,6 +95,14 @@ describe("detección por cabecera (cero pedidos extra)", () => {
     const { act, recargar } = armar({ enLinea: () => false });
     act.observar(cab({ [CABECERA_VERSION]: "bbb222" }));
     expect(recargar).not.toHaveBeenCalled();
+  });
+});
+
+describe("M2: consultar al OCULTARSE (para recargar mientras no mira), sin sondeo", () => {
+  it("un HEAD al ocultarse, como mucho 1 cada 5 min", () => {
+    expect(tocaConsultarVersion(null, 1_000)).toBe(true);
+    expect(tocaConsultarVersion(1_000, 1_000 + 4 * 60_000)).toBe(false);
+    expect(tocaConsultarVersion(1_000, 1_000 + 5 * 60_000)).toBe(true);
   });
 });
 
@@ -119,6 +134,11 @@ describe("solo en momento seguro", () => {
     expect(motivoOcupado({ bloqueos: [], mutacionesEnVuelo: 1, doc: docLibre })).toBe("pedido_en_vuelo");
   });
 
+  it("A2: una escritura recién terminada bloquea ~1 s (el que la hizo alcanza a leer la respuesta y mostrar el error)", () => {
+    expect(motivoOcupado({ bloqueos: [], mutacionesEnVuelo: 0, msDesdeUltimaEscritura: 200, doc: docLibre })).toBe("escritura_reciente");
+    expect(motivoOcupado({ bloqueos: [], mutacionesEnVuelo: 0, msDesdeUltimaEscritura: 1_500, doc: docLibre })).toBeNull();
+  });
+
   it("un popup/formulario abierto bloquea", () => {
     const doc = { querySelector: (s: string) => (s.includes("data-actualizacion-espera") ? {} : null), activeElement: null };
     expect(motivoOcupado({ bloqueos: [], mutacionesEnVuelo: 0, doc })).toBe("popup_abierto");
@@ -134,21 +154,27 @@ describe("solo en momento seguro", () => {
     expect(con({ tagName: "BUTTON" })).toBeNull();
   });
 
-  it("pestaña visible: no recarga en medio de un clic/tecla; sí cuando queda quieta", () => {
+  it("M2: pestaña visible exige ~25 s quieta (no 3 s); oculta recarga al tiro", () => {
+    expect(QUIETUD_VISIBLE_MS).toBeGreaterThanOrEqual(20_000);
     let interaccion = 0;
     const h = armar({ oculta: () => false, ultimaInteraccion: () => interaccion });
     interaccion = h.ahora() - 500;
     h.act.observar(cab({ [CABECERA_VERSION]: "bbb222" }));
     expect(h.recargar).not.toHaveBeenCalled();
     h.avanzar(5_000);
+    expect(h.act.intentar()).toBe("interactuando");
+    h.avanzar(QUIETUD_VISIBLE_MS);
     expect(h.act.intentar()).toBe("recargada");
   });
 });
 
 describe("anti-bucle", () => {
-  it("máximo UNA recarga automática por versión", () => {
+  it("B2: una recarga por versión; una 2.ª solo tras el enfriamiento (cayó en HTML viejo o rollback); nunca 3.ª", () => {
     const reg = anotarRecarga({ intentos: [] }, "bbb222", 0);
-    expect(decidirRecarga(reg, "bbb222", ESPERA_TRAS_RECARGA_MS * 5)).toEqual({ ok: false, motivo: "ya_intentada" });
+    expect(decidirRecarga(reg, "bbb222", ESPERA_TRAS_RECARGA_MS - 1)).toEqual({ ok: false, motivo: "enfriando" });
+    expect(decidirRecarga(reg, "bbb222", ESPERA_TRAS_RECARGA_MS)).toEqual({ ok: true });
+    const dos = anotarRecarga(reg, "bbb222", ESPERA_TRAS_RECARGA_MS);
+    expect(decidirRecarga(dos, "bbb222", ESPERA_TRAS_RECARGA_MS * 10)).toEqual({ ok: false, motivo: "ya_intentada" });
   });
 
   it("si tras recargar la versión sigue distinta, no reintenta en 10 min", () => {
@@ -187,7 +213,7 @@ function armarDeps(h: ReturnType<typeof armar>): DepsActualizador {
 
 const estadoBase = (over: Partial<EstadoGuardado> = {}): EstadoGuardado => ({
   formato: 1, desde: "aaa111", at: 1_000, ruta: "/massdte?date=2026-09-12&month=2026-8&view=month&mesa=boleta",
-  piezas: { "mesa.tab": "emitir", "check.doc": "doc-42" }, scroll: [{ clave: "emitir.lista", top: 640, left: 0 }], foco: null, ventana: { x: 0, y: 0 },
+  piezas: { "mesa.tab": "emitir", "check.doc": "doc-42" }, scroll: [{ clave: "emitir.lista", top: 640, left: 0 }], foco: null, ventana: { x: 0, y: 0 }, tapar: true,
   ...over,
 });
 
@@ -250,6 +276,19 @@ describe("guardar y restaurar el estado", () => {
   });
 });
 
+describe("M2: sin destello — tapar solo si la vista restaurada difiere de la que pinta el server", () => {
+  it("vista por defecto (Check, sin doc, sin scroll): no tapa", () => {
+    expect(necesitaTapar({ "mesa.tab": "subidos", "check.doc": null, "derecha.vista": "dashboard" }, [])).toBe(false);
+    expect(necesitaTapar({}, [])).toBe(false);
+  });
+  it("otra pestaña, doc abierto, otra vista o scroll: tapa", () => {
+    expect(necesitaTapar({ "mesa.tab": "emitir" }, [])).toBe(true);
+    expect(necesitaTapar({ "mesa.tab": "subidos", "check.doc": "d1" }, [])).toBe(true);
+    expect(necesitaTapar({ "derecha.vista": "rcv" }, [])).toBe(true);
+    expect(necesitaTapar({}, [{ clave: "r-scroll:0", top: 300, left: 0 }])).toBe(true);
+  });
+});
+
 describe("TTL del estado guardado", () => {
   it("vale 2 minutos; después se descarta (y se borra)", () => {
     const s = new MemStorage();
@@ -294,5 +333,7 @@ describe("tapado antes de pintar (script inline)", () => {
     expect(correr(e, { ahora: e.at + 1_000, pathname, search: "?date=otra" }).tapado).toBe(false);
     expect(correr(undefined, { ahora: e.at, pathname, search }).tapado).toBe(false);
     expect(correr({ ...e, ruta: "/boletas/reportes" }, { ahora: e.at + 1_000, pathname: "/boletas/reportes", search: "" }).tapado).toBe(false);
+    // M2: la vista guardada es la que el server ya pinta → nada que tapar.
+    expect(correr({ ...e, tapar: false }, { ahora: e.at + 1_000, pathname, search }).tapado).toBe(false);
   });
 });

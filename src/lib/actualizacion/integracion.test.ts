@@ -33,8 +33,9 @@ describe("el server publica su versión en las respuestas que ya existen", () =>
     const src = fuente("src/app/api/emision/jobs/route.ts");
     expect(src).toMatch(/code: "EMISION_PAUSADA", campos: cmp\.campos, detalle: DETALLE_DATOS_FALTAN/);
     expect(src).toMatch(/CABECERA_ACTUALIZAR\]: "1"/);
-    // La pestaña nueva no le pide a la clienta recargar a mano.
-    expect(fuente(V5 + "useEmisionLote.ts")).toMatch(/CABECERA_ACTUALIZAR/);
+    // La pestaña nueva no le pide a la clienta recargar a mano… y solo dice "poniéndose
+    // al día" si de verdad cambió la versión (A3).
+    expect(fuente(V5 + "useEmisionLote.ts")).toMatch(/pestanaQuedoVieja\(res\.headers, versionDelCliente\(\)\)/);
   });
 });
 
@@ -56,6 +57,18 @@ describe("momentos NO seguros declarados", () => {
     // `actualizacion-libre: <motivo>` para lo que de verdad no guarda nada).
     const faltan = inventarioOverlaysSinMarca();
     expect(faltan).toEqual([]);
+  });
+
+  it("A2: tras una escritura se reintenta con setTimeout (nunca microtask) y con margen", () => {
+    const src = fuente("src/components/ActualizadorInvisible.tsx");
+    expect(src).not.toMatch(/queueMicrotask/);
+    expect(src).toMatch(/msDesdeUltimaEscritura: Date\.now\(\) - ultimaEscrituraFin/);
+  });
+
+  it("M2: consulta la versión al ocultarse; sin setInterval (cero sondeo)", () => {
+    const src = fuente("src/components/ActualizadorInvisible.tsx");
+    expect(src).toMatch(/tocaConsultarVersion\(ultimaConsulta, Date\.now\(\)\)/);
+    expect(src).not.toMatch(/setInterval/);
   });
 
   it("MFA: enrolando (QR en pantalla) no se recarga", () => {

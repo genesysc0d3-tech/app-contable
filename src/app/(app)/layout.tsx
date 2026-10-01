@@ -1,8 +1,7 @@
 import { getAppEmpresaContext } from "@/lib/dal";
 import DevSupportBanner, { type BannerIntervencion } from "./escritorio/v5/DevSupportBanner";
 import ActualizadorInvisible from "@/components/ActualizadorInvisible";
-import { CLASE_TAPA, ESTILO_RESTAURANDO, SCRIPT_ANTES_DE_PINTAR } from "@/lib/actualizacion/estado-guardado";
-import MesaSkeleton from "@/components/MesaSkeleton";
+import { ESTILO_RESTAURANDO, SCRIPT_ANTES_DE_PINTAR } from "@/lib/actualizacion/estado-guardado";
 
 export default async function AppLayout({
   children,
@@ -23,13 +22,13 @@ export default async function AppLayout({
 
   return (
     <>
-      {/* Actualización invisible: si esta carga viene de una recarga automática, la
-          silueta de la mesa tapa la página ANTES de pintar hasta restaurar lo que la
-          clienta veía (pestaña, doc, scroll) y se destapa con la vista ya restaurada.
-          Solo en la app con sesión: /auth, /legal y las públicas no usan este layout. */}
+      {/* Actualización invisible: si esta carga viene de una recarga automática y la
+          vista guardada difiere de la por defecto, la página queda invisible ANTES de
+          pintar (el navegador sostiene el último cuadro) hasta restaurar lo que la
+          clienta veía. Solo en la app con sesión: /auth, /legal y las públicas no usan
+          este layout. */}
       <style dangerouslySetInnerHTML={{ __html: ESTILO_RESTAURANDO }} />
       <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANTES_DE_PINTAR }} />
-      <div className={CLASE_TAPA} aria-hidden="true"><MesaSkeleton /></div>
       {supportMode && (
         <div style={{ padding: "12px 12px 0" }}>
           <DevSupportBanner

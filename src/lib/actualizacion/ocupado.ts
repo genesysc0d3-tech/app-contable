@@ -47,9 +47,13 @@ function escribiendo(a: ActivoLike): boolean {
   return false;
 }
 
-export function motivoOcupado({ bloqueos: activos, mutacionesEnVuelo, doc }: { bloqueos: string[]; mutacionesEnVuelo: number; doc: DocLike | null }): string | null {
+/** Tras una escritura, margen para que su código lea la respuesta (y muestre un error). */
+export const MARGEN_TRAS_ESCRITURA_MS = 1_000;
+
+export function motivoOcupado({ bloqueos: activos, mutacionesEnVuelo, msDesdeUltimaEscritura = Infinity, doc }: { bloqueos: string[]; mutacionesEnVuelo: number; msDesdeUltimaEscritura?: number; doc: DocLike | null }): string | null {
   if (activos.length > 0) return activos[0];
   if (mutacionesEnVuelo > 0) return "pedido_en_vuelo";
+  if (msDesdeUltimaEscritura < MARGEN_TRAS_ESCRITURA_MS) return "escritura_reciente";
   if (doc) {
     try { if (doc.querySelector(SELECTOR_ESPERA)) return "popup_abierto"; } catch { return "popup_abierto"; }
     if (escribiendo(doc.activeElement as ActivoLike)) return "escribiendo";
