@@ -169,6 +169,13 @@ describe("un solo rol por celda: un posible subtotal leído como movimiento no s
     expect(r.plantilla).toBe(true);
     expect(r.verificacion?.tipo).toBe("sin_comprobar");
     expect(r.verificacion?.alerta).toBe(true);
+    // …pero el popup "Revisa las columnas" NO se abre: las columnas de nuestra
+    // plantilla son fijas, el problema es una FILA (se resuelve en Editar). Antes
+    // el visor quedaba con el CTA para siempre: guardar columnas no la arregla
+    // (la plantilla se lee antes del caché) — revisión adversarial 2026-09-30.
+    const { revisarColumnas } = await import("@/lib/cartola/verificacion");
+    expect(r.censo.mapa?.confirmado_por).toBe("plantilla");
+    expect(revisarColumnas({ verificacion: r.censo.verificacion, mapa: r.censo.mapa }).abrir).toBe(false);
   });
   it("plantilla massDTE normal (sin subtotales) sigue con sello cliente", async () => {
     const filas: Celda[][] = [["Fecha", "Glosa", "Monto", "Tipo", "RUT receptor", "Nombre receptor", "Medio de pago"]];

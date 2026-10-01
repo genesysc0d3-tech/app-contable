@@ -35,6 +35,11 @@ describe("revisarColumnas: ¿se abre solo el popup?", () => {
     expect(revisarColumnas({ verificacion: { tipo: "cliente", detalle: "" }, mapa: nuevo }).abrir).toBe(false);
   });
 
+  it("NO abre en la plantilla massDTE (columnas fijas): una alerta ahí es de FILAS, va a Editar", () => {
+    const plantilla: MapaUsado = { adapter_id: "p", estado: "confirmado", nuevo: false, confirmado_por: "plantilla" };
+    expect(revisarColumnas({ verificacion: { tipo: "sin_comprobar", alerta: true, detalle: "Posible subtotal" }, mapa: plantilla }).abrir).toBe(false);
+  });
+
   it("NO abre en cuadres viejos sin sello (documentos antiguos no molestan)", () => {
     expect(revisarColumnas({}).abrir).toBe(false);
   });

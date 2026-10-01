@@ -33,6 +33,10 @@ export function revisarColumnas(c: Partial<ConSello>): RevisarColumnas {
   const no: RevisarColumnas = { abrir: false, otraVez: false, motivo: null };
   const v = c.verificacion;
   if (!v || v.tipo === "cliente" || v.tipo === "saldo" || v.tipo === "total_banco") return no;
+  // Nuestra plantilla massDTE tiene columnas FIJAS: una alerta ahí (un posible
+  // subtotal) es de filas y se resuelve en Editar. Guardar columnas no la arregla
+  // (la plantilla se lee antes del caché) → el CTA quedaba para siempre.
+  if (c.mapa?.confirmado_por === "plantilla") return no;
   const chequeoFallo = !!(v.alerta || v.revisar);
   const formatoConfirmado = !!c.mapa && c.mapa.estado === "confirmado" && c.mapa.nuevo !== true;
   if (formatoConfirmado) {

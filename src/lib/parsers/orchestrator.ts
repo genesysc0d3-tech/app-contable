@@ -215,7 +215,7 @@ export async function parseExcelWithOrchestrator(
           empresaId: null, // nuestra propia plantilla: global
           confirmadoPor: "plantilla",
         });
-        return terminar(lectura, 3, adapterId, { adapter_id: adapterId, estado: "confirmado", nuevo: false });
+        return terminar(lectura, 3, adapterId, { adapter_id: adapterId, estado: "confirmado", nuevo: false, confirmado_por: "plantilla" });
       }
     }
 
