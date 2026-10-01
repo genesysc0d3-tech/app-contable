@@ -75,8 +75,7 @@ export function clasificarStartJob(status: number, json: Record<string, unknown>
     return {
       tipo: "frenada",
       motivo: detalle
-        ? `${detalle} Lo que falta queda guardado.`
-        : "Una boleta cambió en otra pestaña o por otra persona: no se emitió. Lo que falta queda guardado: vuelve a abrir Emitir para ver los datos al día.",
+        ?? "Una de las que faltaban cambió en otra pestaña o la cambió otra persona, así que no la emití. Las que ya salieron quedaron guardadas. Vuelve a abrir Emitir para ver los datos al día y sigue con las que faltan.",
     };
   }
   if (status === 409 && j.error === "EMISION_EN_CURSO") {

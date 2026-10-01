@@ -50,3 +50,12 @@ describe("clasificarStartJob — el lote no revienta en cadena", () => {
     if (r.tipo === "frenada") expect(r.motivo).not.toContain("Tu emisión anterior");
   });
 });
+
+describe("clasificarStartJob — DATOS_CAMBIARON con el texto del server tal cual (rev 2 M1)", () => {
+  it("no le agrega nada al detalle y el fallback no miente a mitad de lote", () => {
+    const r = clasificarStartJob(409, { error: "DATOS_CAMBIARON", detalle: "Esta factura cambió X." });
+    expect(r).toEqual({ tipo: "frenada", motivo: "Esta factura cambió X." });
+    const f = clasificarStartJob(409, { error: "DATOS_CAMBIARON" });
+    if (f.tipo === "frenada") expect(f.motivo).not.toContain("No se emitió nada");
+  });
+});

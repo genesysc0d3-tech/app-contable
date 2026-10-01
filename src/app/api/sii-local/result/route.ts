@@ -11,7 +11,7 @@ import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 import { requireEmisionJob } from "@/lib/emission/jobs";
 import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
-import { declararNoSalioBoletaUnica, levantarLapidaBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
+import { datosFolioBoletaUnica, declararNoSalioBoletaUnica, esLapidaBoletaUnica, fueDeclaradoNoSalio, levantarLapidaBoletaUnica, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { cleanRut } from "@/lib/sii/validation";
@@ -34,6 +34,9 @@ interface SiiLocalResultPayload {
    * la propuesta a Listas. Queda auditado como declaración de la persona.
    */
   declarar_no_salio?: boolean;
+  /** Folio a mano de una boleta única sin intento guardado: monto y tipo de ESA boleta. */
+  monto_declarado?: number | null;
+  tipo_dte_declarado?: number | null;
   /**
    * VEREDICTO DE LA VERIFICACIÓN ("Verificar y seguir", 2026-09-28): el job de
    * verificación (`job_id`) leyó el Resumen de ventas del SII completo y la boleta no
@@ -632,6 +635,8 @@ async function backfillFolioSinJobVivo(
     /** Payload completo: la red anti-pérdida también SUBE el PDF si vino. */
     result?: SiiLocalResultPayload["result"];
     pdfInfo?: SiiLocalPdfInfo | null;
+    /** Boleta única (sin propuesta): receptor y detalle del INTENTO guardado en el job. */
+    intento?: IntentoBoletaUnica | null;
   },
 ): Promise<{ ok: boolean; boletaId?: string; already?: boolean; error?: string }> {
   const { data: empresa } = await sb
@@ -692,6 +697,10 @@ async function backfillFolioSinJobVivo(
     // monto, así que la boleta respaldada salía como "consumidor final" aunque
     // el documento sí identificaba a su receptor. Se lee de la propuesta, que
     // es la fuente de verdad de lo que se emitió.
+    ...(!prop && args.intento ? {
+      receptor_rut: args.intento.receptor_rut,
+      receptor_razon_social: args.intento.receptor_nombre,
+    } : {}),
     ...(prop ? {
       receptor_rut: prop.receptor_rut ?? null,
       receptor_razon_social: prop.receptor_nombre ?? null,
@@ -703,7 +712,7 @@ async function backfillFolioSinJobVivo(
     monto_exento: totals.monto_exento,
     iva: totals.iva,
     monto_total: args.montoTotal,
-    detalles: [{ nro_lin: 1, nombre: "Servicio prestado", qty: 1, monto: args.montoTotal }],
+    detalles: [{ nro_lin: 1, nombre: args.intento?.detalle ?? "Servicio prestado", qty: 1, monto: args.montoTotal }],
     xml_dte: `sii-local://boleta/${args.tipoDte}/${args.folio}`,
     ted: `sii-local://ted/${args.tipoDte}/${args.folio}`,
     track_id: `sii-local-recovery:${args.jobId ?? "manual"}:${args.tipoDte}:${args.folio}`,
@@ -883,6 +892,49 @@ export async function POST(request: Request) {
     // lanzó el intento: si Marge no está, la clienta no queda trabada). Auditado.
     const accesoManual = await accesoDeclaracion(sb, user.id, jobManual);
     if (accesoManual) return accesoManual;
+    // BOLETA ÚNICA a medias (rev. adversarial M1/M2, 2026-09-30): su folio se registra
+    // con los datos del INTENTO guardado en el job (o, sin la migración, con el monto y
+    // tipo que la persona declara de ESA boleta), nunca con el borrador nuevo. Puede
+    // hacerlo cualquier persona activa de la cuenta con rol de emisión (acceso arriba).
+    if (!jobManual.propuesta_id) {
+      if (!esLapidaBoletaUnica(jobManual)) {
+        return NextResponse.json({ ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no quedó a medias: no corresponde registrar un folio a mano." }, { status: 409 });
+      }
+      const { data: jobFull } = await sb.from("emision_jobs").select("*").eq("job_id", jobManual.job_id).maybeSingle();
+      const decl = payload.monto_declarado != null ? { monto: Number(payload.monto_declarado), tipo_dte: Number(payload.tipo_dte_declarado) } : null;
+      const datosU = datosFolioBoletaUnica((jobFull ?? {}) as { intento?: unknown }, decl);
+      if (!datosU.ok) return NextResponse.json({ ok: false, error: datosU.error, detalle: datosU.detalle }, { status: 422 });
+      const { data: yaReg } = await sb
+        .from("boletas_emitidas").select("id")
+        .eq("empresa_id", jobManual.empresa_id).eq("tipo_dte", datosU.tipo_dte).eq("folio", folioManual)
+        .maybeSingle();
+      if (yaReg && !(await jobSiLaBoletaEsSuya(sb, yaReg.id, jobManual.job_id))) {
+        return NextResponse.json(
+          { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO", detalle: `El folio ${folioManual} ya está registrado en otra boleta. Revisa el número en el SII; esta boleta sigue a medias.` },
+          { status: 409 },
+        );
+      }
+      const respaldoU = await backfillFolioSinJobVivo(sb, {
+        empresaId: jobManual.empresa_id,
+        tipoDte: datosU.tipo_dte,
+        folio: folioManual,
+        montoTotal: datosU.monto,
+        fechaEmision: chileDateString(new Date(jobManual.created_at)),
+        totales: null,
+        jobId: jobManual.job_id,
+        propuestaId: null,
+        intento: datosU.intento,
+      });
+      if (!respaldoU.ok) return NextResponse.json({ ok: false, error: "REGISTRO_MANUAL_FALLIDO", detalle: respaldoU.error }, { status: 500 });
+      await recordOpsEvent({
+        sb, severity: "warn", source: "sii-local", eventName: "sii_local_folio_declarado_a_mano",
+        summary: `Folio ${folioManual} declarado a mano para una boleta única a medias`,
+        empresaId: jobManual.empresa_id, cuentaId: jobManual.cuenta_id, usuarioId: user.id,
+        resourceType: "emision_job", resourceId: jobManual.job_id,
+        metadata: { folio: folioManual, tipo_dte: datosU.tipo_dte, boleta_unica: true, monto_de: datosU.intento ? "intento" : "declarado", lanzado_por_otra_persona: jobManual.usuario_id !== user.id },
+      });
+      return NextResponse.json({ ok: true, boleta_id: respaldoU.boletaId ?? null, folio: folioManual, already_exists: Boolean(respaldoU.already), recuperado: true });
+    }
     // Lápida real: a medias (revision_pendiente) o SIN RESPUESTA (job del lote vencido
     // y abierto, lapida.ts) — la clienta ve su folio en el SII y lo registra.
     if (esLapidaEfectiva(jobManual) === null) {
@@ -977,7 +1029,7 @@ export async function POST(request: Request) {
     if (!jobIdDecl) return NextResponse.json({ ok: false, error: "JOB_ID_REQUERIDO" }, { status: 400 });
     const { data: jobDecl, error: errDecl } = await sb
       .from("emision_jobs")
-      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id, expires_at, created_at")
+      .select("job_id, estado, empresa_id, cuenta_id, usuario_id, propuesta_id, expires_at, created_at, updated_at")
       .eq("job_id", jobIdDecl)
       .maybeSingle();
     if (errDecl) return NextResponse.json({ ok: false, error: "JOB_QUERY_FAILED" }, { status: 500 });
@@ -1317,6 +1369,18 @@ export async function POST(request: Request) {
       });
       if (respaldo.ok) {
         await levantarAdoptado(sb, jobCerrado);
+        // Llegó un folio REAL para un intento que alguien declaró «no salió»
+        // (rev. adversarial M3): puede haber dos boletas por la misma venta y la
+        // boleta única no tiene índice por propuesta que lo detecte. Alerta crítica.
+        if (fueDeclaradoNoSalio(jobCerrado)) {
+          await recordOpsEvent({
+            sb, severity: "critical", source: "sii-local", eventName: "folio_tras_no_salio_declarado",
+            summary: `Llegó el folio ${folio} de un intento declarado «no salió»: revisar posible doble boleta`,
+            empresaId: jobCerrado.empresa_id, cuentaId: jobCerrado.cuenta_id, usuarioId: user.id,
+            resourceType: "emision_job", resourceId: effectiveJobId,
+            metadata: { folio, tipo_dte: tipoDte, propuesta_id: jobCerrado.propuesta_id ?? null },
+          });
+        }
         await rememberResult(sb, {
           user_id: user.id,
           job_id: effectiveJobId,

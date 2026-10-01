@@ -36,3 +36,19 @@ describe("result/route.ts — lápida de boleta única", () => {
     expect(unica).toBeLessThan(rechazoLote);
   });
 });
+
+// ── Revisión adversarial del fix (2026-09-30) ──
+describe("result/route.ts — salida real de la boleta única a medias", () => {
+  it("registrar_folio_manual atiende la boleta única ANTES del rechazo JOB_SIN_PROPUESTA, con los datos del intento", () => {
+    const manual = src.indexOf("if (payload.registrar_folio_manual != null) {");
+    const unica = src.indexOf("datosFolioBoletaUnica(", manual);
+    const acceso = src.indexOf("const accesoManual = await accesoDeclaracion(sb, user.id, jobManual);", manual);
+    const sinProp = src.indexOf('error: "JOB_SIN_PROPUESTA"', manual);
+    expect(unica).toBeGreaterThan(acceso);
+    expect(unica).toBeLessThan(sinProp);
+  });
+  it("un folio que llega para un intento declarado «no salió» dispara alerta crítica", () => {
+    expect(src).toContain("fueDeclaradoNoSalio(");
+    expect(src).toContain('eventName: "folio_tras_no_salio_declarado"');
+  });
+});

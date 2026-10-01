@@ -44,8 +44,8 @@ describe("compararDatosJob", () => {
   it("tipo de otra mesa (factura pedida sobre una boleta) → tipo_dte", () => {
     expect(compararDatosJob(base, 33, ok)).toMatchObject({ ok: false, campos: ["tipo_dte"] });
   });
-  it("sin tipo persistido manda el veredicto del cliente (no se puede recalcular): ok", () => {
-    expect(compararDatosJob({ ...base, tipo_dte: null }, 39, ok)).toEqual({ ok: true });
+  it("sin tipo persistido y sin contexto de empresa → ya NO se acepta el del navegador (rev. adversarial M4)", () => {
+    expect(compararDatosJob({ ...base, tipo_dte: null }, 39, ok)).toEqual({ ok: false, campos: ["tipo_dte"] });
   });
   it("receptor distinto o borrado → receptor_rut", () => {
     expect(compararDatosJob({ ...base, receptor_rut: "11.111.111-1" }, 41, ok)).toEqual({ ok: false, campos: ["receptor_rut"] });

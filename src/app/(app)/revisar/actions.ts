@@ -17,7 +17,7 @@ const BATCH_SIZE = 50;
 /** Desde dónde se puede aprobar (mismo allowlist que editarPropuesta y ponerListo). */
 const ESTADOS_APROBABLES = ["pendiente", "listo", "editado"];
 const MENSAJE_NO_APROBABLE =
-  "Esta propuesta cambió mientras la mirabas (otra persona la aprobó, rechazó o emitió). Recarga para ver su estado actual.";
+  "Este movimiento cambió mientras lo mirabas (otra persona lo aprobó, rechazó o emitió). Recarga para ver cómo quedó.";
 
 /**
  * Fetches the current user's empresa_id (with auth) and returns a service-role

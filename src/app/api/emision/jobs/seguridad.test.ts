@@ -17,6 +17,7 @@ const { estado } = vi.hoisted(() => ({
     llamadas: [] as Llamada[],
     resp: (() => ({ data: null, error: null })) as (l: Llamada) => Resp,
     acquire: vi.fn(async () => ({ ok: true, jobId: "server:sii_local:NUEVO", lockedUntil: "2026-09-30T13:00:00Z" })),
+    emitible: { ok: true } as Record<string, unknown>,
   },
 }));
 
@@ -59,7 +60,7 @@ vi.mock("@/lib/emission/authorizations", () => ({
   getEmissionAuthorizationStatus: async () => ({ authorized: true }),
 }));
 vi.mock("@/lib/emission/propuesta-emitible", () => ({
-  revisarPropuestaEmitible: async () => ({ ok: true }),
+  revisarPropuestaEmitible: async () => estado.emitible,
   revisarPostCandado: async () => ({ ok: true }),
   revisarYaEmitida: async () => ({ ok: true }),
 }));
@@ -108,6 +109,7 @@ function escenario(over: (l: Llamada) => Resp | undefined = () => undefined) {
 beforeEach(() => {
   estado.llamadas = [];
   estado.acquire.mockClear();
+  estado.emitible = { ok: true };
   escenario();
 });
 
@@ -202,5 +204,67 @@ describe("PATCH /api/emision/jobs — latido con candado perdido (puntos 3 y 5)"
       expect(res.status).toBe(200);
       expect((await res.json()).closed).toBe(true);
     }
+  });
+});
+
+// ── Revisión adversarial del fix (2026-09-30) ──
+describe("POST — pestañas viejas, ya emitida primero, intento de la boleta única", () => {
+  const lote = (datos?: unknown) => ({ provider: "sii_local", tipo_dte: 41, origin: "emision_lote", propuesta_id: PROP, ...(datos === undefined ? {} : { datos }) });
+
+  it("JS viejo sin datos → code EMISION_PAUSADA + «recarga la página» (el clasificador viejo lo entiende como pausa limpia)", async () => {
+    const res = await POST(req("POST", lote()));
+    const json = await res.json();
+    expect(res.status).toBe(409);
+    expect(json.code).toBe("EMISION_PAUSADA");
+    expect(json.detalle).toContain("Recarga la página");
+  });
+
+  it("ya emitida va ANTES que los datos: se salta (no frena el lote) aunque los datos difieran", async () => {
+    estado.emitible = { ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", detalle: "ya", folio: 7 };
+    const res = await POST(req("POST", lote({ monto: 1, receptor_rut: null, glosa: "x" })));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("PROPUESTA_YA_EMITIDA");
+  });
+
+  it("boleta única: guarda el intento (monto/tipo/receptor) en el job recién creado", async () => {
+    const intento = { monto: 10000, tipo_dte: 41, receptor_rut: null, receptor_nombre: "Ana", detalle: "Clase" };
+    const res = await POST(req("POST", { provider: "sii_local", tipo_dte: 41, origin: "emision_directa", intento }));
+    expect(res.status).toBe(200);
+    const upd = estado.llamadas.find((l) => l.tabla === "emision_jobs" && l.op === "update" && (l.valores as { intento?: unknown })?.intento);
+    expect(upd?.filtros["eq:job_id"]).toBe("server:sii_local:NUEVO");
+    expect((upd?.valores as { intento: unknown }).intento).toEqual(intento);
+  });
+
+  it("BOLETA_A_MEDIAS trae qué buscar en el SII y quién la lanzó", async () => {
+    const intento = { monto: 10000, tipo_dte: 41, receptor_rut: null, receptor_nombre: "Ana", detalle: "Clase" };
+    escenario((l) => {
+      if (l.tabla === "emision_jobs" && l.op === "select") return { data: [{ job_id: "J9", estado: "revision_pendiente", propuesta_id: null, created_at: "2026-09-30T17:05:00Z", usuario_id: "U2", intento }], error: null };
+      if (l.tabla === "usuarios") return { data: { nombre: "Marge" }, error: null };
+      return undefined;
+    });
+    const res = await POST(req("POST", { provider: "sii_local", tipo_dte: 41, origin: "emision_directa" }));
+    const json = await res.json();
+    expect(json.error).toBe("BOLETA_A_MEDIAS");
+    expect(json.intento).toEqual(intento);
+    expect(json.lanzada_por).toBe("Marge");
+    expect(json.es_mia).toBe(false);
+    expect(json.detalle).toContain("$10.000");
+  });
+});
+
+describe("PATCH — carrera con /result (rev 2 M3)", () => {
+  it("lease perdido pero el job ya quedó completed (el resultado ganó) → 200 closed, sin alarma", async () => {
+    let lecturas = 0;
+    escenario((l) => {
+      if (l.tabla === "emision_jobs" && l.op === "select") {
+        lecturas++;
+        return { data: { job_id: "J1", cuenta_id: "C1", usuario_id: "U1", estado: lecturas === 1 ? "running" : "completed", provider: "sii_local" }, error: null };
+      }
+      if (l.tabla === "emision_locks" && l.op === "update") return { data: [], error: null };
+      return undefined;
+    });
+    const res = await PATCH(req("PATCH", { job_id: "J1", status: "result_awaiting_ack" }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).closed).toBe(true);
   });
 });

@@ -14,14 +14,20 @@
 //   receptor= receptor_rut ?? cliente.rut
 //   glosa   = boleta: resolverGlosa(notas › glosa común activa › genérico)
 //             factura: detalle || "Servicios profesionales"
-//   tipo    = el persistido manda (Paso P); sin persistido es veredicto del motor
-//             (patrones del día, UF…): no se puede recalcular acá y se acepta el del
-//             cliente, pero nunca un tipo de la otra mesa.
+//   tipo    = el persistido manda (Paso P); sin persistido (43 % de las boletas
+//             aprobadas en prod, rev. adversarial M4) se RECALCULA con el mismo motor
+//             de la mesa (evaluarEmision: tipo_propuesto exento, hint de la cartola,
+//             heurística de la glosa, régimen de la empresa). El ángulo "patrón" es
+//             neutral (clasificador-tipo.ts), así que el tipo no depende de las
+//             hermanas de la lista. Sin contexto de empresa → se rechaza.
+//             Nunca un tipo de la otra mesa.
 
 import { GLOSA_FALLBACK, GLOSA_FALLBACK_EXENTA, resolverGlosa } from "@/lib/intermediario/armar-boleta";
+import { evaluarEmision } from "@/lib/intermediario/emision-decision";
+import type { DocumentoHint, EmpresaContext } from "@/lib/sii/clasificador-tipo";
 
 export const SELECT_PROPUESTA_DATOS =
-  "id, empresa_id, estado, mesa, tipo_dte, total, notas, detalle, receptor_rut, clientes(rut), movimientos_raw(monto, documentos_subidos(glosa_comun, glosa_activa))";
+  "id, empresa_id, estado, mesa, tipo_dte, tipo_propuesto, total, notas, detalle, receptor_rut, receptor_nombre, created_at, clientes(rut, nombre), movimientos_raw(monto, fecha, descripcion, documentos_subidos(glosa_comun, glosa_activa, tipo_operacion_hint))";
 
 type Uno<T> = T | T[] | null | undefined;
 const uno = <T>(v: Uno<T>): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
@@ -29,13 +35,49 @@ const uno = <T>(v: Uno<T>): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v 
 export type PropuestaDatos = {
   mesa: string | null;
   tipo_dte: number | null;
+  estado?: string | null;
+  tipo_propuesto?: string | null;
   total: number | string | null;
   notas: string | null;
   detalle: string | null;
   receptor_rut: string | null;
-  clientes: Uno<{ rut: string | null }>;
-  movimientos_raw: Uno<{ monto: number | string | null; documentos_subidos?: Uno<{ glosa_comun: string | null; glosa_activa: boolean | null }> }>;
+  receptor_nombre?: string | null;
+  created_at?: string | null;
+  clientes: Uno<{ rut: string | null; nombre?: string | null }>;
+  movimientos_raw: Uno<{
+    monto: number | string | null;
+    fecha?: string | null;
+    descripcion?: string | null;
+    documentos_subidos?: Uno<{ glosa_comun: string | null; glosa_activa: boolean | null; tipo_operacion_hint?: string | null }>;
+  }>;
 };
+
+const HINTS = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
+
+/** Tipo de boleta que la mesa le asigna a una propuesta SIN tipo persistido (mismo motor). */
+export function tipoBoletaDeMesa(prop: PropuestaDatos, empresa: EmpresaContext): 39 | 41 | null {
+  const mov = uno(prop.movimientos_raw);
+  const doc = uno(mov?.documentos_subidos);
+  const cliente = uno(prop.clientes);
+  const total = Number(prop.total ?? mov?.monto ?? 0);
+  const hint = doc?.tipo_operacion_hint && HINTS.has(doc.tipo_operacion_hint) ? (doc.tipo_operacion_hint as DocumentoHint) : null;
+  const v = evaluarEmision(
+    {
+      estado: prop.estado ?? "",
+      yaEmitida: false,
+      total,
+      descripcion: mov?.descripcion ?? "",
+      fecha: (mov?.fecha ?? prop.created_at ?? "").slice(0, 10),
+      receptorRut: prop.receptor_rut ?? cliente?.rut ?? null,
+      receptorNombre: prop.receptor_nombre ?? cliente?.nombre ?? null,
+      tipoDtePersistido: null,
+      tipoPropuesto: prop.tipo_propuesto ?? null,
+      docHint: hint,
+    },
+    { empresa },
+  );
+  return v.tipoDte;
+}
 
 export type DatosJobEnviados = { monto: number; receptor_rut: string | null; glosa: string };
 
@@ -67,6 +109,8 @@ export function compararDatosJob(
   prop: PropuestaDatos,
   tipoDtePedido: number,
   enviado: DatosJobEnviados,
+  /** Contexto de la empresa (con operacion_default) para recalcular un tipo sin persistir. */
+  empresa?: EmpresaContext | null,
 ): { ok: true } | { ok: false; campos: CampoDatos[] } {
   const campos: CampoDatos[] = [];
   const mov = uno(prop.movimientos_raw);
@@ -78,9 +122,12 @@ export function compararDatosJob(
 
   const familia = prop.mesa ? FAMILIA[prop.mesa] : undefined;
   const tipoPersistido = prop.tipo_dte != null && familia?.includes(prop.tipo_dte) ? prop.tipo_dte : null;
-  if ((familia && !familia.includes(tipoDtePedido)) || (tipoPersistido != null && tipoPersistido !== tipoDtePedido)) {
-    campos.push("tipo_dte");
+  let tipoMal = Boolean(familia && !familia.includes(tipoDtePedido)) || (tipoPersistido != null && tipoPersistido !== tipoDtePedido);
+  if (!tipoMal && tipoPersistido == null && prop.mesa === "boleta") {
+    // Sin tipo persistido: el server lo recalcula; sin contexto no se acepta a ciegas.
+    tipoMal = !empresa || tipoBoletaDeMesa(prop, empresa) !== tipoDtePedido;
   }
+  if (tipoMal) campos.push("tipo_dte");
 
   if (normRut(prop.receptor_rut ?? cliente?.rut ?? null) !== normRut(enviado.receptor_rut)) campos.push("receptor_rut");
 
@@ -101,7 +148,11 @@ export function compararDatosJob(
   return campos.length === 0 ? { ok: true } : { ok: false, campos };
 }
 
-export const DETALLE_DATOS_CAMBIARON =
-  "Esta boleta cambió en otra pestaña o por otra persona (monto, tipo, receptor o glosa). No se emitió nada: vuelve a abrir Emitir para ver los datos al día.";
+/** Texto para la clienta (rev. adversarial 2 M1): honesto a mitad de lote, sin jerga. */
+export function textoDatosCambiaron(mesa: string | null | undefined): string {
+  const doc = mesa === "factura" ? "factura" : "boleta";
+  const pl = mesa === "factura" ? "facturas" : "boletas";
+  return `Esta ${doc} cambió en otra pestaña o la cambió otra persona (monto, tipo, receptor o detalle), así que no la emití. Las que ya salieron quedaron guardadas. Vuelve a abrir Emitir para ver los datos al día y sigue con las ${pl} que faltan.`;
+}
 export const DETALLE_DATOS_FALTAN =
-  "Esta pestaña tiene una versión vieja de massDTE. No se emitió nada: recarga la página y vuelve a emitir.";
+  "Esta pestaña tiene una versión vieja de massDTE. Recarga la página y vuelve a emitir: lo que falta quedó guardado.";

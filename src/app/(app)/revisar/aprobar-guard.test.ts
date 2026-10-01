@@ -69,7 +69,7 @@ describe("aprobarPropuesta — solo desde el estado esperado", () => {
   it("si no calzó (rechazada/emitida por otra persona con vista vieja) → error honesto", async () => {
     estado.count = 0;
     const r = await aprobarPropuesta("P1", null);
-    expect(r).toMatchObject({ error: expect.stringContaining("cambió") });
+    expect(r).toMatchObject({ error: expect.stringContaining("Este movimiento cambió") });
   });
 });
 
