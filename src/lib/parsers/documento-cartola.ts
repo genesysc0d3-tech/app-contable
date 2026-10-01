@@ -9,6 +9,16 @@ import type { AdapterConfig } from "./types";
  * navegador y bajar el archivo de la cartola.
  */
 
+/**
+ * ¿Este documento se lee con el lector de planillas (y por eso puede pedir
+ * "Revisa las columnas")? Excel y CSV: queue.ts manda ambos a parseExcel. Si
+ * las rutas del popup rechazaran el CSV, su cartola quedaría con el CTA para
+ * siempre y sin Editar/Aprobar (revisión adversarial 2026-09-30).
+ */
+export function esPlanillaMapeable(tipo: string | null | undefined): boolean {
+  return tipo === "excel" || tipo === "csv";
+}
+
 /** ¿El mapa que llega del navegador tiene la forma mínima? (el server no confía en la UI) */
 export function configValida(cfg: unknown): cfg is AdapterConfig {
   if (!cfg || typeof cfg !== "object") return false;

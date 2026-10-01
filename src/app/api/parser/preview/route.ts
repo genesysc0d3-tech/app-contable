@@ -13,7 +13,7 @@ import { recordOpsEvent } from "@/lib/ops/events";
 import { applyAdapter } from "@/lib/parsers/apply";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { adapterDelDocumento } from "@/lib/parsers/adapter-store";
-import { bajarArchivoCartola, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
+import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
 
 const PREVIEW_ROWS = 30;
 
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     .eq("empresa_id", empresaIdEfectiva)
     .single();
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
-  if (documento.tipo !== "excel") {
+  if (!esPlanillaMapeable(documento.tipo)) {
     return NextResponse.json({ error: "Solo Excel soporta mapeo visual" }, { status: 400 });
   }
 

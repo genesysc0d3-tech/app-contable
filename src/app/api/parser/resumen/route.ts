@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
-import { bajarArchivoCartola, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
+import { bajarArchivoCartola, esPlanillaMapeable, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
 import { resumenDeMapa } from "@/lib/parsers/resumen-mapa";
 
 /**
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     .eq("empresa_id", empresaId)
     .single();
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
-  if (documento.tipo !== "excel") return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
+  if (!esPlanillaMapeable(documento.tipo)) return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
 
   let buf: ArrayBuffer;
   try { buf = await bajarArchivoCartola(sb, documento, { cache: true }); }

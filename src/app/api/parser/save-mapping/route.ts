@@ -4,7 +4,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { computeFingerprint, encabezadoNormalizado } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
-import { bajarArchivoCartola, clienteServicio, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
+import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
 import { juzgarArchivo } from "@/lib/parsers/resumen-mapa";
 
 /**
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     .eq("empresa_id", empresaId)
     .single();
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
-  if (documento.tipo !== "excel") return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
+  if (!esPlanillaMapeable(documento.tipo)) return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
 
   let buf: ArrayBuffer;
   try { buf = await bajarArchivoCartola(supabase, documento, { cache: true }); }

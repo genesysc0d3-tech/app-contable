@@ -15,6 +15,7 @@ let archivo: ArrayBuffer;
 // el archivo unos minutos en memoria por documento + ruta).
 let ruta = "x-0.xlsx";
 let nArchivo = 0;
+let tipoDoc = "excel";
 const eqs: [string, unknown][] = [];
 const upserts: Record<string, unknown>[] = [];
 
@@ -24,7 +25,7 @@ function tabla(nombre: string) {
   b.eq = (col: string, val: unknown) => { eqs.push([`${nombre}.${col}`, val]); return b; };
   b.single = async () => nombre === "usuarios"
     ? { data: { empresa_id: EMPRESA, rol: "admin", vetado: false }, error: null }
-    : { data: { id: "doc-1", tipo: "excel", storage_provider: "supabase", storage_path: ruta, empresa_id: EMPRESA }, error: null };
+    : { data: { id: "doc-1", tipo: tipoDoc, storage_provider: "supabase", storage_path: ruta, empresa_id: EMPRESA }, error: null };
   b.maybeSingle = b.single;
   return b;
 }
@@ -73,6 +74,7 @@ const usar = (buf: ArrayBuffer) => { archivo = buf; ruta = `x-${++nArchivo}.xlsx
 
 beforeEach(() => {
   usar(libro(conSaldo()));
+  tipoDoc = "excel";
   eqs.length = 0;
   upserts.length = 0;
   vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
@@ -143,5 +145,31 @@ describe("/api/parser/save-mapping (Listo)", () => {
     const ok = await POST(post("/api/parser/save-mapping", { documento_id: "doc-1", config: { ...bien, skip_rows_before_data: 1 }, solo_abonos: true }));
     expect(ok.status).toBe(200);
     expect((upserts[0] as { config: AdapterConfig }).config.revision_cliente?.solo_abonos).toBe(true);
+  });
+});
+
+describe("cartola CSV (revisión adversarial 2026-09-30)", () => {
+  // Un CSV pasa por el MISMO lector que el Excel (queue.ts) y su cuadre puede pedir
+  // "Revisa las columnas": si las rutas del popup lo rechazan ("Solo planillas"),
+  // la cartola queda con el CTA para siempre y sin Editar/Aprobar.
+  const csv = () => {
+    const filas = conSaldo().map((r) => r.map((c) => `"${String(c)}"`).join(";")).join("\n");
+    return new TextEncoder().encode(filas).buffer as ArrayBuffer;
+  };
+  it("resumen, vista previa y Listo aceptan un CSV", async () => {
+    tipoDoc = "csv";
+    usar(csv());
+    const { POST: resumen } = await import("./resumen/route");
+    expect((await resumen(post("/api/parser/resumen", { documento_id: "doc-1", config: bien }))).status).toBe(200);
+    const { POST: preview } = await import("./preview/route");
+    expect((await preview(post("/api/parser/preview", { documento_id: "doc-1" }))).status).toBe(200);
+    const { POST: guardar } = await import("./save-mapping/route");
+    const res = await guardar(post("/api/parser/save-mapping", { documento_id: "doc-1", config: bien, reprocess: true }));
+    expect(res.status).not.toBe(400);
+  });
+  it("un PDF sigue sin popup de columnas", async () => {
+    tipoDoc = "pdf";
+    const { POST } = await import("./save-mapping/route");
+    expect((await POST(post("/api/parser/save-mapping", { documento_id: "doc-1", config: bien }))).status).toBe(400);
   });
 });
