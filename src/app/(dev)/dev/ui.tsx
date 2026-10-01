@@ -73,14 +73,20 @@ export const PANTALLAS = [
     label: "Estado del sistema",
     title: "Ir a la salud de la plataforma entera: tu acceso, colas, emisiones fallidas y eventos de las últimas 24 horas.",
   },
+  {
+    id: "avisos" as const,
+    href: "/dev/avisos",
+    label: "Avisos",
+    title: "Escribir avisos y novedades que las clientas ven dentro de la app (toast, tarjeta o popup urgente).",
+  },
 ];
 
 /**
  * Navegación entre pantallas. `activa` es opcional a propósito: en el detalle
- * de una cuenta no estás en NINGUNA de las dos, y pintar "Cuentas" como
+ * de una cuenta no estás en NINGUNA pantalla, y pintar "Cuentas" como
  * pestaña actual ahí sería mentir.
  */
-export function DevNav({ activa }: { activa?: "cuentas" | "sistema" }) {
+export function DevNav({ activa }: { activa?: "cuentas" | "sistema" | "avisos" }) {
   return (
     <nav style={{ display: "flex", gap: 6 }}>
       {PANTALLAS.map((item) => {

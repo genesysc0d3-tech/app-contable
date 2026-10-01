@@ -2,13 +2,28 @@ import { getAppEmpresaContext } from "@/lib/dal";
 import DevSupportBanner, { type BannerIntervencion } from "./escritorio/v5/DevSupportBanner";
 import ActualizadorInvisible from "@/components/ActualizadorInvisible";
 import { ESTILO_RESTAURANDO, SCRIPT_ANTES_DE_PINTAR } from "@/lib/actualizacion/estado-guardado";
+import { Suspense } from "react";
+import AvisosApp from "@/components/AvisosApp";
+import { avisosPendientes, clienteServicioAvisos } from "@/lib/avisos/servidor";
+
+/**
+ * Avisos y novedades: viajan en ESTE render (que la app ya hace), por el MISMO camino
+ * que /api/mesa (service role + la regla de empresa de servidor.ts, con el usuario y
+ * la empresa activa que getAppEmpresaContext ya validó), con caché corta. En
+ * Suspense: la consulta no atrasa la página. Si falla o tarda: undefined → la
+ * pantalla deja su cola como está (N1).
+ */
+async function AvisosDeLaSesion({ userId, empresaId }: { userId: string; empresaId: string }) {
+  const avisos = await avisosPendientes(clienteServicioAvisos(), { userId, empresaId });
+  return <AvisosApp key={userId} iniciales={avisos} userId={userId} />;
+}
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { empresa, supportMode } = await getAppEmpresaContext();
+  const { empresa, supportMode, usuario, empresaId } = await getAppEmpresaContext();
 
   // Estado de la intervención autorizada por el cliente (solo en modo soporte;
   // el CLIENTE ve lo suyo en Empresa → Acceso de soporte, no acá).
@@ -40,6 +55,12 @@ export default async function AppLayout({
       )}
       {children}
       <ActualizadorInvisible />
+      {/* En modo soporte el operador no consume (ni marca) avisos de la clienta. */}
+      {supportMode ? null : (
+        <Suspense fallback={null}>
+          <AvisosDeLaSesion userId={usuario.id} empresaId={empresaId} />
+        </Suspense>
+      )}
     </>
   );
 }
