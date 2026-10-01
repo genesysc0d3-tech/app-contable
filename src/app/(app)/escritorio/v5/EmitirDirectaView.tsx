@@ -1112,8 +1112,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               receptor_comuna: receptorComuna.trim() || null,
               receptor_email: receptorEmail.trim() || null,
               receptor_giro: receptorGiro.trim() || null,
-              detalle: detalleNombre.trim() || null,
-              tipo_sugerido: tipoDte,
+              // El servidor manda en los datos (seguridad 2026-09-30): glosa y tipo
+              // tal como quedaron en la propuesta recién creada (detalle ≤300, tipo
+              // del carril factura). Si no, el POST del job responde DATOS_CAMBIARON.
+              detalle: detalleNombre.trim().slice(0, 300) || null,
+              tipo_sugerido: creada.tipo_dte === 33 || creada.tipo_dte === 34 ? creada.tipo_dte : tipoDte,
               monto_total: total,
             },
             formaPago: formaPago === "Contado" ? "contado" : "credito",
