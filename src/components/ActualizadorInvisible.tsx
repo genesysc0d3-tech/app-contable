@@ -28,7 +28,7 @@ import { alLiberarBloqueo, bloqueosActivos, MARGEN_TRAS_ESCRITURA_MS, motivoOcup
 import { ATRIBUTO_RESTAURANDO, guardarEstado, TOPE_TAPADO_MS } from "@/lib/actualizacion/estado-guardado";
 import { descartarRestauracion, estadoARestaurar, momentoPrimeraRestauracion, momentoUltimaRestauracion, piezasPorRestaurar, ventanaRestauracionAbierta } from "@/lib/actualizacion/piezas";
 import { aplicarScroll } from "@/lib/actualizacion/scroll";
-import { capturarEstadoVisible, debeDescartarRestauracion } from "@/lib/actualizacion/capturar";
+import { capturarEstadoVisible, debeDescartarRestauracion, toqueCierraVentana } from "@/lib/actualizacion/capturar";
 
 const REINTENTO_MS = 5_000;
 // Tras soltar un bloqueo o terminar una escritura: margen para que el código que
@@ -77,15 +77,24 @@ function terminarRestauracion(): () => void {
   let toco = false;
   // Primer toque de la clienta: ya siguió con otra cosa → lo que falte por restaurar
   // se abandona (no se le cambia la pestaña ni el doc bajo los dedos).
-  const alTocar = () => { toco = true; descartarRestauracion(); };
+  // Un toque ANTES de restaurar no cuenta (puede ser el que hidrata la página).
+  const alTocar = () => {
+    const primera = momentoPrimeraRestauracion();
+    if (!toqueCierraVentana(primera === null ? null : Date.now() - primera)) return;
+    toco = true;
+    descartarRestauracion();
+    soltarOyentes();
+  };
+  const soltarOyentes = () => { for (const ev of EVENTOS_INTERACCION) window.removeEventListener(ev, alTocar, { capture: true }); };
+  for (const ev of EVENTOS_INTERACCION) window.addEventListener(ev, alTocar, { capture: true, passive: true });
   // Lo que monta tarde (la mesa streameada, chunks fríos) se sigue restaurando al
   // montarse; se abandona según debeDescartarRestauracion (no un tope desde la carga).
   const vigilarDescarte = () => {
     // La ventana sigue abierta aunque todo se haya aplicado una vez: un re-montaje
     // (SSR fallido, StrictMode) vuelve a recibir su valor hasta el toque o el descarte.
-    if (cancelado || !ventanaRestauracionAbierta()) return;
+    if (cancelado || !ventanaRestauracionAbierta()) { soltarOyentes(); return; }
     const primera = momentoPrimeraRestauracion();
-    if (debeDescartarRestauracion({ msDesdeCarga: performance.now() - inicio, msDesdePrimeraRestauracion: primera === null ? null : Date.now() - primera, toco })) { descartarRestauracion(); return; }
+    if (debeDescartarRestauracion({ msDesdeCarga: performance.now() - inicio, msDesdePrimeraRestauracion: primera === null ? null : Date.now() - primera, toco })) { descartarRestauracion(); soltarOyentes(); return; }
     const t = setTimeout(() => { timers.delete(t); vigilarDescarte(); }, 1_000);
     timers.add(t);
   };
@@ -93,8 +102,6 @@ function terminarRestauracion(): () => void {
   // La página nunca queda invisible más que el tope (4 s), pase lo que pase.
   const tope = setTimeout(() => mostrar(), TOPE_TAPADO_MS);
   timers.add(tope);
-  for (const ev of EVENTOS_INTERACCION) window.addEventListener(ev, alTocar, { capture: true, passive: true, once: true });
-  const soltarOyentes = () => { for (const ev of EVENTOS_INTERACCION) window.removeEventListener(ev, alTocar, { capture: true }); };
 
   const aplicarFinal = () => {
     const t0 = performance.now();
@@ -111,8 +118,8 @@ function terminarRestauracion(): () => void {
         enfocado = true;
         try { document.getElementById(estado.foco)?.focus({ preventScroll: true }); } catch { /* */ }
       }
+      // Los oyentes de toque siguen: el primer toque tras restaurar cierra la ventana.
       if (!toco && faltan > 0 && performance.now() - t0 < TOPE_SCROLL_MS) { siguiente(paso); return; }
-      soltarOyentes();
     };
     siguiente(() => siguiente(paso));
   };

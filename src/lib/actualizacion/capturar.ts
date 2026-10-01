@@ -18,17 +18,28 @@ export function capturarEstadoVisible({ raiz, ruta, ahora, desde, foco, ventana 
 }
 
 /**
+ * ¿Un toque de la clienta cierra la ventana de restauración? Solo DESPUÉS de haber
+ * restaurado algo (y con 500 ms de margen). Antes no: una página que aún no hidrata
+ * (pestaña recién vuelta, máquina lenta, o SSR fallido en dev) se hidrata justamente
+ * con ese toque, y descartar ahí devolvía a Check (bug en vivo 2026-10-01, 39d6542).
+ */
+export const MARGEN_TOQUE_TRAS_RESTAURAR_MS = 500;
+export function toqueCierraVentana(msDesdePrimeraRestauracion: number | null): boolean {
+  return msDesdePrimeraRestauracion !== null && msDesdePrimeraRestauracion >= MARGEN_TOQUE_TRAS_RESTAURAR_MS;
+}
+
+/**
  * ¿Abandonar las piezas que aún no se montan? NO por un tope desde la carga: la mesa
  * puede llegar tarde (dev compilando >8 s, chunks fríos tras el deploy) y era justo
  * cuando la pestaña volvía a Check (bug en vivo 2026-10-01). Se abandona:
- *  - al primer toque de la clienta (ya siguió con otra cosa: no se le mueve la vista);
+ *  - al primer toque de la clienta DESPUÉS de restaurar (ya siguió con otra cosa);
  *  - 8 s después de la primera pieza restaurada (lo que falte ya no viene);
  *  - al minuto de cargar, pase lo que pase.
  */
 export function debeDescartarRestauracion({ msDesdeCarga, msDesdePrimeraRestauracion, toco }: {
   msDesdeCarga: number; msDesdePrimeraRestauracion: number | null; toco: boolean;
 }): boolean {
-  if (toco) return true;
+  if (toco && toqueCierraVentana(msDesdePrimeraRestauracion)) return true;
   if (msDesdePrimeraRestauracion !== null && msDesdePrimeraRestauracion > 8_000) return true;
   return msDesdeCarga > 60_000;
 }

@@ -97,6 +97,34 @@ describe("ciclo completo: guardar → recargar → restaurar (pestaña Emitir + 
     vi.unstubAllGlobals();
   });
 
+  it("un toque ANTES de restaurar (página sin hidratar: ese toque la hidrata) no descarta nada", async () => {
+    const { debeDescartarRestauracion: d, toqueCierraVentana } = await cargarPagina();
+    // Bug en vivo con 39d6542: el pointerdown que hidrataba la página descartaba la
+    // restauración antes de que TabsV5 se registrara → nacía en Check.
+    expect(toqueCierraVentana(null)).toBe(false);
+    expect(toqueCierraVentana(200)).toBe(false);
+    expect(toqueCierraVentana(1_000)).toBe(true);
+    expect(d({ msDesdeCarga: 25_000, msDesdePrimeraRestauracion: null, toco: true })).toBe(false);
+    expect(d({ msDesdeCarga: 25_000, msDesdePrimeraRestauracion: 200, toco: true })).toBe(false);
+
+    // Ciclo: toque antes del registro → TabsV5 se registra después → igual restaura.
+    const storage = new MemStorage();
+    instalarNavegador(storage);
+    recargarPestana();
+    const vieja = await cargarPagina();
+    vieja.registrarPieza("mesa.tab", { guardar: () => "emitir", restaurar: () => {} });
+    vieja.guardarEstado(storage, vieja.capturarEstadoVisible({ raiz: { querySelectorAll: () => [] }, ruta: RUTA, ahora: Date.now(), desde: "dev", foco: null, ventana: { x: 0, y: 0 } }));
+    recargarPestana();
+    const nueva = await cargarPagina();
+    nueva.estadoARestaurar();
+    const primera = nueva.momentoPrimeraRestauracion();
+    if (nueva.toqueCierraVentana(primera === null ? null : Date.now() - primera)) nueva.descartarRestauracion();
+    const tab = vi.fn();
+    nueva.registrarPieza("mesa.tab", { guardar: () => "subidos", restaurar: tab });
+    expect(tab).toHaveBeenCalledWith("emitir");
+    vi.unstubAllGlobals();
+  });
+
   it("dos copias del módulo (chunks del layout y de la página) comparten piezas y bloqueos", async () => {
     vi.stubGlobal("window", { sessionStorage: new MemStorage(), location: { pathname: "/massdte", search: "" } });
     recargarPestana();
@@ -118,7 +146,7 @@ describe("ciclo completo: guardar → recargar → restaurar (pestaña Emitir + 
 
   it("se descarta al primer toque de la clienta, o 8 s después de la primera pieza, o al minuto", async () => {
     const { debeDescartarRestauracion: d } = await cargarPagina();
-    expect(d({ msDesdeCarga: 500, msDesdePrimeraRestauracion: null, toco: true })).toBe(true);
+    expect(d({ msDesdeCarga: 5_000, msDesdePrimeraRestauracion: 1_000, toco: true })).toBe(true);
     expect(d({ msDesdeCarga: 9_000, msDesdePrimeraRestauracion: 8_001, toco: false })).toBe(true);
     expect(d({ msDesdeCarga: 9_000, msDesdePrimeraRestauracion: 2_000, toco: false })).toBe(false);
     expect(d({ msDesdeCarga: 60_001, msDesdePrimeraRestauracion: null, toco: false })).toBe(true);
