@@ -39,7 +39,7 @@ function fakeSb(resp: (l: Llamada) => Resp) {
   return { sb: sb as any, llamadas };
 }
 
-const intento = { monto: 10000, tipo_dte: 41, receptor_rut: null, receptor_nombre: "Ana Pérez", detalle: "Clase" };
+const intento = { monto: 10000, tipo_dte: 41 as const, receptor_rut: null, receptor_nombre: "Ana Pérez", detalle: "Clase" };
 
 describe("intento de la boleta única", () => {
   it("leerIntento valida y recorta; basura → null", () => {
