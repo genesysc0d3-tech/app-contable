@@ -2,16 +2,29 @@
 
 // Presentación de un aviso (toast / tarjeta / popup urgente). La usa <AvisosApp>
 // en la app y la vista previa de /dev → Avisos (vistaPrevia: sin posición fija).
+//
+// Diseño NATIVO de massDTE (fundador 2026-10-01: "parece card de IA"), copiando lo
+// que ya existe:
+//  - toast  = el de src/components/Toast.tsx (abajo al centro, rounded-xl, blanco /
+//             #1c1c1e, ícono Phosphor 18 px + texto 14 px medium);
+//  - tarjeta = el panel de la columna izquierda (var(--surface), borde 1 px, radio 16,
+//             cuadrito de ícono con tinte del acento) y "Entendido" como link discreto
+//             (estilo "Eliminar cartola" del visor);
+//  - popup  = el modal "Revisa las columnas" (FieldMapper: mismo velo, radio 20) con
+//             Warning en rojo y UN botón como el CTA "Revisar columnas" (radio 11).
+// Claro/oscuro con las variables del tema (V5Root/globals) y respaldo por si no están.
+//
 // Overlays según el inventario de la actualización invisible: el popup urgente es
 // modal marcado (bloquea la recarga); toast y tarjeta se declaran libres.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Info, Sparkle, Warning, Wrench, X } from "@phosphor-icons/react";
 import { formatoEfectivo, partesMarkdown, TOAST_MS, type AvisoApp } from "@/lib/avisos/reglas";
 
-function Cuerpo({ texto }: { texto: string }): ReactNode {
+function Cuerpo({ texto, className = "av-cuerpo" }: { texto: string; className?: string }): ReactNode {
   if (!texto) return null;
   return (
-    <p className="av-cuerpo">
+    <p className={className}>
       {partesMarkdown(texto).map((p, i) => {
         if (p.t === "negrita") return <strong key={i}>{p.v}</strong>;
         if (p.t === "link") {
@@ -24,10 +37,10 @@ function Cuerpo({ texto }: { texto: string }): ReactNode {
   );
 }
 
-function etiqueta(a: AvisoApp): string {
-  if (a.tipo === "urgente") return "Importante";
-  if (a.tipo === "mantencion") return "Mantención";
-  return a.version_min ? "Novedades de esta versión" : "Novedad";
+function Icono({ aviso, size }: { aviso: AvisoApp; size: number }) {
+  if (aviso.tipo === "urgente") return <Warning size={size} weight="fill" />;
+  if (aviso.tipo === "mantencion") return <Wrench size={size} weight="fill" />;
+  return aviso.version_min ? <Sparkle size={size} weight="fill" /> : <Info size={size} weight="fill" />;
 }
 
 /**
@@ -67,12 +80,12 @@ function AvisoToast({ aviso, onCerrar, autoCerrar }: { aviso: AvisoApp; onCerrar
       onFocus={() => setPausado(true)}
       onBlur={() => setPausado(false)}
     >
-      <span className="av-barra" aria-hidden="true" />
-      <div className="av-texto">
-        <div className="av-titulo">{aviso.titulo}</div>
-        <Cuerpo texto={aviso.cuerpo} />
+      <span className="av-toast-ico" aria-hidden="true"><Icono aviso={aviso} size={18} /></span>
+      <div className="av-toast-texto">
+        <span className="av-toast-titulo">{aviso.titulo}</span>
+        <Cuerpo texto={aviso.cuerpo} className="av-toast-cuerpo" />
       </div>
-      <button type="button" className="av-x" aria-label="Cerrar aviso" onClick={onCerrar}>×</button>
+      <button type="button" className="av-x" aria-label="Cerrar aviso" onClick={onCerrar}><X size={12} weight="bold" /></button>
     </div>
   );
 }
@@ -81,11 +94,11 @@ function AvisoTarjeta({ aviso, onCerrar }: { aviso: AvisoApp; onCerrar: () => vo
   return (
     // actualizacion-libre: tarjeta informativa sin formulario; si la pestaña recarga sin cerrarla, vuelve a salir
     <section className="av-tarjeta" data-tipo={aviso.tipo} role="region" aria-label={aviso.titulo}>
-      <div className="av-eyebrow">{etiqueta(aviso)}</div>
-      <div className="av-titulo av-titulo-lg">{aviso.titulo}</div>
-      <Cuerpo texto={aviso.cuerpo} />
-      <div className="av-acciones">
-        <button type="button" className="av-btn" onClick={onCerrar}>Entendido</button>
+      <span className="av-ico" aria-hidden="true"><Icono aviso={aviso} size={15} /></span>
+      <div className="av-tarjeta-texto">
+        <div className="av-titulo">{aviso.titulo}</div>
+        <Cuerpo texto={aviso.cuerpo} />
+        <button type="button" className="av-link" onClick={onCerrar}>Entendido</button>
       </div>
     </section>
   );
@@ -96,13 +109,12 @@ function PopupCard({ aviso, onCerrar, autoFoco = false }: { aviso: AvisoApp; onC
   useEffect(() => { if (autoFoco) btn.current?.focus({ preventScroll: true }); }, [autoFoco]);
   return (
     <div className="av-pop-card" data-tipo={aviso.tipo}>
-      <div className="av-pop-icono" aria-hidden="true">!</div>
-      <div className="av-eyebrow">{etiqueta(aviso)}</div>
-      <h2 id={`av-t-${aviso.id}`} className="av-titulo av-titulo-xl">{aviso.titulo}</h2>
-      <Cuerpo texto={aviso.cuerpo} />
-      <div className="av-acciones av-acciones-centro">
-        <button ref={btn} type="button" className="av-btn av-btn-grande" onClick={onCerrar}>Entendido</button>
-      </div>
+      <h2 id={`av-t-${aviso.id}`} className="av-pop-titulo">
+        <span className="av-pop-ico" aria-hidden="true"><Warning size={20} weight="fill" /></span>
+        {aviso.titulo}
+      </h2>
+      <Cuerpo texto={aviso.cuerpo} className="av-cuerpo av-pop-cuerpo" />
+      <button ref={btn} type="button" className="av-cta" onClick={onCerrar}>Entendido</button>
     </div>
   );
 }
@@ -124,52 +136,56 @@ function AvisoPopup({ aviso, onCerrar }: { aviso: AvisoApp; onCerrar: () => void
   );
 }
 
-// Estilo massDTE: carbón + acento coral, radios y tipografía de la app; claro/oscuro
-// con la clase .dark del <html>. Inline (<style>) como el resto de v5.
+// Variables del tema (V5Root define --surface/--text/--text2/--text3/--border/--shadow/
+// --accent-light/--red/--amber en :root y .dark); los respaldos cubren las pantallas
+// de la app que no montan V5Root.
 const CSS = `
-.av-root{--av-bg:#FFFDF9;--av-fg:#1A1612;--av-fg2:#6B6559;--av-borde:#E2DCD1;--av-acento:#E8553E;--av-sombra:0 18px 48px -12px rgba(26,22,18,.28);font-family:var(--font-geist-sans),system-ui,sans-serif}
-.dark .av-root{--av-bg:#1c1c1f;--av-fg:#EDEDED;--av-fg2:rgba(255,255,255,.62);--av-borde:rgba(255,255,255,.09);--av-sombra:0 22px 60px -14px rgba(0,0,0,.65)}
-.av-root [data-tipo="mantencion"]{--av-acento:#f59e0b}
-.av-cuerpo{margin:4px 0 0;font-size:12.5px;line-height:1.55;color:var(--av-fg2);overflow-wrap:anywhere}
-.av-cuerpo strong{color:var(--av-fg);font-weight:800}
-.av-cuerpo a{color:var(--av-acento);font-weight:700;text-decoration:underline;text-underline-offset:2px}
-.av-titulo{font-size:13px;font-weight:850;letter-spacing:-.01em;color:var(--av-fg);line-height:1.35}
-.av-titulo-lg{font-size:14.5px;margin-top:2px}
-.av-titulo-xl{font-size:17px;margin:4px 0 0;letter-spacing:-.02em}
-.av-eyebrow{font-size:9.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--av-acento)}
-.av-btn{border:none;border-radius:11px;padding:9px 18px;background:var(--av-acento);color:#fff;font:inherit;font-size:12.5px;font-weight:850;cursor:pointer;box-shadow:0 10px 26px -10px rgba(232,85,62,.6);transition:filter .15s}
-.av-btn:hover{filter:brightness(1.07)}
-.av-btn:focus-visible,.av-x:focus-visible{outline:2px solid var(--av-acento);outline-offset:2px}
-.av-btn-grande{padding:11px 30px;font-size:13px}
-.av-acciones{display:flex;justify-content:flex-end;margin-top:12px}
-.av-acciones-centro{justify-content:center;margin-top:18px}
+.av-root{--av-surface:var(--surface,#ffffff);--av-text:var(--text,#1a1612);--av-text2:var(--text2,#6f6659);--av-text3:var(--text3,#8b8275);--av-border:var(--border,rgba(0,0,0,.08));--av-shadow:var(--shadow,rgba(0,0,0,.08));--av-tinte:var(--accent-light,rgba(232,85,62,.08));--av-acento:var(--accent,#E8553E);--av-rojo:var(--red,#dc2626);--av-ambar:var(--amber,#d97706);font-family:var(--font-geist-sans),system-ui,sans-serif}
+.dark .av-root{--av-surface:var(--surface,#16181d);--av-text:var(--text,#e8eaf0);--av-text2:var(--text2,#8b92a3);--av-text3:var(--text3,#697080);--av-border:var(--border,rgba(255,255,255,.06));--av-shadow:var(--shadow,rgba(0,0,0,.3));--av-tinte:var(--accent-light,rgba(232,85,62,.1));--av-rojo:var(--red,#ef4444);--av-ambar:var(--amber,#f59e0b)}
+.av-cuerpo{margin:3px 0 0;font-size:12px;line-height:1.5;color:var(--av-text2);overflow-wrap:anywhere}
+.av-cuerpo strong{color:var(--av-text);font-weight:700}
+.av-cuerpo a{color:var(--av-acento);font-weight:600;text-decoration:underline;text-underline-offset:2px}
 
-/* toast: carbón siempre (también en claro), abajo a la derecha. z-index 90: BAJO los
-   modales de la app (z-100+), nunca queda encima de un wizard o un popup (M3). */
-.av-toast{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:flex-start;gap:10px;width:min(360px,calc(100vw - 32px));padding:12px 10px 12px 12px;border-radius:14px;background:#1c1c1f;border:1px solid rgba(255,255,255,.08);box-shadow:0 18px 44px -12px rgba(0,0,0,.55);animation:avSube .28s cubic-bezier(.2,.9,.3,1.2) both}
-.av-toast .av-titulo{color:#f2f2f2}
-.av-toast .av-cuerpo{color:rgba(255,255,255,.66)}
-.av-toast .av-cuerpo strong{color:#fff}
-.av-barra{flex:0 0 3px;align-self:stretch;border-radius:3px;background:var(--av-acento)}
-.av-texto{flex:1;min-width:0}
-.av-x{flex:0 0 26px;height:26px;border-radius:999px;border:none;background:rgba(255,255,255,.07);color:rgba(255,255,255,.7);font-size:16px;line-height:1;cursor:pointer;display:grid;place-items:center;transition:.15s}
-.av-x:hover{background:var(--av-acento);color:#fff}
+/* toast = el de Toast.tsx. z-index 90: BAJO los modales de la app (z-100+) (M3). */
+.av-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:90;display:flex;align-items:flex-start;gap:8px;width:max-content;max-width:min(440px,calc(100vw - 32px));padding:10px 10px 10px 16px;border-radius:12px;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12);animation:avSube .25s ease both}
+.dark .av-toast{background:#1c1c1e}
+.av-toast-ico{display:flex;padding-top:1px;color:var(--av-acento);flex-shrink:0}
+.av-toast[data-tipo="mantencion"] .av-toast-ico{color:var(--av-ambar)}
+.av-toast-texto{min-width:0;padding-right:2px}
+.av-toast-titulo{display:block;font-size:14px;font-weight:500;line-height:1.4;color:#111}
+.dark .av-toast-titulo{color:#fff}
+.av-toast-cuerpo{margin:1px 0 0;font-size:12px;line-height:1.45;color:var(--av-text2);overflow-wrap:anywhere}
+.av-toast-cuerpo strong{font-weight:600;color:inherit}
+.av-toast-cuerpo a{color:var(--av-acento);text-decoration:underline;text-underline-offset:2px}
 
-/* tarjeta: esquina inferior derecha, discreta */
-.av-tarjeta{position:fixed;right:20px;bottom:20px;z-index:90;width:min(340px,calc(100vw - 32px));padding:16px 16px 14px;border-radius:16px;background:var(--av-bg);border:1px solid var(--av-borde);border-top:3px solid var(--av-acento);box-shadow:var(--av-sombra);animation:avSube .32s cubic-bezier(.2,.9,.3,1.2) both}
+/* ✕ chica como la del resto de la app */
+.av-x{flex-shrink:0;width:22px;height:22px;border-radius:999px;border:none;background:transparent;color:var(--av-text3);display:grid;place-items:center;cursor:pointer;transition:background .15s,color .15s}
+.av-x:hover{background:var(--bg-muted,rgba(0,0,0,.05));color:var(--av-text)}
 
-/* popup urgente: modal centrado sobre velo */
-.av-velo{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:20px;background:rgba(8,9,12,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:avFundido .22s ease both}
-.av-pop-card{width:min(420px,100%);padding:24px 24px 20px;border-radius:20px;background:var(--av-bg);border:1px solid var(--av-borde);box-shadow:0 40px 100px -20px rgba(0,0,0,.5);text-align:center;animation:avPop .3s cubic-bezier(.34,1.4,.5,1) both}
-.av-pop-card .av-cuerpo{font-size:13px}
-.av-pop-icono{width:44px;height:44px;margin:0 auto 12px;border-radius:14px;display:grid;place-items:center;background:rgba(232,85,62,.14);color:var(--av-acento);font-size:22px;font-weight:900}
+/* tarjeta = panel de la columna izquierda */
+.av-tarjeta{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:flex-start;gap:10px;width:min(320px,calc(100vw - 32px));padding:12px 14px;border-radius:16px;background:var(--av-surface);border:1px solid var(--av-border);box-shadow:0 8px 32px var(--av-shadow);animation:avSube .25s ease both}
+.av-ico{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--av-tinte);color:var(--av-acento)}
+.av-tarjeta[data-tipo="mantencion"] .av-ico{background:rgba(245,158,11,.12);color:var(--av-ambar)}
+.av-tarjeta-texto{flex:1;min-width:0;padding-top:1px}
+.av-titulo{font-size:13px;font-weight:700;letter-spacing:-.01em;line-height:1.35;color:var(--av-text)}
+.av-link{display:block;margin:8px 0 0 auto;padding:0;border:none;background:transparent;color:var(--av-text3);font:inherit;font-size:11px;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.av-link:hover{color:var(--av-text)}
+
+/* popup urgente = modal "Revisa las columnas" (FieldMapper) */
+.av-velo{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);animation:avFundido .2s ease both}
+.av-pop-card{width:min(440px,100%);padding:22px;border-radius:20px;background:var(--av-surface);border:1px solid var(--av-border);box-shadow:0 30px 90px rgba(0,0,0,.35);color:var(--av-text)}
+.av-pop-titulo{display:flex;align-items:center;gap:9px;margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.35;color:var(--av-text)}
+.av-pop-ico{display:flex;color:var(--av-rojo);flex-shrink:0}
+.av-pop-cuerpo{margin-top:8px;font-size:12.5px}
+.av-cta{margin-top:18px;width:100%;display:flex;align-items:center;justify-content:center;padding:11px 16px;border:none;border-radius:11px;background:var(--av-acento);color:#fff;font:inherit;font-size:13px;font-weight:700;line-height:1.4;cursor:pointer;transition:filter .15s}
+.av-cta:hover{filter:brightness(1.06)}
+.av-cta:focus-visible,.av-link:focus-visible,.av-x:focus-visible{outline:2px solid var(--av-acento);outline-offset:2px}
 
 /* vista previa en /dev: misma pieza, sin posición fija */
-.av-previa .av-toast,.av-previa .av-tarjeta{position:relative;right:auto;bottom:auto;z-index:auto}
+.av-previa .av-toast,.av-previa .av-tarjeta{position:relative;left:auto;right:auto;bottom:auto;transform:none;z-index:auto;animation:none}
 
-@keyframes avSube{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes avSube{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
 @keyframes avFundido{from{opacity:0}to{opacity:1}}
-@keyframes avPop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
-@media (max-width:520px){.av-toast,.av-tarjeta{right:12px;left:12px;bottom:12px;width:auto}}
-@media (prefers-reduced-motion:reduce){.av-toast,.av-tarjeta,.av-velo,.av-pop-card{animation:none}}
+@media (max-width:520px){.av-tarjeta{right:12px;left:12px;bottom:12px;width:auto}}
+@media (prefers-reduced-motion:reduce){.av-toast,.av-tarjeta,.av-velo{animation:none}}
 `;

@@ -231,10 +231,10 @@ export function AvisosEditor({
               minHeight: 260,
               borderRadius: 12,
               border: `1px dashed ${C.border}`,
-              background: form.formato === "popup" ? "rgba(8,9,12,.55)" : "var(--background, #18181B)",
+              background: form.formato === "popup" ? "rgba(0,0,0,.5)" : "var(--background, #18181B)",
               display: "flex",
               alignItems: form.formato === "popup" ? "center" : "flex-end",
-              justifyContent: form.formato === "popup" ? "center" : "flex-end",
+              justifyContent: form.formato === "tarjeta" ? "flex-end" : "center",
               padding: 16,
             }}
           >
