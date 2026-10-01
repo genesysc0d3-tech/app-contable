@@ -25,7 +25,7 @@ type Form = {
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const TIPO_LABEL: Record<TipoAviso, string> = { novedad: "Novedad", mantencion: "Mantención", urgente: "Urgente" };
-const FORMATO_LABEL: Record<FormatoAviso, string> = { toast: "Toast (8 s, abajo a la derecha)", tarjeta: "Tarjeta (esquina, «Entendido»)", popup: "Popup centrado (solo urgentes)" };
+const FORMATO_LABEL: Record<FormatoAviso, string> = { toast: "Toast (8 s, abajo a la izquierda)", tarjeta: "Tarjeta (esquina, «Entendido»)", popup: "Popup centrado (solo urgentes)" };
 
 function formVacio(ahoraIso: string): Form {
   const ahora = Date.parse(ahoraIso);

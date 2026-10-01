@@ -12,7 +12,7 @@
 //  - Visto UNA vez por persona: al cerrar se inserta en avisos_vistos directo
 //    contra Supabase con el token de la clienta (RLS: solo lo suyo). No pasa por Vercel.
 //
-// Formatos: toast (abajo a la derecha, 8 s o ✕), tarjeta (esquina, "Entendido";
+// Formatos: toast (abajo a la izquierda, 8 s o ✕), tarjeta (esquina, "Entendido";
 // para novedades de esta versión) y popup (modal centrado, SOLO urgentes).
 
 import { useCallback, useEffect, useRef, useState } from "react";
