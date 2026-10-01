@@ -12,6 +12,26 @@ import TermHint from "@/components/ui/TermHint";
 import VisualizarArchivo from "./VisualizarArchivo";
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import { useMesaReload } from "./mesa-reload";
+import { leerCuadre } from "@/lib/cartola/cuadre-mesa";
+import { revisarColumnas } from "@/lib/cartola/verificacion";
+
+/** Por qué hay que revisar las columnas de este documento (null = entró solo). */
+function motivoColumnas(doc: { estado: string; progreso_ia: unknown }): string | null {
+  if (doc.estado !== "procesado") return null;
+  const c = leerCuadre(doc.progreso_ia);
+  const r = c ? revisarColumnas(c) : null;
+  return r?.abrir ? (r.motivo ?? "Revisa las columnas") : null;
+}
+
+// Aviso en la tarjeta: el popup "Revisa las columnas" se abre solo una vez; si
+// la clienta lo cerró, esto le recuerda que falta (y en el visor está el botón).
+function ChipColumnas({ motivo }: { motivo: string }) {
+  return (
+    <span title={motivo} style={{ fontSize: 9, padding: "1px 6px", borderRadius: 999, background: "color-mix(in srgb, var(--amber) 14%, transparent)", color: "var(--amber)", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>
+      Revisa las columnas
+    </span>
+  );
+}
 
 const st: Record<string, string> = {procesado:"var(--green)",procesando:"var(--blue)",error:"var(--red)",subido:"var(--amber)"};
 const sl: Record<string, string> = {procesado:"Listo",procesando:"Procesando",error:"Error",subido:"Pendiente"};
@@ -266,6 +286,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   <span title="Cartola decidida completa: lo emitible está en Emitir y el resto quedó juzgado." style={{ fontSize: 9, padding: "1px 6px", borderRadius: 999, background: "rgba(91,156,246,.12)", color: "var(--blue)", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>en Emitir</span>
                 )}
                 {isBoletaUnica && <span style={{fontSize:9,padding:"1px 5px",borderRadius:999,background:"rgba(232,85,62,.12)",color:"var(--accent)",fontWeight:900,whiteSpace:"nowrap"}}>BOLETA UNICA</span>}
+                {!isBoletaUnica && (() => { const m = motivoColumnas(doc); return m ? <ChipColumnas motivo={m} /> : null; })()}
                 <span className={`st ${lm[doc.estado] ?? "ls"}`}>{sl[doc.estado] ?? doc.estado}</span>
                 <span className="mt">{doc.movimientos_detectados ? `${doc.movimientos_detectados} mov` : "—"}</span>
                 {(() => {
@@ -427,7 +448,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                   {doc.estado === "procesando" && (
                     <button className="cl" onClick={() => callApi("/api/cancelar-documento", doc.id)}>✕ Cancelar</button>
                   )}
-                  {!isBoletaUnica && !frozen && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Mapear</button>}
+                  {!isBoletaUnica && !frozen && <button className="mp" onClick={() => setMappingDocId(doc.id)}>↔ Columnas</button>}
                   {!isBoletaUnica && <button className="mp" onClick={() => setViewDocId(doc.id)} style={{background:"rgba(59,130,246,.06)",color:"var(--blue)"}}>Visualizar</button>}
                   {!isBoletaUnica && doc.estado === "procesado" && (
                     <span style={{marginLeft:"auto"}}>
@@ -592,6 +613,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
                           <span title="Cartola decidida completa: lo emitible está en Emitir y el resto quedó juzgado."
                             style={{ fontSize: 9, padding: "1px 6px", borderRadius: 999, background: "rgba(91,156,246,.12)", color: "var(--blue)", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}>en Emitir</span>
                         )}
+                        {g.key === "massdte" && (() => { const m = motivoColumnas(doc); return m ? <ChipColumnas motivo={m} /> : null; })()}
                         {stuckN > 0 && (
                           <span className="stuck" style={{ color: (stuck?.bloqueadas ?? 0) > 0 ? "var(--red)" : "var(--amber)" }}
                             title={`${stuckN} en Emitir — ${stuck?.bloqueadas ?? 0} bloqueada(s), ${stuck?.porRevisar ?? 0} por revisar`}>{stuckN}</span>
@@ -610,6 +632,7 @@ export default function DocCardList({ docs: initialDocs, empresaId, tipoEmpresa,
       {mappingDocId && typeof document !== "undefined" && createPortal(
         <FieldMapper
           documentoId={mappingDocId}
+          motivo={(() => { const d = docs.find((x) => x.id === mappingDocId); return d ? motivoColumnas(d) : null; })()}
           onClose={() => setMappingDocId(null)}
           onSaved={() => { setMappingDocId(null); fetchDocs(); }}
         />,

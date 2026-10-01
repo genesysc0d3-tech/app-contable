@@ -1,111 +1,106 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
-import { computeFingerprint } from "@/lib/parsers/fingerprint";
+import { recordCuentaAudit } from "@/lib/audit/account";
+import { computeFingerprint, encabezadoNormalizado } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
-import { applyAdapter } from "@/lib/parsers/apply";
-import type { AdapterConfig, Row } from "@/lib/parsers/types";
-import { descargarDocumento } from "@/lib/storage";
+import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
+import { juzgarArchivo } from "@/lib/parsers/resumen-mapa";
 
-function isValidConfig(cfg: unknown): cfg is AdapterConfig {
-  if (!cfg || typeof cfg !== "object") return false;
-  const c = cfg as Partial<AdapterConfig>;
-  if (typeof c.header_row !== "number" || typeof c.skip_rows_before_data !== "number") return false;
-  if (!c.columns || typeof c.columns !== "object") return false;
-  const cols = c.columns;
-  if (typeof cols.fecha !== "number" || typeof cols.descripcion !== "number") return false;
-  return true;
-}
-
+/**
+ * "Listo" del popup "Revisa las columnas" (2026-09-30). El cliente eligió las
+ * columnas (o dijo "Mi cartola trae solo abonos"). El server vuelve a juzgar el
+ * archivo COMPLETO con ese mapa (la UI puede fallar):
+ *   - si el saldo o los totales del banco lo contradicen → 422, no se guarda;
+ *   - "solo abonos" solo si la cartola de verdad viene filtrada;
+ * y guarda el mapa como del CLIENTE, SOLO para su empresa (nunca global), con
+ * la revisión de ESTE documento: el reproceso que sigue, si lee lo mismo, queda
+ * sellado "cliente". Las siguientes cartolas del formato entran solas.
+ */
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id")
-    .eq("id", user.id)
-    .single();
-  if (!usuario) return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+  const { data: usuario } = await supabase.from("usuarios").select("empresa_id").eq("id", user.id).single();
+  if (!usuario?.empresa_id) return NextResponse.json({ error: "Usuario sin empresa" }, { status: 403 });
+  const empresaId = usuario.empresa_id;
 
-  // Modo soporte = solo lectura: guardar un mapeo MUTA los datos del cliente.
-  // Error honesto en vez del "Documento no encontrado" fantasma de antes.
+  // Modo soporte = solo lectura: guardar columnas MUTA los datos del cliente.
   const writeBlock = await getDevSupportWriteBlock("parser_save_mapping");
   if (writeBlock) return NextResponse.json({ error: writeBlock.error }, { status: 403 });
 
-  const body = await request.json();
-  const { documento_id, config, nombre, reprocess } = body as {
-    documento_id: string;
-    config: AdapterConfig;
-    nombre?: string;
-    reprocess?: boolean;
-  };
-
-  if (!documento_id) return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
-  if (!isValidConfig(config)) return NextResponse.json({ error: "config inválido" }, { status: 400 });
+  // Del body solo se toman el documento, el mapa y las dos decisiones; el dueño
+  // es SIEMPRE la empresa del usuario (nada de empresa_id/global desde afuera).
+  const body = (await request.json().catch(() => ({}))) as { documento_id?: string; config?: unknown; reprocess?: boolean; solo_abonos?: boolean };
+  const documentoId = body.documento_id;
+  if (!documentoId) return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
+  if (!configValida(body.config)) return NextResponse.json({ error: "config inválido" }, { status: 400 });
+  const config = configDelCliente(body.config);
+  const soloAbonos = body.solo_abonos === true;
 
   const { data: documento } = await supabase
     .from("documentos_subidos")
-    .select("*")
-    .eq("id", documento_id)
-    .eq("empresa_id", usuario.empresa_id)
+    .select("id, tipo, storage_provider, storage_path")
+    .eq("id", documentoId)
+    .eq("empresa_id", empresaId)
     .single();
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
-  if (documento.tipo !== "excel") {
-    return NextResponse.json({ error: "Mapeo solo para Excel" }, { status: 400 });
+  if (!esPlanillaMapeable(documento.tipo)) return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
+
+  let buf: ArrayBuffer;
+  try { buf = await bajarArchivoCartola(supabase, documento, { cache: true }); }
+  catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
+
+  const { resumen, rows } = juzgarArchivo(buf, config);
+  if (!resumen.valido || !rows) {
+    return NextResponse.json({ error: resumen.error ?? "Con estas columnas no se puede leer la cartola" }, { status: 422 });
+  }
+  if (soloAbonos && !resumen.soloAbonos) {
+    return NextResponse.json({ error: "Tu cartola no parece traer solo abonos: revisa las columnas" }, { status: 422 });
+  }
+  if (!soloAbonos && !resumen.guardable) {
+    return NextResponse.json({ error: "Tu banco no calza con estas columnas (saldo o totales): revísalas" }, { status: 422 });
   }
 
-  const provider = documento.storage_provider === "r2" ? "r2" : "supabase";
-  const bajar = async (path: string): Promise<Buffer> => {
-    const { data, error } = await supabase.storage.from("documentos").download(path);
-    if (error || !data) throw new Error("no file");
-    return Buffer.from(await data.arrayBuffer());
-  };
-  let fileBuf: Buffer;
-  try { fileBuf = await descargarDocumento(provider, documento.storage_path, bajar); }
-  catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
-  const ab = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
-  // Mismas opciones de lectura que el orquestador (cellDates) para que la huella
-  // calce, y la hoja = la primera donde ESTE mapeo produce movimientos: en
-  // BancoEstado (hojas Resumen + Movimientos) la "primera no vacía" era el
-  // Resumen y el manual quedaba guardado con la huella de la hoja equivocada.
-  const workbook = XLSX.read(ab, { type: "array", cellDates: true, dateNF: "dd-mm-yyyy" });
-  const hojas = workbook.SheetNames
-    .map((n) => ({ n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" }) }))
-    .filter((h) => h.rows.length > 0);
-  if (!hojas.length) return NextResponse.json({ error: "Excel vacío" }, { status: 422 });
-  const produce = (h: { rows: Row[] }) => {
-    try { return applyAdapter(h.rows, config).length > 0; } catch { return false; }
-  };
-  const hoja = hojas.find(produce) ?? hojas[0];
-  const firstSheet = hoja.n;
-  const rows = hoja.rows;
-  const fingerprint = computeFingerprint(rows);
-
+  const titulos = encabezadoNormalizado(rows);
   const adapterId = await upsertManualAdapter({
-    fingerprint,
-    empresaId: usuario.empresa_id,
-    nombre: nombre ?? `Manual (${firstSheet})`,
-    config,
+    fingerprint: computeFingerprint(rows),
+    empresaId,
+    nombre: `Columnas del cliente (${resumen.hoja ?? "hoja"})`,
+    config: {
+      ...config,
+      ...(titulos ? { titulos } : {}),
+      revision_cliente: { documento_id: documentoId, firma: resumen.firma, ...(soloAbonos ? { solo_abonos: true } : {}) },
+    },
+    confirmadoPor: "cliente",
   });
+  if (!adapterId) return NextResponse.json({ error: "No se pudieron guardar las columnas" }, { status: 500 });
 
-  if (!adapterId) {
-    return NextResponse.json({ error: "No se pudo guardar el adapter" }, { status: 500 });
+  const sb = clienteServicio();
+  if (sb) {
+    await recordCuentaAudit({
+      sb,
+      empresaId,
+      usuarioId: user.id,
+      accion: "cartola_lectura_confirmada",
+      recursoTipo: "documento_subido",
+      recursoId: documentoId,
+      // Sin glosas ni montos de terceros: solo cómo se confirmó.
+      resumen: soloAbonos ? "Columnas de la cartola confirmadas: trae solo abonos" : "Columnas de la cartola confirmadas por el cliente",
+      metadata: { accion: soloAbonos ? "solo_abonos" : "columnas", estado: resumen.estado },
+    });
   }
 
   let reprocessStarted = false;
-  if (reprocess) {
+  if (body.reprocess) {
     try {
       const origin = new URL(request.url).origin;
       const cookie = request.headers.get("cookie") ?? "";
       const res = await fetch(`${origin}/api/procesar-documento`, {
         method: "POST",
         headers: { "Content-Type": "application/json", cookie },
-        body: JSON.stringify({ documento_id }),
+        body: JSON.stringify({ documento_id: documentoId }),
       });
       reprocessStarted = res.ok;
     } catch (err) {
@@ -113,5 +108,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, adapter_id: adapterId, fingerprint, reprocessStarted });
+  return NextResponse.json({ ok: true, adapter_id: adapterId, reprocessStarted });
 }

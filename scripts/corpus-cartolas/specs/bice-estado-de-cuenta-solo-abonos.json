@@ -1,0 +1,59 @@
+{
+ "id": "bice-estado-de-cuenta-solo-abonos",
+ "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+ "origen": "real",
+ "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+ "hoja": "cartola",
+ "base": "bice-estado-de-cuenta",
+ "columnas": [
+  {
+   "titulo": "FECHA",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "yyyymmdd"
+  },
+  {
+   "titulo": "DOCUMENTO",
+   "rol": "doc"
+  },
+  {
+   "titulo": "CODIGO",
+   "rol": "vacia"
+  },
+  {
+   "titulo": "DESCRIPCION",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "ABONOS",
+   "rol": "monto",
+   "celda": "n"
+  }
+ ],
+ "direcciones": "solo_entradas",
+ "filtrada": true,
+ "abajo": [
+  [],
+  [
+   "",
+   "",
+   "SALDO FINAL"
+  ],
+  [
+   "",
+   "",
+   "{SALDO_FINAL}"
+  ],
+  [],
+  [
+   "",
+   "",
+   "",
+   "Movimientos al cierre del dia"
+  ]
+ ],
+ "movs": [
+  20,
+  200
+ ]
+}

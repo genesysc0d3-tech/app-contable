@@ -1,0 +1,14 @@
+{
+ "id": "santander-movimientos-ctacte-completa",
+ "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+ "origen": "real+fixture",
+ "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+ "hoja": "Movimientos CtaCte",
+ "base": "santander-movimientos-ctacte",
+ "direcciones": "ambas",
+ "filtrada": false,
+ "movs": [
+  40,
+  400
+ ]
+}

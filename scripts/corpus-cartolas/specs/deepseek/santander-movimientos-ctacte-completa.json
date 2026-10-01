@@ -1,0 +1,3289 @@
+[
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_dec"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_dec"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds000:nuevo_core_t24_csv"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyymmdd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "SEQ",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró a un nuevo core bancario (Temenos T24) y el proveedor exporta la cartola como CSV separado por ';', con fechas compuestas, montos con decimales y una columna índice de secuencia.",
+  "variante": "santander-movimientos-ctacte-completa~ds000"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mmm-yyyy"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "D/C",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_global_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mmm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "sucursal",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanza 'Santander Empresas Global' con encabezados en inglés, fechas estilo anglosajón y sin sucursal, para clientes corporativos.",
+  "variante": "santander-movimientos-ctacte-completa~ds001"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds002:debe_haber_estilo_contable"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "flag",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo módulo contable exporta DEBE y HABER como columnas separadas (estilo libro diario) en lugar de MONTO + CARGO/ABONO.",
+  "variante": "santander-movimientos-ctacte-completa~ds002"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds003:fechas_nativas_y_montos_numericos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco configuró el export con formatos nativos de Excel: la fecha como fecha real y los montos como número, sin pasar por texto.",
+  "variante": "santander-movimientos-ctacte-completa~ds003"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds005:resumen_pie_total_instrucciones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo export agrega un resumen al pie con totales de cargos/abonos y una hoja de instrucciones al final del libro.",
+  "variante": "santander-movimientos-ctacte-completa~ds005"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds006:export_solo_abonos_tesoro"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión de tesorería filtra solo abonos, elimina el saldo y ordena los movimientos cronológicamente ascendente.",
+  "variante": "santander-movimientos-ctacte-completa~ds006"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds007:glosa_partida_filas_vacias"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El core nuevo parte glosas largas en dos filas e intercala filas vacías al agrupar movimientos del mismo día.",
+  "variante": "santander-movimientos-ctacte-completa~ds007"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds008:montos_texto_miles_ceros"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La plataforma web del banco exporta montos como texto con separador de miles, los números de documento con ceros a la izquierda como texto y cambió las fechas a dd-mm-yyyy.",
+  "variante": "santander-movimientos-ctacte-completa~ds008"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true,
+    "span": 2
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds009:xls_antiguo_basura_titulos_combinados"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco conserva el export heredado en .xls antiguo con filas de encabezado extra y el título de la cartola en celdas combinadas.",
+  "variante": "santander-movimientos-ctacte-completa~ds009"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "filtrada": true,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds100:abonos_para_declaracion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "flag",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta filtra la cartola para quedarse solo con sus ingresos, borra la columna de bandera que ya no aporta y pega un resumen al final que adjunta a su declaración de impuestos.",
+  "variante": "santander-movimientos-ctacte-completa~ds100"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds101:cargo_abono_en_columnas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "flag",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta necesita cargos y abonos en columnas separadas para cuadrar su libro contable, así que parte la columna MONTO en dos y borra la bandera CARGO/ABONO.",
+  "variante": "santander-movimientos-ctacte-completa~ds101"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Detalle",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "Suc.",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds102:titulos_cortos_fecha_guion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "sucursal",
+    "titulo": "Suc.",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta renombra las columnas a su nomenclatura interna, y al guardar la planilla Excel le quedan las fechas como dd-mm-yyyy y los montos como número para poder sumarlos.",
+  "variante": "santander-movimientos-ctacte-completa~ds102"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds103:total_y_resumen_para_control"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Antes de subirla, la clienta agrega una fila de totales con fórmula SUMA y un mini resumen arriba para verificar que los montos le cuadren con el saldo del banco.",
+  "variante": "santander-movimientos-ctacte-completa~ds103"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds104:resumen_en_hoja_aparte"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "sucursal",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta copia los movimientos a una hoja 'Resumen' al inicio del libro, agrega una hoja de instrucciones al final, mueve la FECHA al frente y borra la columna SUCURSAL que no ocupa.",
+  "variante": "santander-movimientos-ctacte-completa~ds104"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "SALDO",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds105:csv_sin_titulos_con_basura"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para subirla al portal de la contadora, la clienta exporta a CSV separado por punto y coma, borra la fila de títulos y deja unas líneas de notas arriba; los montos quedan como texto.",
+  "variante": "santander-movimientos-ctacte-completa~ds105"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "MONTO ($)",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "mutaciones": [
+   "ds106:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "flag",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "MONTO ($)",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para simplificar el análisis, la clienta une MONTO y CARGO/ABONO en una sola columna con signo, borra la bandera y el SALDO, y renombra la columna resultante.",
+  "variante": "santander-movimientos-ctacte-completa~ds106"
+ },
+ {
+  "id": "santander-movimientos-ctacte-completa",
+  "familia": "Santander 'Movimientos CtaCte' sin filtrar (C y A)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "estructura real (bancos-reales.test.ts 2026-09-26) sin filtrar; prod solo vio el export filtrado",
+  "hoja": "Movimientos CtaCte",
+  "arriba": [
+   [
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente",
+    "Detalle de movimientos de Cuenta Corriente"
+   ],
+   [],
+   [
+    "Sr. (a):",
+    "{TITULAR}",
+    "Fecha:",
+    "{FECHA_LARGA}"
+   ],
+   [
+    "Empresa:",
+    "{EMPRESA}",
+    "Hora:",
+    "{HORA}"
+   ],
+   [
+    "RUT empresa:",
+    "{RUT}"
+   ],
+   [
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta",
+    "Datos cuenta"
+   ],
+   [
+    "Cuenta Corriente N°: {CUENTA}",
+    "Moneda: PESOS DE CHILE",
+    "Oficina: {OFICINA}"
+   ],
+   [
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo",
+    "Datos ejecutivo"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos",
+    "Detalle movimientos"
+   ],
+   [
+    "Desde {FECHA_DESDE}",
+    "Hasta {FECHA_HASTA}"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "MONTO",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "DESCRIPCIÓN MOVIMIENTO",
+    "rol": "glosa",
+    "prefijo_doc": true
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "N° DOCUMENTO",
+    "rol": "doc_corto"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "CARGO/ABONO",
+    "rol": "flag",
+    "flag": {
+     "entrada": "A",
+     "salida": "C"
+    }
+   },
+   {
+    "titulo": "N° MOVIMIENTO",
+    "rol": "doc_corto"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "filtrada": false,
+  "pie": [
+   {
+    "tipo": "fila_libre",
+    "celdas": {
+     "monto": "{TOTAL_VISIBLE}",
+     "glosa": "Total general",
+     "saldo": "{N_MOVS} registros"
+    },
+    "gap": 0,
+    "prob": 0.4
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   400
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds107:cronologico_con_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "asc",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta ordena la cartola de más antigua a más reciente para revisarla cronológicamente, agrega una columna de índice y borra el saldo; al editar le quedan filas vacías intercaladas.",
+  "variante": "santander-movimientos-ctacte-completa~ds107"
+ }
+]

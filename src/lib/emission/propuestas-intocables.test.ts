@@ -177,7 +177,9 @@ describe("acciones de retroceso respetan lo emitido (fuente)", () => {
 describe("cierres de la revisión adversarial", () => {
   it("el server solo crea jobs de lote para propuestas APROBADAS (salvo verificación)", () => {
     const src = readFileSync(join(__dirname, "../../app/api/emision/jobs/route.ts"), "utf8");
-    expect(src).toMatch(/\.select\("id, empresa_id, estado"\)/);
+    // El select ahora trae también los datos a comparar (seguridad 2026-09-30, datos-job.ts).
+    expect(src).toMatch(/\.select\(SELECT_PROPUESTA_DATOS\)/);
+    expect(readFileSync(join(__dirname, "datos-job.ts"), "utf8")).toMatch(/SELECT_PROPUESTA_DATOS =\s*"id, empresa_id, estado,/);
     expect(src).toMatch(/!cleanText\(payload\.adopta_job_id\) && \(prop as \{ estado\?: string \| null \}\)\.estado !== "aprobado"/);
     expect(src).toMatch(/error: "PROPUESTA_NO_APROBADA"/);
   });

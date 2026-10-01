@@ -1,0 +1,1932 @@
+[
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds000:nuevo_core_encabezados_en_ingles_con_bas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo proveedor de core bancario (versión empresas) exporta con una fila de basura de encabezado arriba y títulos en inglés, sin quitar la fila de títulos propia de la planilla.",
+  "variante": "clp-bs-planilla-casera~ds000"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds001:fechas_iso_y_montos_como_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El sistema nuevo escribe las fechas en formato ISO (yyyy-mm-dd) y exporta los montos como texto con separador de miles para evitar errores de redondeo del flotante.",
+  "variante": "clp-bs-planilla-casera~ds001"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds002:version_personas_sin_tasa_ni_bs_con_sucu"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "SUCURSAL",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para personas del banco no trae las columnas de tasa ni de Bs (solo CLP) y agrega la sucursal de origen de la operación.",
+  "variante": "clp-bs-planilla-casera~ds002"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:export_csv_punto_y_coma_con_guiones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco ahora ofrece exportación CSV con separador punto y coma (estándar chileno) y las celdas vacías van con guion en vez de quedar en blanco.",
+  "variante": "clp-bs-planilla-casera~ds003"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds004:resumen_superior_y_saldo_inicial"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco antepone un bloque de resumen (saldo inicial, total cargos y abonos) antes de las transacciones, como en las cartolas de la banca online.",
+  "variante": "clp-bs-planilla-casera~ds004"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds005:pie_con_totales_formula_y_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco agrega una fila de totales al pie de la cartola con fórmula de suma y un bloque de resumen final que repite los montos agregados.",
+  "variante": "clp-bs-planilla-casera~ds005"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds007:export_xls_antiguo_fecha_corta"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco mantiene la exportación a Excel 97-2003 (.xls) y las fechas salen en dd/mm/yy como fecha nativa de Excel.",
+  "variante": "clp-bs-planilla-casera~ds007"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds008:subtotales_por_dia_con_celdas_combinadas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión empresas agrega subtotales diarios con celdas combinadas en la columna de monto y deja filas vacías entre días para facilitar la lectura.",
+  "variante": "clp-bs-planilla-casera~ds008"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds009:orden_descendente_con_indice_e_instrucci"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema exporta en orden descendente (operación más reciente primero), agrega una columna índice N° y una hoja de instrucciones al final del libro.",
+  "variante": "clp-bs-planilla-casera~ds009"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Monto CLP",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds100:encabezado_y_total_con_formula"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Monto CLP",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta le pone títulos a las columnas y una fila de total con fórmula SUMA para entregarle la planilla a su contador, y de paso borra la columna vacía que siempre estorba.",
+  "variante": "clp-bs-planilla-casera~ds100"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds101:exporta_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para mandarla por correo al familiar en Venezuela, la clienta exporta la planilla a CSV con punto y coma; las fechas quedan como texto dd/mm/yy, los montos como números planos y elimina la columna vac",
+  "variante": "clp-bs-planilla-casera~ds101"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds102:bs_unica_columna_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "Bs",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para comparar de un vistazo, la clienta funde la tasa y el monto en Bs en una sola columna con signo negativo, borra la columna del día y la de tasa, y deja la fecha de primera.",
+  "variante": "clp-bs-planilla-casera~ds102"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "Nombre",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds103:resumen_instrucciones_xls_viejo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "nombre",
+    "titulo": "Nombre",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta arma un libro con hoja de resumen al inicio, hoja de instrucciones al final y una columna con el nombre del destinatario, y lo guarda en .xls antiguo porque la receptora tiene un PC viejo.",
+  "variante": "clp-bs-planilla-casera~ds103"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds104:subtotales_por_dia_orden_inverso"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "otro_num",
+    "titulo": "TC",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para cuadrar con lo que le informa el banco, la clienta ordena las filas de más reciente a más antigua, agrega subtotales por día y un total general, y renombra la columna de tasa como 'TC'.",
+  "variante": "clp-bs-planilla-casera~ds104"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds105:fechas_excel_vacios_guion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para que le funcione el gráfico, la clienta convierte las fechas a valores de fecha reales de Excel, muestra los vacíos como guión y le quedaron filas en blanco intercaladas por envíos que no se concr",
+  "variante": "clp-bs-planilla-casera~ds105"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Nota",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds106:indice_nota_fecha_corta"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "Nota",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega una columna de índice y otra de notas para identificar cada remesa, acorta la fecha a día/mes porque el año se sobreentiende y deja los montos como texto para que no se le muevan.",
+  "variante": "clp-bs-planilla-casera~ds106"
+ },
+ {
+  "id": "clp-bs-planilla-casera",
+  "familia": "Planilla casera de remesas CLP→Bs (sin títulos, fechas Excel, tasa y Bs negativos con fórmulas)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "2 cartolas reales (338 filas, 625 fórmulas, 77 columnas de ancho): 'todo entrada'; nuevo 'totales calzan pero nada dice cargo/abono'",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "dia_num"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   },
+   {
+    "titulo": "",
+    "rol": "bs_neg",
+    "z": "#,##0.00000"
+   }
+  ],
+  "ancho_vacio": 70,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 0,
+    "prob": 0.5
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   400
+  ],
+  "mutaciones": [
+   "ds107:solo_abonos_de_la_semana"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "TOTAL Bs",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para revisar solo lo que recibió en Bs, la clienta separa el monto en cargo y abono, filtra dejando únicamente abonos y suma el total, con las fechas en formato dd-mm-yyyy.",
+  "variante": "clp-bs-planilla-casera~ds107"
+ }
+]

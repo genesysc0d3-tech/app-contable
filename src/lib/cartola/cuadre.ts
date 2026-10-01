@@ -1,4 +1,4 @@
-import type { CensoCartola } from "@/lib/parsers/types";
+import type { CensoCartola, MapaUsado, VerificacionCartola } from "@/lib/parsers/types";
 
 /**
  * CUADRE DE CARTOLA — invariante final del procesamiento.
@@ -50,6 +50,17 @@ export interface CuadreCartola {
   /** La DB confirma lo guardado: movimientos y 1 propuesta por movimiento. */
   db: { movimientos: number; propuestas: number; ok: boolean };
   calculado_en: string;
+  /**
+   * SELLO de la lectura (2026-09-30): saldo | total_banco | cliente |
+   * sin_comprobar. Ausente en cuadres anteriores al sello.
+   */
+  verificacion?: VerificacionCartola;
+  saldo_inicial?: number | null;
+  saldo_final?: number | null;
+  cuenta?: { huella: string; sufijo: string } | null;
+  mapa?: MapaUsado;
+  /** Lo que quedó guardado (conteo y sumas): si el cliente no lo editó, sigue igual. */
+  guardado?: { n: number; entradas: number; salidas: number };
 }
 
 export function calcularCuadre(args: {
@@ -91,6 +102,7 @@ export function calcularCuadre(args: {
   //    que falló o una propuesta que no nació también son pérdidas o sobrantes).
   const dbOk = args.db.movimientos === guardadas.size && args.db.propuestas === args.db.movimientos;
 
+  const guardadasLeidas = leidas.filter((l) => typeof l.excel_row === "number" && guardadas.has(l.excel_row));
   const abonos = leidas.filter((l) => l.tipo_flujo === "entrada").reduce((s, l) => s + (Number(l.monto) || 0), 0);
   const cargos = leidas.filter((l) => l.tipo_flujo === "salida").reduce((s, l) => s + (Number(l.monto) || 0), 0);
 
@@ -110,6 +122,17 @@ export function calcularCuadre(args: {
     otras_hojas_con_datos: censo.otras_hojas_con_datos,
     db: { ...args.db, ok: dbOk },
     calculado_en: (args.ahora ?? new Date()).toISOString(),
+    // Sin sello del lector NO hay "OK" implícito.
+    verificacion: censo.verificacion ?? { tipo: "sin_comprobar", detalle: "El lector no entregó con qué comprobar la lectura" },
+    saldo_inicial: censo.saldo_inicial ?? null,
+    saldo_final: censo.saldo_final ?? null,
+    cuenta: censo.cuenta ?? null,
+    ...(censo.mapa ? { mapa: censo.mapa } : {}),
+    guardado: {
+      n: guardadasLeidas.length,
+      entradas: guardadasLeidas.filter((l) => l.tipo_flujo === "entrada").reduce((s, l) => s + (Number(l.monto) || 0), 0),
+      salidas: guardadasLeidas.filter((l) => l.tipo_flujo === "salida").reduce((s, l) => s + (Number(l.monto) || 0), 0),
+    },
   };
 }
 

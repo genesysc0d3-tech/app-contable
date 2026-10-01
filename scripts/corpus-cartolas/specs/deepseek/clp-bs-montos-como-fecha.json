@@ -1,0 +1,1893 @@
+[
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "Fecha Movimiento",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds000:nuevo_core_con_titulos_y_iso"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha Movimiento",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migra a un nuevo proveedor de core bancario cuyo export estándar trae títulos de columna, fechas ISO y montos como número con decimales.",
+  "variante": "clp-bs-montos-como-fecha~ds000"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Código",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Saldo CLP",
+    "rol": "otro_texto"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_con_saldo_y_codigo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "otro_num",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "codigo",
+    "titulo": "Código",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo CLP",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco lanza una versión 'empresas' del extracto que agrega código de transacción y saldo acumulado, y elimina la columna de tasa que solo usaba la versión personas.",
+  "variante": "clp-bs-montos-como-fecha~ds001"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds002:export_csv_semicolon_montos_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema exporta a CSV con separador ';' (configuración regional chilena), montos como texto con CLP y miles, y fechas dd/mm/yyyy.",
+  "variante": "clp-bs-montos-como-fecha~ds002"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds003:cargo_abono_separados_desc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Con el nuevo core el banco entrega el movimiento completo (débitos y créditos) en columnas separadas de Cargo y Abono, ordenado de más reciente a más antiguo y con fórmula de suma.",
+  "variante": "clp-bs-montos-como-fecha~ds003"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}",
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds004:glosa_partida_saldo_inicial_resumen"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El módulo de detalle del nuevo core parte las glosas largas en dos filas, antepone la fila de saldo inicial y un bloque resumen arriba.",
+  "variante": "clp-bs-montos-como-fecha~ds004"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds005:hojas_extra_resumen_e_instrucciones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco ahora entrega el libro con una hoja resumen al inicio y una hoja de instrucciones al final, con filas de encabezado adicionales en la hoja de detalle.",
+  "variante": "clp-bs-montos-como-fecha~ds005"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds006:version_internacional_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha2",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "en_dec",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco habilita el export para clientes en el extranjero: títulos en inglés, fecha ISO, montos con formato internacional y un solo monto con signo.",
+  "variante": "clp-bs-montos-como-fecha~ds006"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos_pegado"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "formato": "xls",
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "mutaciones": [
+   "ds007:export_legacy_xls_antiguo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos_pegado",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Una sucursal sigue usando el exportador viejo que guarda en XLS 97, fechas dd/mm/yy y montos como texto con miles pegados y ceros a la izquierda.",
+  "variante": "clp-bs-montos-como-fecha~ds007"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   },
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds008:subtotales_por_dia_con_total"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo módulo de conciliación agrupa el detalle por día con subtotales, lo ordena de más reciente a más antiguo y cierra con una fila de total.",
+  "variante": "clp-bs-montos-como-fecha~ds008"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   300,
+   800
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds009:export_masivo_filas_vacias_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "muchas_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco genera el detalle mensual masivo con muchas filas, una fila en blanco entre días, celdas de encabezado combinadas y una columna índice al inicio.",
+  "variante": "clp-bs-montos-como-fecha~ds009"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Comentario",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds100:quita_tasa_y_anota_comentarios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "Comentario",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta solo le interesan monto y fecha para conciliar; borra la columna de tasa y agrega al final una columna 'Comentario' para anotar a mano las boletas que ya revisó.",
+  "variante": "clp-bs-montos-como-fecha~ds100"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds101:separa_cargo_abono_y_rotula_fecha"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Fecha",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para su control interno la clienta parte el monto único en dos columnas Cargo/Abono (como en la cartola original del banco) y de paso le pone encabezado a la fecha.",
+  "variante": "clp-bs-montos-como-fecha~ds101"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds102:fecha_primero_y_montos_como_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta pega los datos en su plantilla propia que ordena Fecha primero y el bloque 'Ingresos' quedó pegado desde un mail, por lo que los montos llegan como texto y la fecha con guiones.",
+  "variante": "clp-bs-montos-como-fecha~ds102"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "mutaciones": [
+   "ds103:filtra_abonos_y_agrega_total"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Solo quiere saber cuánto entró en el mes: filtra la tabla para mostrar únicamente abonos y le agrega una fila de total con fórmula SUMA al pie.",
+  "variante": "clp-bs-montos-como-fecha~ds103"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}",
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds104:resumen_arriba_y_hoja_instrucciones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Deja un bloque de resumen ('Total ingresos', 'N° movs') arriba de la tabla y agrega al final una hoja 'Instrucciones' explicando cómo leyó el archivo, para la contadora.",
+  "variante": "clp-bs-montos-como-fecha~ds104"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds105:csv_punto_y_coma_con_guiones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guarda la planilla como CSV (separador ';', que es el que abre bien en su Excel) y rellena las celdas vacías con '-' para que no se vean huecos.",
+  "variante": "clp-bs-montos-como-fecha~ds105"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds106:orden_desc_fecha_iso_y_filas_vacias"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Ordena la tabla de la fecha más reciente a la más antigua para revisar lo último primero, cambia las fechas a formato ISO y al borrar filas a mano le quedaron filas vacías intercaladas.",
+  "variante": "clp-bs-montos-como-fecha~ds106"
+ },
+ {
+  "id": "clp-bs-montos-como-fecha",
+  "familia": "Planilla casera con bloque 'Ingresos' arriba y el monto ANTES de la fecha (montos en rango de serial Excel)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (capa 4 en ACTUAL y NUEVO: toma la columna de montos como fecha) + incidente M&E 2026-08-28 (montos leídos como fechas 2009-2091)",
+  "hoja": "CLP-Bs 08-26 VZLA",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [],
+   [
+    "Ingresos"
+   ],
+   "{BLOQUE_NUMEROS_14}"
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0.00"
+   },
+   {
+    "titulo": "",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "",
+    "rol": "tasa",
+    "z": "#,##0.00000"
+   }
+  ],
+  "rango_montos": [
+   20000,
+   60000
+  ],
+  "ancho_vacio": 25,
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "sum",
+    "rol": "monto",
+    "gap": 6
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   900
+  ],
+  "movs": [
+   60,
+   320
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds107:combina_celdas_y_guarda_xls_viejo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta une con 'Combinar celdas' el bloque 'Ingresos' del encabezado, le agrega unas filas de notas arriba y guarda en formato .xls antiguo porque la contadora trabaja con Excel 2003.",
+  "variante": "clp-bs-montos-como-fecha~ds107"
+ }
+]

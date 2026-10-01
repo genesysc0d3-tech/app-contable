@@ -1,0 +1,3056 @@
+[
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "span": 2,
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Detalle Movimiento",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "mutaciones": [
+   "ds000:core_nuevo_datos_limpios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Detalle Movimiento",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco migró de un mainframe Cobol a un core moderno (Temenos) que ya exporta fechas como fecha real de Excel y montos como números, y moderniza el nombre de la columna de detalle.",
+  "variante": "bancochile-cartola-historica~ds000"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "RUT Cliente",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Beneficiario",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_con_beneficiario"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT Cliente",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "nombre",
+    "titulo": "Beneficiario",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para empresas del nuevo portal agrega RUT y beneficiario para la conciliación contable, y desplaza el número de documento junto a los montos.",
+  "variante": "bancochile-cartola-historica~ds001"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Oficina",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n",
+    "z": "#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "mutaciones": [
+   "ds002:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "sucursal",
+    "titulo": "Oficina",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El rediseño de la versión personas consolida cargo y abono en una sola columna 'Monto' con signo, elimina el saldo y renombra Sucursal como Oficina.",
+  "variante": "bancochile-cartola-historica~ds002"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Branch",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds003:export_csv_internacional"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo generador de reportes para clientes corporativos internacionales exporta CSV con separador punto y coma, títulos en inglés y fechas ISO.",
+  "variante": "bancochile-cartola-historica~ds003"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds004:resumen_al_pie_con_totales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo proveedor de reporting mueve el resumen del periodo al pie del archivo y agrega fila de totales calculada con fórmula en vez de texto.",
+  "variante": "bancochile-cartola-historica~ds004"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "span": 2,
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "mutaciones": [
+   "ds005:plataforma_multinacional_orden_inverso"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El core internacional entrega la cartola con lo más reciente primero, con fechas reales y todos los montos numéricos, sin depender de formatos de texto.",
+  "variante": "bancochile-cartola-historica~ds005"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds006:tesoreria_solo_abonos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión que el banco genera para el área de tesorería viene pre-filtrada solo con abonos, por lo que elimina la columna de cargos y el saldo.",
+  "variante": "bancochile-cartola-historica~ds006"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Código",
+    "rol": "codigo"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds007:glosas_partidas_con_codigo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "codigo",
+    "titulo": "Código",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo módulo de detalle parte las descripciones largas en dos filas, agrega el código de transacción del core y cambia el separador de fecha a guiones.",
+  "variante": "bancochile-cartola-historica~ds007"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "formato": "xls",
+  "mutaciones": [
+   "ds008:export_legacy_xls_con_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco mantiene el export antiguo en .xls para clientes legacy, que agrega una columna de índice, más filas de encabezado basura y celdas combinadas.",
+  "variante": "bancochile-cartola-historica~ds008"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Hora",
+    "rol": "hora"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo acumulado",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds009:subtotales_diarios_con_hora"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "hora",
+    "titulo": "Hora",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "saldo",
+    "titulo": "Saldo acumulado",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core bancario agrupa la cartola por día con subtotales, agrega la hora de cada movimiento y renombra el saldo como acumulado.",
+  "variante": "bancochile-cartola-historica~ds009"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "mutaciones": [
+   "ds100:planilla_limpia_para_el_contador"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta borra las columnas que su contador no usa (N° Documento y Saldo diario), deja la fecha en formato estándar y agrega un total de abonos al final para la declaración.",
+  "variante": "bancochile-cartola-historica~ds100"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm",
+    "span": 2
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Ingresos",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds101:solo_ingresos_del_mes"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Ingresos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "sucursal",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta filtra la cartola quedándose solo con los depósitos para conciliar ingresos, renombra la columna como 'Ingresos', borra Sucursal y deja las fechas dd/mm porque trabaja dentro de un solo mes",
+  "variante": "bancochile-cartola-historica~ds101"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Tipo",
+    "rol": "flag",
+    "flag": {
+     "entrada": "Abono",
+     "salida": "Cargo"
+    }
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "mutaciones": [
+   "ds102:monto_unico_con_signo_y_bandera"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_y_bandera",
+    "rol": "monto",
+    "titulo": "Monto",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta une cargos y abonos en una sola columna 'Monto' con signo negativo/positivo y una bandera de tipo, elimina el saldo, agrega un índice y ordena de más reciente a más antiguo para revisar el ",
+  "variante": "bancochile-cartola-historica~ds102"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds103:hoja_resumen_con_subtotales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta arma una hoja 'Resumen' al inicio con subtotales por día, fila de totales y fórmulas de suma, para el reporte mensual que le pide la gerencia.",
+  "variante": "bancochile-cartola-historica~ds103"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": false,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds104:csv_para_importacion"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "sin_fila_de_titulos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta exporta a CSV con punto y coma para importarlo a su ERP, deja los montos como texto con $, la fecha en formato ISO y borra la fila de títulos porque el sistema importa por posición de colum",
+  "variante": "bancochile-cartola-historica~ds104"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds105:con_saldo_inicial_y_rut"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta inserta una fila con el saldo inicial del período, agrega el resumen al final, mueve el saldo junto a la fecha para ver la evolución y agrega una columna RUT para la facturación.",
+  "variante": "bancochile-cartola-historica~ds105"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "Comentario",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "extras": {
+   "glosa_partida": true
+  },
+  "mutaciones": [
+   "ds106:glosa_partida_con_comentarios"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "Comentario",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta parte en dos filas las glosas que traen dos conceptos (por ejemplo 'transferencia + comisión') y agrega una columna de comentarios para el arqueo; además deja montos con $ en texto y fechas",
+  "variante": "bancochile-cartola-historica~ds106"
+ },
+ {
+  "id": "bancochile-cartola-historica",
+  "familia": "Banco de Chile 'CartolaHistorica' (Resumen del Periodo arriba, celdas combinadas, cargos y saldo en texto)",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (675 filas, 2.739 celdas combinadas): sella por saldo en el nuevo",
+  "hoja": "CartolaHistorica",
+  "arriba": [
+   [],
+   [
+    " Cartola de cuenta corriente"
+   ],
+   [
+    "Empresa",
+    "{EMPRESA}",
+    "",
+    "Ejecutivo",
+    "{EJECUTIVO}"
+   ],
+   [
+    "N° de cuenta",
+    "{CUENTA}",
+    "",
+    "Periodo",
+    "{PERIODO}"
+   ],
+   [
+    "Oficina",
+    "{OFICINA}"
+   ],
+   [],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Periodo",
+    "Saldo Anterior",
+    "Total Cargos y Cheques",
+    "Total Abonos y Depósitos",
+    "Saldo Contable Final del Periodo"
+   ],
+   [
+    "{PERIODO}",
+    "{SALDO_INICIAL|cl}",
+    "{TOTAL_CARGOS|cl}",
+    "{TOTAL_ABONOS|cl}",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Retenciones",
+    "Saldo Disponible"
+   ],
+   [
+    "0",
+    "{SALDO_FINAL|cl}"
+   ],
+   [],
+   [],
+   [
+    "Movimientos cuenta corriente"
+   ]
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy",
+    "span": 2
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal",
+    "span": 3
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "N° Documento",
+    "rol": "doc",
+    "span": 2
+   },
+   {
+    "titulo": "Cheques y otros cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Depósitos y Abono",
+    "rol": "abono",
+    "celda": "n",
+    "z": "#,##0",
+    "vacio": "guion"
+   },
+   {
+    "titulo": "Saldo diario",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   2
+  ],
+  "movs": [
+   40,
+   700
+  ],
+  "formato": "xls",
+  "ceros_texto": [
+   2,
+   6
+  ],
+  "extras": {
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds107:guardada_antigua_con_ceros_y_guiones"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "ceros_en_texto",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guarda en .xls antiguo (Excel 97) porque su PC no abre xlsx, deja los ceros como texto para no perder los números que empiezan con 0 y rellena los cargos vacíos con guiones; además intercal",
+  "variante": "bancochile-cartola-historica~ds107"
+ }
+]

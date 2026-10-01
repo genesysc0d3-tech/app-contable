@@ -67,6 +67,17 @@ export function clasificarStartJob(status: number, json: Record<string, unknown>
   if (status === 409 && j.error === "PROPUESTA_NO_APROBADA") {
     return { tipo: "frenada", motivo: "Esta cartola volvió a Check: lo que falta quedó ahí. Apruébala de nuevo para seguir emitiendo." };
   }
+  // El server manda en los datos (seguridad 2026-09-30): lo que el lote iba a teclear
+  // no calza con la propuesta guardada (otra pestaña/persona la cambió, o esta pestaña
+  // es vieja). Se frena el lote sin emitir; lo que falta se reanuda con datos frescos.
+  if (status === 409 && j.error === "DATOS_CAMBIARON") {
+    const detalle = typeof j.detalle === "string" && j.detalle.trim() ? j.detalle : null;
+    return {
+      tipo: "frenada",
+      motivo: detalle
+        ?? "Una de las que faltaban cambió en otra pestaña o la cambió otra persona, así que no la emití. Las que ya salieron quedaron guardadas. Vuelve a abrir Emitir para ver los datos al día y sigue con las que faltan.",
+    };
+  }
   if (status === 409 && j.error === "EMISION_EN_CURSO") {
     return { tipo: "frenada", motivo: "Esta boleta ya se está emitiendo en otra pestaña. Lo que falta queda guardado para seguir." };
   }

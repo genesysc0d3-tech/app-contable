@@ -1,6 +1,7 @@
 import type { ParsedLine, Row, AdapterConfig, DescarteFila, ValidationResult } from "./types";
 import { cellEsFecha } from "./heuristic";
-import { cuadreSaldo } from "./saldo-cuadre";
+import { cuadreSaldo, cuadreSaldoConBandera } from "./saldo-cuadre";
+import { classifyTipoFlag } from "./apply";
 
 const MIN_ROWS = 1;
 const MAX_ROWS = 5000;
@@ -205,19 +206,26 @@ function checkSaldoMonotonia(rows: Row[], cfg: AdapterConfig): string | null {
 }
 
 /**
- * ¿El saldo corrido CONFIRMA este mapeo? (≥10 filas revisadas y ≤20% fallidas).
- * Es la condición para compartir un formato derivado con otras empresas: sin
- * saldo (o con pocas filas) el mapeo es una adivinanza y queda privado de la
- * empresa que lo subió (revisión adversarial 2026-09-26).
+ * ¿El saldo corrido ORIENTA este mapeo? (≥10 filas revisadas y ≤20% fallidas,
+ * tolerancia blanda). OJO: solo sirve para ELEGIR/ORIENTAR (scripts de medición).
+ * NO sella ni confirma nada: el sello "saldo" exige la ecuación al peso en el
+ * 100% de las filas leídas (saldo-cuadre.ts cuadreDeLectura, juez-banco.ts
+ * sellarCartola; revisiones adversariales 2026-09-30).
  */
 export function formatoVerificadoPorSaldo(rows: Row[], cfg: AdapterConfig): boolean {
   const c = cfg.columns;
-  if (c.saldo < 0 || (cfg.layout ?? "two_cols") !== "two_cols") return false;
+  const layout = cfg.layout ?? "two_cols";
+  if (c.saldo < 0 || layout === "transactions_log") return false;
   const filas: Row[] = [];
   for (let i = cfg.skip_rows_before_data; i < rows.length; i++) {
     const r = rows[i];
     if (r && cellEsFecha(r[c.fecha] as never)) filas.push(r);
   }
-  const { revisadas, fallidas } = cuadreSaldo(filas, c.cargo, c.abono, c.saldo);
+  // single_col (2026-09-30): monto + bandera también se prueba con la ecuación.
+  const { revisadas, fallidas } = layout === "single_col"
+    ? (c.monto != null && c.monto >= 0 && c.tipo_flujo_col != null && c.tipo_flujo_col >= 0
+        ? cuadreSaldoConBandera(filas, c.monto, c.tipo_flujo_col, c.saldo, classifyTipoFlag)
+        : { revisadas: 0, fallidas: 0 })
+    : cuadreSaldo(filas, c.cargo, c.abono, c.saldo);
   return revisadas >= 10 && fallidas / revisadas <= 0.2;
 }

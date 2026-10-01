@@ -1,0 +1,2005 @@
+[
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Description",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds000:core_internacional_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "Date",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "Description",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "saldo",
+    "titulo": "Balance",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El banco cambió de proveedor de core bancario a una plataforma internacional que traduce los títulos al inglés y usa fechas ISO.",
+  "variante": "bancoestado-fechas-compactas~ds000"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "RUT Cliente",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Sucursal",
+    "rol": "sucursal"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds001:version_empresas_con_rut"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT Cliente",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "Sucursal",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": 6,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema diferencia export para empresas: agrega RUT y sucursal del cliente y reordena el saldo al final.",
+  "variante": "bancoestado-fechas-compactas~ds001"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds002:cuentarut_sin_saldo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyymmdd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para personas (CuentaRUT) del nuevo portal omite el saldo y comprime la fecha a yyyymmdd.",
+  "variante": "bancoestado-fechas-compactas~ds002"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds003:montos_clp_y_fecha_excel"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El sistema renovado entrega la fecha como fecha real de Excel y los montos como números con formato CLP.",
+  "variante": "bancoestado-fechas-compactas~ds003"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds004:monto_unico_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "Monto (CLP)",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core unifica cargos y abonos en una sola columna de monto con signo, como suelen hacer los sistemas modernos.",
+  "variante": "bancoestado-fechas-compactas~ds004"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto",
+    "celda": "n"
+   },
+   {
+    "titulo": "C/D",
+    "rol": "flag",
+    "flag": {
+     "entrada": "Abono",
+     "salida": "Cargo"
+    }
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds005:monto_y_bandera_cd"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_y_bandera",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "flag",
+    "titulo": "C/D",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El proveedor nuevo entrega una sola columna de monto y una bandera C/D para distinguir cargo de abono.",
+  "variante": "bancoestado-fechas-compactas~ds005"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds006:resumen_periodo_y_totales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El export nuevo agrega un bloque de resumen del período arriba, fila de totales abajo y fórmulas de suma.",
+  "variante": "bancoestado-fechas-compactas~ds006"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds007:export_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema ofrece descarga CSV con separador punto y coma y montos emitidos como texto.",
+  "variante": "bancoestado-fechas-compactas~ds007"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "mutaciones": [
+   "ds008:hojas_extra_y_saldo_inicial"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El export rediseñado incorpora hoja resumen al inicio, hoja de instrucciones al final y una fila de saldo inicial.",
+  "variante": "bancoestado-fechas-compactas~ds008"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds009:glosa_partida_e_indice"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "vacia",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo proveedor parte las descripciones largas en dos filas, agrega columna índice y deja filas vacías intercaladas.",
+  "variante": "bancoestado-fechas-compactas~ds009"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Débitos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Créditos",
+    "rol": "abono",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds100:borra_saldo_y_renombra_debitos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "cargo",
+    "titulo": "Débitos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "abono",
+    "titulo": "Créditos",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta no le sirve el saldo y le parece más claro llamar las columnas Débitos/Créditos para cuadrar con su contabilidad; además agrega un total al final.",
+  "variante": "bancoestado-fechas-compactas~ds100"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds101:solo_abonos_con_suma_para_ingresos"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "filtrar_solo_abonos",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta filtra la cartola a solo abonos para declarar ingresos y le agrega una fórmula de suma; borra la columna Cargos que quedó vacía y normaliza las fechas.",
+  "variante": "bancoestado-fechas-compactas~ds101"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Monto",
+    "rol": "monto_signo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds102:monto_unico_con_signo_y_desc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "Monto",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "cargo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "abono",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Junta Cargos y Abonos en una sola columna con signo (los abonos en positivo, cargos en negativo) para ver el flujo neto, reordena de más reciente a más antiguo y pasa fechas a formato normal.",
+  "variante": "bancoestado-fechas-compactas~ds102"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   [],
+   [
+    "Resumen del Periodo"
+   ],
+   [
+    "Saldo Anterior",
+    "Total Cargos",
+    "Total Abonos",
+    "Saldo Final"
+   ],
+   [
+    "{SALDO_INICIAL}",
+    "{TOTAL_CARGOS}",
+    "{TOTAL_ABONOS}",
+    "{SALDO_FINAL}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "rut"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "mutaciones": [
+   "ds103:agrega_rut_y_resumen_arriba"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "rut",
+    "titulo": "RUT",
+    "posicion": 2,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Le agrega una columna con el RUT del titular y mueve el número de operación al final porque no lo usa; pega un resumen arriba para su contador.",
+  "variante": "bancoestado-fechas-compactas~ds103"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "extras": {
+   "subtotal_dia": true
+  },
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds104:subtotal_por_dia_y_montos_en_pesos_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Agrega subtotales por día y formatea los montos como texto con '$' y separador de miles para revisar a mano; copia la cartola a una hoja resumen antes de la original.",
+  "variante": "bancoestado-fechas-compactas~ds104"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yy"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds105:exporta_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_dec",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta guarda la planilla editada como CSV con separador ';' porque su software de impuestos lo exige, y ahí las fechas quedan dd/mm/aa y los montos con decimales.",
+  "variante": "bancoestado-fechas-compactas~ds105"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "Fecha",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° Operación",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Descripción",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Cargos",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Abonos",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Saldo",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "extras": {
+   "glosa_partida": true,
+   "filas_vacias_intercaladas": true
+  },
+  "mutaciones": [
+   "ds106:indice_y_glosa_partida_con_filas_vacias"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "glosa_partida_en_dos_filas",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "filas_vacias_intercaladas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta agrega una columna de índice para referenciar líneas y parte en dos filas las glosas largas (p.ej. el detalle del giro); deja filas vacías intercaladas para anotar a mano.",
+  "variante": "bancoestado-fechas-compactas~ds106"
+ },
+ {
+  "id": "bancoestado-fechas-compactas",
+  "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
+  "origen": "deepseek-mutacion",
+  "evidencia": "memoria project_incidente_feedback_2026_09_23: 165 filas cayeron al carril texto (no parecía cartola) → IA inventó glosas y todo afecta",
+  "hoja": "Movimientos",
+  "arriba": [
+   [
+    "CUENTARUT"
+   ],
+   [
+    "{TITULAR}"
+   ],
+   [
+    "Cuenta: {CUENTA}"
+   ],
+   []
+  ],
+  "titulos": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Debit",
+    "rol": "cargo",
+    "celda": "n"
+   },
+   {
+    "titulo": "Credit",
+    "rol": "abono",
+    "celda": "n"
+   },
+   {
+    "titulo": "Balance",
+    "rol": "saldo",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "ambas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "cargo",
+     "abono"
+    ],
+    "gap": 1
+   }
+  ],
+  "filas_vacias_al_final": [
+   0,
+   0
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "extras": {
+   "saldo_inicial_fila": true
+  },
+  "abajo": [
+   [],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Total cargos",
+    "{TOTAL_CARGOS}"
+   ],
+   [
+    "Total abonos",
+    "{TOTAL_ABONOS}"
+   ],
+   [
+    "Saldo final",
+    "{SALDO_FINAL}"
+   ]
+  ],
+  "mutaciones": [
+   "ds107:saldo_inicial_total_y_titulos_en_ingles"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Agrega una fila de saldo inicial arriba, total al pie y un resumen abajo; además renombra los títulos al inglés porque su socia extranjera revisa la planilla.",
+  "variante": "bancoestado-fechas-compactas~ds107"
+ }
+]

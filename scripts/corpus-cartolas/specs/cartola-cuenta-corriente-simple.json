@@ -1,0 +1,55 @@
+{
+ "id": "cartola-cuenta-corriente-simple",
+ "familia": "'CARTOLA CUENTA CORRIENTE' Fecha | Descripción | Cargos | Abonos | Saldo",
+ "origen": "real",
+ "evidencia": "1 archivo real (10 filas): sin sello por tener menos de 10 filas comprobables",
+ "hoja": "Movimientos",
+ "arriba": [
+  [
+   "CARTOLA CUENTA CORRIENTE"
+  ],
+  [
+   "{EMPRESA} · RUT {RUT}"
+  ],
+  []
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "Fecha",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd/mm/yyyy"
+  },
+  {
+   "titulo": "Descripción",
+   "rol": "glosa"
+  },
+  {
+   "titulo": "Cargos",
+   "rol": "cargo",
+   "celda": "n"
+  },
+  {
+   "titulo": "Abonos",
+   "rol": "abono",
+   "celda": "n"
+  },
+  {
+   "titulo": "Saldo",
+   "rol": "saldo",
+   "celda": "n"
+  }
+ ],
+ "orden": "asc",
+ "direcciones": "ambas",
+ "pie": [],
+ "filas_vacias_al_final": [
+  0,
+  0
+ ],
+ "movs": [
+  8,
+  60
+ ]
+}

@@ -40,6 +40,6 @@ describe("microatribución", () => {
     const comp = readFileSync(ATRIB, "utf8");
     expect(comp).toMatch(/if \(!a\) return null;/);
     const mesa = readFileSync(MESA, "utf8");
-    expect(mesa).toMatch(/\{selDoc && <AtribucionDoc key=\{selDoc\.id\} documentoId=\{selDoc\.id\} \/>\}/);
+    expect(mesa).toMatch(/\{selDoc && <AtribucionDoc key=\{`atrib-\$\{selDoc\.id\}`\} documentoId=\{selDoc\.id\} \/>\}/);
   });
 });

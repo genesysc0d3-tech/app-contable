@@ -17,6 +17,8 @@ import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
+import { cierreBoletaUnicaPorStatus, declaradoParaFolio, DETALLE_BOLETA_A_MEDIAS, describirIntento, leerIntento, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
+import { declararNoSalio, registrarFolioAMano } from "@/lib/emission/recover-latest";
 
 type TipoDte = 33 | 34 | 39 | 41;
 type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro" | "Contado" | "Crédito" | "";
@@ -89,6 +91,8 @@ interface ExtensionPageMessage {
   status?: string;
   message?: string;
   recoverable?: boolean;
+  /** 0.2.8+: falla con el canal muerto tras mandar la emisión (pudo emitir). */
+  emision_incierta?: boolean;
   result?: {
     folio?: number | null;
     folio_confidence?: "none" | "medium" | "high";
@@ -120,9 +124,25 @@ interface LocalWorkerState {
   message: string;
 }
 
+/** Boleta única a medias que hay que resolver antes de emitir otra (rev. adversarial). */
+interface LapidaBoletaUnica {
+  jobId: string;
+  intento: IntentoBoletaUnica | null;
+  creadaAt: string;
+  esMia: boolean;
+  lanzadaPor: string | null;
+}
+
+/** Estados en que la extensión pudo haber apretado EMITIR (un lease perdido ahí sella lápida). */
+const ESTADOS_POSIBLE_CLIC = new Set(["submitting", "capturing_result", "result_awaiting_ack", "result_needs_review"]);
+
 interface EmissionJobStartResponse {
   ok?: boolean;
   job_id?: string;
+  intento?: IntentoBoletaUnica | null;
+  creada_at?: string;
+  es_mia?: boolean;
+  lanzada_por?: string | null;
   expires_at?: string;
   locked_until?: string;
   empresa_id?: string;
@@ -293,6 +313,8 @@ const WORKER_STATUS_LABELS: Record<string, string> = {
   retrying: "Reintentando",
   emitted: "Boleta emitida",
   result_needs_review: "Requiere revisión",
+  // El server dijo LEASE_PERDIDO: el candado de la cuenta ya no es de esta emisión.
+  lease_perdido: "Emisión detenida",
   // Extensión 0.2.9: folio emitido y enviado; massDTE aún no confirma el guardado.
   result_awaiting_ack: "Guardando…",
   learning_observing: "Modo aprendizaje",
@@ -347,12 +369,26 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   // MISMO EmitirLoteModal del masivo (un solo ítem) — auth, candado,
   // TOTAL_MISMATCH, capabilities y captura de folio, todo reutilizado.
   const [facturaLote, setFacturaLote] = useState<{ item: LoteItemInput; formaPago: "contado" | "credito" } | null>(null);
+  // Con la factura única corriendo en el modal del lote, SUS avisos de la extensión
+  // los maneja el modal (useEmisionLote): esta vista no late ni cierra ese job (rev 2 M2).
+  const facturaLoteActivaRef = useRef(false);
+  useEffect(() => { facturaLoteActivaRef.current = facturaLote != null; }, [facturaLote]);
+  // Boleta única a medias (lápida) y su resolución: folio de ESA boleta o «no salió».
+  const [lapidaBU, setLapidaBU] = useState<LapidaBoletaUnica | null>(null);
+  const [folioLapida, setFolioLapida] = useState("");
+  const [montoLapida, setMontoLapida] = useState("");
+  const [tipoLapida, setTipoLapida] = useState<39 | 41>(39);
+  const [confirmandoNoSalio, setConfirmandoNoSalio] = useState(false);
+  // Lo que se mandó al SII en la emisión en curso (para describir la lápida si queda a medias).
+  const intentoEnCursoRef = useRef<{ jobId: string; intento: IntentoBoletaUnica; creadaAt: string } | null>(null);
   const [localWorkerLoading, setLocalWorkerLoading] = useState(false);
   // Espejo del estado para leerlo dentro del listener de mensajes sin re-suscribir.
   const localWorkerRef = useRef<LocalWorkerState | null>(null);
   useEffect(() => { localWorkerRef.current = localWorker; }, [localWorker]);
   // Jobs ya cerrados desde esta sesión: JOB_CLOSE se manda UNA vez por job.
   const closedJobIdsRef = useRef<Set<string>>(new Set());
+  // Jobs que perdieron el candado (409 LEASE_PERDIDO): se avisa UNA vez por job.
+  const leaseLostJobIdsRef = useRef<Set<string>>(new Set());
   // Último mensaje de estado de la extensión (para la CAJA NEGRA: se adjunta como
   // motivo al cerrar un job fallido → queda en status_message + ops_event).
   const lastStatusMsgRef = useRef<string | null>(null);
@@ -640,6 +676,33 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }
   }
 
+  function intentoActual(): IntentoBoletaUnica | null {
+    if (!(total > 0) || ![33, 34, 39, 41].includes(tipoDte)) return null;
+    return {
+      monto: Math.round(total),
+      tipo_dte: tipoDte,
+      receptor_rut: receptorRut.trim() || null,
+      receptor_nombre: receptorRazonSocial.trim() || null,
+      detalle: detalleNombre.trim().slice(0, 80) || null,
+    };
+  }
+
+  // Muestra la boleta única a medias: Emitir queda bloqueado (result_needs_review) y
+  // el panel dice QUÉ boleta buscar en el SII y cómo resolverla.
+  function mostrarLapida(l: LapidaBoletaUnica, mensaje?: string) {
+    setLapidaBU(l);
+    setFolioLapida("");
+    setMontoLapida("");
+    setConfirmandoNoSalio(false);
+    setLocalWorker({ jobId: l.jobId, status: "result_needs_review", message: mensaje ?? DETALLE_BOLETA_A_MEDIAS });
+  }
+
+  // La lápida de ESTE intento (se acaba de sellar acá): usa lo que se mandó al SII.
+  function lapidaDeEsteIntento(jobId: string): LapidaBoletaUnica {
+    const enCurso = intentoEnCursoRef.current?.jobId === jobId ? intentoEnCursoRef.current : null;
+    return { jobId, intento: enCurso?.intento ?? null, creadaAt: enCurso?.creadaAt ?? new Date().toISOString(), esMia: true, lanzadaPor: null };
+  }
+
   async function startEmissionJob(provider: "sii_local" | "simpleapi"): Promise<EmissionJobStartResponse | null> {
     try {
       const authorized = await ensureEmissionAuthorization(provider);
@@ -653,6 +716,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           tipo_dte: tipoDte,
           origin: "emision_directa",
           expected_emisor_rut: empresaRut ?? null,
+          // Lo que se va a teclear en el SII: si queda a medias, la lápida dice QUÉ
+          // boleta buscar y su folio se registra con estos datos (rev. adversarial M1).
+          intento: intentoActual(),
         }),
       });
       const json = (await res.json()) as EmissionJobStartResponse;
@@ -664,6 +730,20 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           : json.error === "EMISION_PAUSADA"
             ? (json.detalle ?? "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Inténtalo de nuevo más tarde.")
             : json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
+        // BOLETA ÚNICA A MEDIAS (seguridad 2026-09-30): el server no abre otra boleta
+        // única mientras una anterior pudo haber salido en el SII. Se muestra ESA
+        // lápida (Recuperar / folio a mano / «no salió»), no un toast suelto.
+        if (json.error === "BOLETA_A_MEDIAS" && json.job_id) {
+          mostrarLapida({
+            jobId: json.job_id,
+            intento: json.intento ?? null,
+            creadaAt: json.creada_at ?? new Date().toISOString(),
+            esMia: json.es_mia !== false,
+            lanzadaPor: json.lanzada_por ?? null,
+          }, json.detalle ?? DETALLE_BOLETA_A_MEDIAS);
+          toast(json.detalle ?? DETALLE_BOLETA_A_MEDIAS, "error");
+          return null;
+        }
         if (json.error === "EMISION_BLOQUEADA") {
           setEmissionLock({
             ok: true,
@@ -675,6 +755,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         toast(message, "error");
         return null;
       }
+      const intentoEnviado = intentoActual();
+      intentoEnCursoRef.current = intentoEnviado ? { jobId: json.job_id, intento: intentoEnviado, creadaAt: new Date().toISOString() } : null;
       setEmissionLock({
         ok: true,
         locked: true,
@@ -694,10 +776,17 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }
   }
 
-  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente" = "cancelled") {
-    if (!jobId) return;
+  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente" = "cancelled"): Promise<string | null> {
+    return (await closeEmissionJobDetalle(jobId, estado)).estado;
+  }
+
+  // Igual que closeEmissionJob, pero devuelve también el intento de una lápida de
+  // boleta única (V2-B1: «liberar» sobre una lápida muestra qué boleta buscar).
+  async function closeEmissionJobDetalle(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente"): Promise<{ estado: string | null; intento: IntentoBoletaUnica | null; creadaAt: string | null }> {
+    const vacio = { estado: null, intento: null, creadaAt: null };
+    if (!jobId) return vacio;
     try {
-      await fetch("/api/emision/jobs", {
+      const res = await fetch("/api/emision/jobs", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         // CAJA NEGRA: adjunta el último mensaje de estado de la extensión como motivo
@@ -706,25 +795,66 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         body: JSON.stringify({ job_id: jobId, estado, status_message: lastStatusMsgRef.current ?? null }),
       });
       setEmissionLock(null);
+      // El estado REAL con que quedó el job (una lápida no se cancela: vuelve tal cual).
+      const json = (await res.json().catch(() => ({}))) as { estado?: string; intento?: unknown; creada_at?: string };
+      return {
+        estado: typeof json.estado === "string" ? json.estado : null,
+        intento: leerIntento(json.intento),
+        creadaAt: typeof json.creada_at === "string" ? json.creada_at : null,
+      };
     } catch {
       // Best-effort: si falla, el lock expira por TTL server-side.
+      return vacio;
     }
   }
 
   async function heartbeatEmissionJob(jobId: string | null | undefined, status: string) {
     if (!jobId) return;
     try {
-      await fetch("/api/emision/jobs", {
+      const res = await fetch("/api/emision/jobs", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: jobId, status }),
       });
+      if (res.status !== 409) return;
+      const json = (await res.json().catch(() => ({}))) as { error?: string; detalle?: string };
+      if (json.error !== "LEASE_PERDIDO") return;
+      // LEASE PERDIDO (seguridad 2026-09-30, puntos 3 y 5): el candado de la cuenta ya
+      // no es de esta emisión (alguien lo liberó desde otro computador, otra emisión lo
+      // tomó o venció). Una sola vez por job y solo si es la emisión en curso de esta
+      // pestaña (un latido tardío de un job que ya cerramos acá no alarma).
+      if (closedJobIdsRef.current.has(jobId) || leaseLostJobIdsRef.current.has(jobId)) return;
+      const current = localWorkerRef.current;
+      if (current?.jobId !== jobId || current.status === "emitted" || current.status === "already_exists") return;
+      leaseLostJobIdsRef.current.add(jobId);
+      // Después de un posible clic (rev 2 B1): la boleta pudo salir → se sella a medias
+      // (revision_pendiente) para que no se pueda re-emitir tras recargar.
+      if (ESTADOS_POSIBLE_CLIC.has(current.status)) {
+        closedJobIdsRef.current.add(jobId);
+        void closeEmissionJob(jobId, "revision_pendiente");
+        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+        mostrarLapida(lapidaDeEsteIntento(jobId), json.detalle ?? DETALLE_BOLETA_A_MEDIAS);
+        setLocalWorkerLoading(false);
+        toast(json.detalle ?? DETALLE_BOLETA_A_MEDIAS, "error");
+        return;
+      }
+      // Que la extensión de ESTE computador cierre su ventana: antes del clic no emite;
+      // después del clic la extensión NO cancela (sigue capturando el folio, que el
+      // server registra siempre). El corte total antes del clic necesita el «aviso
+      // antes del clic» de la extensión 0.3.0.
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+      const detalle = json.detalle ?? "Detuvimos esta emisión porque se empezó a emitir desde otra pantalla (o pasó mucho rato sin respuesta). Si alcanzó a salir en el SII, usa Recuperar emisión SII antes de volver a emitir.";
+      setLocalWorker({ jobId, status: "lease_perdido", message: detalle });
+      setLocalWorkerLoading(false);
+      toast(detalle, "error");
     } catch {
       // Best-effort: el lock expira por TTL si el navegador se cae.
     }
   }
 
   const closeEmissionJobEvent = useEffectEvent(closeEmissionJob);
+  const mostrarLapidaEvent = useEffectEvent(mostrarLapida);
+  const lapidaDeEsteIntentoEvent = useEffectEvent(lapidaDeEsteIntento);
   const heartbeatEmissionJobEvent = useEffectEvent(heartbeatEmissionJob);
 
   const persistSimpleApiResult = useEffectEvent(async (data: ExtensionPageMessage) => {
@@ -820,6 +950,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         if (!emitted && data.result?.folio && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
           closedJobIdsRef.current.add(data.job_id);
           void closeEmissionJobEvent(data.job_id, "revision_pendiente");
+          // Mismo panel que cualquier boleta a medias: qué buscar y dónde escribir su folio.
+          mostrarLapidaEvent(lapidaDeEsteIntentoEvent(data.job_id), `${data.message ?? "Resultado SII recibido, pero falta guardarlo."}${folio}${persistenceError}`);
         }
         toast(emitted ? `Boleta emitida y guardada.${folio}` : "Boleta SII no quedó guardada en la app", emitted ? "success" : "error");
         router.refresh();
@@ -844,12 +976,18 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       }
 
       if (data.type !== "APP_CONTABLE_SII_JOB_STATUS") return;
+      // Factura única en el modal del lote: ese job lo maneja useEmisionLote (rev 2 M2).
+      if (facturaLoteActivaRef.current) return;
 
       // CAJA NEGRA: recordamos el último mensaje del RPA para adjuntarlo si el job
       // termina fallido (el motivo real del fallo suele venir en el último status).
       if (data.message) lastStatusMsgRef.current = String(data.message).slice(0, 500);
 
       void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
+      // Seguridad 2026-09-30 (punto 1): `emision_incierta` (canal muerto tras mandar la
+      // emisión) y `result_needs_review` pudieron dejar una boleta REAL en el SII → se
+      // muestran y se sellan como lápida, nunca como un error re-emitible.
+      const cierre = cierreBoletaUnicaPorStatus(data);
       setLocalWorker((current) => {
         // Un éxito terminal NO se pisa: tras "Boleta emitida y guardada", un
         // "closed"/"result_needs_review" tardío (cierre de la ventana SII) volvía
@@ -863,17 +1001,35 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         }
         return {
           jobId: data.job_id ?? null,
-          status: data.status ?? "error",
-          message: data.message ?? "Estado recibido desde motor local SII",
+          status: data.status ? cierre.estadoUi : "error",
+          message: cierre.mensaje ?? data.message ?? "Estado recibido desde motor local SII",
         };
       });
       setLocalWorkerLoading(false);
-      if ((data.status === "error" || data.status === "cancelled") && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
+      if (cierre.cerrar === "revision_pendiente" && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
+        // LÁPIDA: el job queda `revision_pendiente` (retiene el candado y el server no
+        // abre otra boleta única hasta resolverla). NO se cierra la ventana del SII:
+        // ahí puede estar el folio para capturarlo.
+        closedJobIdsRef.current.add(data.job_id);
+        void closeEmissionJobEvent(data.job_id, cierre.cerrar);
+        // Cerrar la ventana del SII, IGUAL que el lote (useEmisionLote: JOB_CLOSE antes
+        // de verificar): si queda viva, su «Reintentar» re-emite con el mismo job
+        // (rev. adversarial A1). Es seguro: post-clic sin guardar, la extensión NO
+        // cierra y sigue capturando el folio.
+        window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: data.job_id }, window.location.origin);
+        mostrarLapidaEvent(lapidaDeEsteIntentoEvent(data.job_id), cierre.mensaje ?? data.message ?? DETALLE_BOLETA_A_MEDIAS);
+        if (data.job_id === simpleApiJobId) {
+          setEmitiendo(false);
+          setSimpleApiJobId(null);
+        }
+        return;
+      }
+      if ((cierre.cerrar === "failed" || cierre.cerrar === "cancelled") && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
         // Una sola vez por job (el Set corta el bucle error→JOB_CLOSE→error que se
         // formaba cuando la extensión quedaba huérfana y el bridge respondía con
         // otro status "error" para el mismo job).
         closedJobIdsRef.current.add(data.job_id);
-        void closeEmissionJobEvent(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
+        void closeEmissionJobEvent(data.job_id, cierre.cerrar);
         // Cerrar también la ventana worker de ese job: si quedaba viva con su botón
         // "Reintentar" mientras acá se re-habilitaba Emitir, había dos cerebros
         // capaces de emitir dos boletas reales. (Post-emit la extensión la protege.)
@@ -1056,8 +1212,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               receptor_comuna: receptorComuna.trim() || null,
               receptor_email: receptorEmail.trim() || null,
               receptor_giro: receptorGiro.trim() || null,
-              detalle: detalleNombre.trim() || null,
-              tipo_sugerido: tipoDte,
+              // El servidor manda en los datos (seguridad 2026-09-30): glosa y tipo
+              // tal como quedaron en la propuesta recién creada (detalle ≤300, tipo
+              // del carril factura). Si no, el POST del job responde DATOS_CAMBIARON.
+              detalle: detalleNombre.trim().slice(0, 300) || null,
+              tipo_sugerido: creada.tipo_dte === 33 || creada.tipo_dte === 34 ? creada.tipo_dte : tipoDte,
               monto_total: total,
             },
             formaPago: formaPago === "Contado" ? "contado" : "credito",
@@ -1231,7 +1390,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     const job = await startEmissionJob("sii_local");
     if (!job?.job_id || !job.expires_at) {
       setLocalWorkerLoading(false);
-      setLocalWorker(null);
+      // Si el server mostró una boleta a medias, su panel se queda (no se limpia).
+      setLocalWorker((cur) => (cur?.status === "result_needs_review" ? cur : null));
       return;
     }
 
@@ -1285,7 +1445,46 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }, window.location.origin);
   }
 
+  // Folio de la boleta única A MEDIAS (rev. adversarial M1/M2): se registra con los
+  // datos del INTENTO guardado en el job (o el monto/tipo declarados de ESA boleta),
+  // nunca con el borrador que está abierto ahora. Cualquier persona de la cuenta.
+  async function registrarFolioLapida() {
+    if (!lapidaBU) return;
+    const folio = Number(folioLapida.replace(/[^0-9]/g, ""));
+    if (!Number.isSafeInteger(folio) || folio <= 0) {
+      toast("Escribe el folio de esa boleta tal como aparece en el SII.", "error");
+      return;
+    }
+    // Con el intento en memoria se manda como declarado (V2-M1: sin la migración el
+    // server no lo tiene); sin él, el monto y tipo que la persona escribió.
+    const dec = declaradoParaFolio(lapidaBU.intento, montoLapida, tipoLapida);
+    if (!dec.ok) {
+      toast(dec.mensaje, "error");
+      return;
+    }
+    const declarado = dec.declarado;
+    setLocalWorkerLoading(true);
+    try {
+      const r = await registrarFolioAMano(lapidaBU.jobId, folio, declarado);
+      if (r.estado !== "recuperado") {
+        toast(r.estado === "error" ? r.mensaje : "No se pudo registrar el folio.", "error");
+        return;
+      }
+      closedJobIdsRef.current.add(lapidaBU.jobId);
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: lapidaBU.jobId }, window.location.origin);
+      setLocalWorker({ jobId: lapidaBU.jobId, status: r.already ? "already_exists" : "emitted", message: `Boleta #${folio} guardada en la app.` });
+      setLapidaBU(null);
+      setEmissionLock(null);
+      toast(`Boleta #${folio} guardada en la app`, "success");
+      router.refresh();
+    } finally {
+      setLocalWorkerLoading(false);
+    }
+  }
+
   async function persistVisibleSiiFolio() {
+    // Con una boleta a medias en pantalla, el folio es de ESA boleta: nunca con el borrador.
+    if (lapidaBU) return registrarFolioLapida();
     const folio = Number(manualSiiFolio.replace(/[^0-9]/g, ""));
     if (!Number.isSafeInteger(folio) || folio <= 0) {
       toast("Ingresa el folio visible en SII", "error");
@@ -1378,10 +1577,13 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       const json = (await res.json()) as { ok?: boolean; folio?: number; boleta_id?: string; error?: string; detalle?: string; already_exists?: boolean };
       if (!res.ok || !json.ok) {
         toast(json.error === "SIN_RESULTADO_SII_RECUPERABLE"
-          ? "No encontré ninguna boleta SII pendiente de rescatar (últimas 24 horas). Si la ventana del SII no mostró un folio, no se emitió nada."
+          ? lapidaBU
+            ? "No encontré el folio de esa boleta guardado en la app. Búscala en el SII: si aparece, escribe su folio en «Boleta a medias»."
+            : "No encontré ninguna boleta SII pendiente de rescatar (últimas 24 horas). Si la ventana del SII no mostró un folio, no se emitió nada."
           : json.detalle ?? json.error ?? "No se pudo guardar el PDF SII detectado", "error");
         return;
       }
+      setLapidaBU(null);
       setLocalWorker({
         jobId: localWorker?.jobId ?? null,
         status: json.already_exists ? "already_exists" : "emitted",
@@ -1411,6 +1613,33 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     setLocalWorkerLoading(false);
   }
 
+  // SALIDA HUMANA de la lápida de boleta única (seguridad 2026-09-30): la persona
+  // revisó el SII y la boleta no está → el server cierra el intento (`failed`), suelta
+  // el candado y se puede volver a emitir. Si el server tiene un folio capturado para
+  // ese intento, lo rechaza (FOLIO_CAPTURADO): salió, hay que recuperarlo.
+  async function declararNoSalioUnica() {
+    const jobId = localWorker?.jobId ?? null;
+    if (!jobId) return;
+    setLocalWorkerLoading(true);
+    try {
+      const r = await declararNoSalio(jobId);
+      if (!r.ok) {
+        toast(r.mensaje, "error");
+        return;
+      }
+      closedJobIdsRef.current.add(jobId);
+      // Que ninguna ventana del SII de ese intento quede viva con «Reintentar» (A1).
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+      setLapidaBU(null);
+      setConfirmandoNoSalio(false);
+      setLocalWorker(null);
+      setEmissionLock(null);
+      toast("Listo: quedó registrado que esa boleta no salió. Ya puedes emitir.", "success");
+    } finally {
+      setLocalWorkerLoading(false);
+    }
+  }
+
   // Cancela TU PROPIO candado pegado de un job anterior (myStaleLock): el job cuyo
   // lock quedó tomado ya no es el actual en vuelo (el modal se remonteó, localWorker
   // es null), así que se cierra por el job_id del propio lock. Libera el lock al toque
@@ -1418,7 +1647,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   async function cancelStaleLock() {
     const jobId = activeEmissionLock?.job_id ?? null;
     if (jobId) {
-      await closeEmissionJob(jobId, "cancelled");
+      const cierre = await closeEmissionJobDetalle(jobId, "cancelled");
+      // Una LÁPIDA (boleta que pudo salir en el SII) no se cancela: el server la deja
+      // tal cual. Se muestra su panel (Recuperar / folio a mano / «no salió»).
+      if (cierre.estado === "revision_pendiente") {
+        mostrarLapida({ jobId, intento: cierre.intento, creadaAt: cierre.creadaAt ?? new Date().toISOString(), esMia: true, lanzadaPor: null });
+        setLocalWorkerLoading(false);
+        return;
+      }
       window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
     }
     setLocalWorker(null);
@@ -1776,6 +2012,49 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
               </div>
             )}
 
+            {usesSiiLocal && lapidaBU && (
+              <div style={{ padding: 11, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.25)", color: "var(--text2)", fontSize: 10, lineHeight: 1.5, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  <span className="ed-label" style={{ color: "var(--amber)" }}>Boleta a medias</span><br />
+                  Busca en el SII la {describirIntento(lapidaBU.intento, lapidaBU.creadaAt)}
+                  {!lapidaBU.esMia && <> (la empezó {lapidaBU.lanzadaPor ?? "otra persona de tu cuenta"})</>}. Pudo haber salido: no la vuelvas a emitir.
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <input value={folioLapida} onChange={(e) => setFolioLapida(e.target.value)} inputMode="numeric" placeholder="Folio en el SII" aria-label="Folio de la boleta a medias"
+                    style={{ width: 110, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", padding: "0 8px", fontSize: 10 }} />
+                  {!lapidaBU.intento && (
+                    <>
+                      <input value={montoLapida} onChange={(e) => setMontoLapida(e.target.value)} inputMode="numeric" placeholder="Monto de esa boleta" aria-label="Monto de la boleta a medias"
+                        style={{ width: 120, height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", padding: "0 8px", fontSize: 10 }} />
+                      <select value={tipoLapida} onChange={(e) => setTipoLapida(e.target.value === "41" ? 41 : 39)} aria-label="Tipo de la boleta a medias"
+                        style={{ height: 28, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 10 }}>
+                        <option value="39">Afecta</option>
+                        <option value="41">Exenta</option>
+                      </select>
+                    </>
+                  )}
+                  <button type="button" onClick={() => { void registrarFolioLapida(); }} disabled={localWorkerLoading}
+                    style={{ height: 28, borderRadius: 8, border: "none", background: "#E8553E", color: "#fff", padding: "0 10px", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
+                    Guardar folio
+                  </button>
+                </div>
+                <div>
+                  {confirmandoNoSalio ? (
+                    <>
+                      <button type="button" onClick={() => { void declararNoSalioUnica(); }} disabled={localWorkerLoading}
+                        style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 10, fontWeight: 800, textDecoration: "underline", padding: 0 }}>¿Seguro? Revisé y no está</button>
+                      {" · "}
+                      <button type="button" onClick={() => setConfirmandoNoSalio(false)}
+                        style={{ background: "none", border: "none", color: "var(--text2)", cursor: "pointer", fontSize: 10, padding: 0 }}>Cancelar</button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmandoNoSalio(true)}
+                      style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 10, fontWeight: 800, textDecoration: "underline", padding: 0 }}>Revisé el SII y no salió</button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {usesSiiLocal && (
               <div style={{ padding: 11, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>
                 <div>
@@ -1896,11 +2175,16 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 ) : (
                   <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
                     Hay una emisión SII sin resolver ({WORKER_STATUS_LABELS[localWorker?.status ?? ""] ?? "en proceso"}). No vuelvas a emitir: usa <strong>Recuperar emisión SII</strong> (a la izquierda) para rescatar el folio.
+                    {/* Lápida (pudo salir en el SII): la única salida además del folio es
+                        declarar, tras revisar el SII, que no salió. El server lo valida. */}
+                    {localWorker?.status === "result_needs_review" && lapidaBU && (
+                      <>{" "}Resuélvela en el recuadro «Boleta a medias».</>
+                    )}
                     {/* Salida para el estado fantasma: si el servidor YA liberó la
                         emisión (lock inexistente), quedarse aquí era un callejón sin
                         salida en la sesión. Con lock liberado + rescate a mano, cancelar
                         es razonable — con advertencia explícita de revisar el folio. */}
-                    {emissionLock?.ok === true && emissionLock.locked !== true && (
+                    {emissionLock?.ok === true && emissionLock.locked !== true && localWorker?.status !== "result_needs_review" && (
                       <>
                         {" "}Si la ventana del SII no mostró ningún folio, puedes{" "}
                         <button type="button" onClick={resetStuckSiiEmission} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>cancelarla</button>

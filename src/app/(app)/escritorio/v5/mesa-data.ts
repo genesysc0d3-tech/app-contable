@@ -5,6 +5,7 @@ import { computeGuardarailEmision } from "@/lib/intermediario/guardarail-emision
 import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-date";
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import type { ActividadItem } from "./ActividadView";
+import { sinDocsRepetidos } from "./mesa-data-util";
 import { FILTRO_TIPOS_REGISTRO_EMISION, boletasUnicasSinDocumento } from "@/lib/emission/registros-emision";
 
 // ── Helpers de fecha (compartidos con el render del escritorio) ──────────────
@@ -237,7 +238,7 @@ export async function fetchMesaDateDependent(
         progreso_ia: { origen: "emision_directa", boleta_id: boleta.id, folio: boleta.folio, tipo_dte: boleta.tipo_dte, monto_total: boleta.monto_total, receptor: boleta.receptor_razon_social ?? "consumidor final", sintetico_desde_boleta: true },
       };
     });
-  const docsAgregados = [...boletasComoAgregados, ...docsBase].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const docsAgregados = sinDocsRepetidos([...boletasComoAgregados, ...docsBase]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const boletaUnicaIds = new Set(
     docsAgregados.filter((d) => ["boleta_unica", "boleta_sii_local", "dte_simpleapi"].includes(d.tipo)).map((d) => (d.progreso_ia as { boleta_id?: string } | null)?.boleta_id).filter((v): v is string => Boolean(v)),

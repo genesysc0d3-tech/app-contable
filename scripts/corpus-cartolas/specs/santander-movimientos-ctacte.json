@@ -1,0 +1,147 @@
+{
+ "id": "santander-movimientos-ctacte",
+ "familia": "Santander 'Movimientos CtaCte' (MONTO + CARGO/ABONO + SALDO, 11 filas de metadatos)",
+ "origen": "real",
+ "evidencia": "5 cartolas reales (238-684 filas): banderas solo 'A' (export filtrado a abonos), saldo presente; nuevo: 'filtrada: abonos'",
+ "hoja": "Movimientos CtaCte",
+ "arriba": [
+  [
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente",
+   "Detalle de movimientos de Cuenta Corriente"
+  ],
+  [],
+  [
+   "Sr. (a):",
+   "{TITULAR}",
+   "Fecha:",
+   "{FECHA_LARGA}"
+  ],
+  [
+   "Empresa:",
+   "{EMPRESA}",
+   "Hora:",
+   "{HORA}"
+  ],
+  [
+   "RUT empresa:",
+   "{RUT}"
+  ],
+  [
+   "Datos cuenta",
+   "Datos cuenta",
+   "Datos cuenta",
+   "Datos cuenta",
+   "Datos cuenta",
+   "Datos cuenta",
+   "Datos cuenta",
+   "Datos cuenta"
+  ],
+  [
+   "Cuenta Corriente N°: {CUENTA}",
+   "Moneda: PESOS DE CHILE",
+   "Oficina: {OFICINA}"
+  ],
+  [
+   "Datos ejecutivo",
+   "Datos ejecutivo",
+   "Datos ejecutivo",
+   "Datos ejecutivo",
+   "Datos ejecutivo",
+   "Datos ejecutivo",
+   "Datos ejecutivo",
+   "Datos ejecutivo"
+  ],
+  [
+   "Ejecutivo: {EJECUTIVO}"
+  ],
+  [
+   "Detalle movimientos",
+   "Detalle movimientos",
+   "Detalle movimientos",
+   "Detalle movimientos",
+   "Detalle movimientos",
+   "Detalle movimientos",
+   "Detalle movimientos",
+   "Detalle movimientos"
+  ],
+  [
+   "Desde {FECHA_DESDE}",
+   "Hasta {FECHA_HASTA}"
+  ]
+ ],
+ "titulos": true,
+ "columnas": [
+  {
+   "titulo": "MONTO",
+   "rol": "monto",
+   "celda": "n",
+   "z": "#,##0"
+  },
+  {
+   "titulo": "DESCRIPCIÓN MOVIMIENTO",
+   "rol": "glosa",
+   "prefijo_doc": true
+  },
+  {
+   "titulo": "FECHA",
+   "rol": "fecha",
+   "celda": "s",
+   "fmt": "dd/mm/yyyy"
+  },
+  {
+   "titulo": "SALDO",
+   "rol": "saldo",
+   "celda": "n",
+   "z": "#,##0"
+  },
+  {
+   "titulo": "N° DOCUMENTO",
+   "rol": "doc_corto"
+  },
+  {
+   "titulo": "SUCURSAL",
+   "rol": "sucursal"
+  },
+  {
+   "titulo": "CARGO/ABONO",
+   "rol": "flag",
+   "flag": {
+    "entrada": "A",
+    "salida": "C"
+   }
+  },
+  {
+   "titulo": "N° MOVIMIENTO",
+   "rol": "doc_corto"
+  }
+ ],
+ "orden": "desc",
+ "direcciones": "solo_entradas",
+ "filtrada": true,
+ "pie": [
+  {
+   "tipo": "fila_libre",
+   "celdas": {
+    "monto": "{TOTAL_VISIBLE}",
+    "glosa": "Total general",
+    "saldo": "{N_MOVS} registros"
+   },
+   "gap": 0,
+   "prob": 0.4
+  }
+ ],
+ "filas_vacias_al_final": [
+  0,
+  2
+ ],
+ "movs": [
+  60,
+  700
+ ]
+}

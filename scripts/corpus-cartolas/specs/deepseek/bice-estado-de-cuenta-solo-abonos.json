@@ -1,0 +1,2550 @@
+[
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "date",
+    "z": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DETALLE MOVIMIENTO",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds000:nuevo_core_fechas_excel_y_montos_numeric"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "glosa",
+    "titulo": "DETALLE MOVIMIENTO",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo core bancario exporta la fecha como valor real de Excel y los montos como número puro, y de paso rebautiza la descripción como 'DETALLE MOVIMIENTO'.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds000"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA OPERACIÓN",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "RUT",
+    "rol": "nombre"
+   },
+   {
+    "titulo": "SUCURSAL",
+    "rol": "sucursal"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds001:version_empresas_agrega_rut_y_sucursal"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "agregar_columna",
+    "rol": "nombre",
+    "titulo": "RUT",
+    "posicion": 3,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "sucursal",
+    "titulo": "SUCURSAL",
+    "posicion": 4,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "FECHA OPERACIÓN",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión del portal para empresas agrega el RUT del titular y la sucursal de operación, y antepone 'OPERACIÓN' al título de la fecha.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds001"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CÓDIGO BANCO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds002:nuevo_sistema_unifica_monto_con_signo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "unir_en_monto_con_signo",
+    "rol": "monto_signo",
+    "titulo": "MONTO",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "vacia",
+    "titulo": "CÓDIGO BANCO",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo sistema entrega una sola columna MONTO con signo (débito negativo / crédito positivo), fecha en formato ISO y renombra el código interno.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds002"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "Date",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyy-mm-dd"
+   },
+   {
+    "titulo": "Reference",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "Details",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "Amount",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds003:export_internacional_ingles_orden_desc"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "titulos_en_ingles",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "yyyy-mm-dd",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Para clientes corporativos internacionales el banco cambia todos los títulos a inglés, ordena de más reciente a más antiguo y usa fecha ISO.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds003"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds004:modulo_csv_separador_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo módulo de exportación genera CSV separado por punto y coma, con fecha dd/mm/aaaa, montos con coma decimal y una columna índice al inicio.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds004"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   },
+   {
+    "nombre": "Instrucciones",
+    "posicion": "despues",
+    "tipo": "readme",
+    "filas": [
+     [
+      "Este archivo fue generado por el banco"
+     ],
+     [
+      "Texto ficticio de ayuda"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds005:hojas_extra_y_encabezado_con_saldo_inici"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "hoja_instrucciones_despues",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fila_saldo_inicial",
+    "rol": "saldo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El nuevo portal agrega una hoja de resumen antes de la cartola, una hoja de instrucciones al final y un encabezado con el saldo inicial.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds005"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds006:consolidacion_por_dia_con_subtotales_y_t"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "subtotal_por_dia",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "monto",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El sistema de tesorería consolida la cartola con subtotales por día y agrega al pie un resumen con total y fórmula de suma.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds006"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "N° COMPROBANTE",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "COMENTARIO",
+    "rol": "comentario"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds007:rediseno_columnas_indice_glosa_primera_y"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "doc",
+    "titulo": "N° COMPROBANTE",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_columna",
+    "rol": "comentario",
+    "titulo": "COMENTARIO",
+    "posicion": 5,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "El rediseño de la planilla agrega un índice numerado, mueve la descripción al inicio, renombra DOCUMENTO a N° COMPROBANTE y añade una columna de comentarios.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds007"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds008:separa_debitos_y_creditos_y_quita_codigo"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "separar_cargo_y_abono",
+    "rol": "monto",
+    "titulo": "CRÉDITOS",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "vacia",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La versión para empresas muestra débitos y créditos en columnas separadas, elimina el código interno y formatea los montos en pesos chilenos.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds008"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "formato": "xls",
+  "mutaciones": [
+   "ds009:export_antiguo_xls_fecha_excel_montos_te"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_xls_antiguo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "fecha_como_fecha_excel",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Un proveedor de core antiguo que aún usan algunas sucursales exporta .xls, con la fecha como valor de Excel y los montos como texto.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds009"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "VALOR",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [
+   {
+    "tipo": "fila_total",
+    "etiqueta": "Total",
+    "col_etiqueta": 0,
+    "roles": [
+     "monto"
+    ],
+    "gap": 1
+   },
+   {
+    "tipo": "fila_total",
+    "roles": [
+     "monto"
+    ],
+    "formula": true,
+    "gap": 0
+   }
+  ],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds100:totales_al_final_con_formula"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mover_columna",
+    "rol": "glosa",
+    "titulo": "",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "monto",
+    "titulo": "VALOR",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_fila_total",
+    "rol": "",
+    "titulo": "TOTAL",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_formula_suma",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta quiere ver cuánto entró en total: mueve la descripción al inicio, renombra la columna de dinero a 'VALOR' y agrega una fila TOTAL con fórmula SUMA.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds100"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd/mm/yyyy"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds101:solo_abonos_limpia_fechas_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "quitar_columna",
+    "rol": "codigo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "doc",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd/mm/yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_abajo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Borra las columnas DOCUMENTO y CODIGO que no le sirven y reescribe las fechas a mano en dd/mm/yyyy para su contador, dejando un resumen abajo.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds101"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "hojas_extra": [
+   {
+    "nombre": "Resumen",
+    "posicion": "antes",
+    "tipo": "resumen",
+    "filas": [
+     [
+      "Cartola"
+     ],
+     [
+      "Cuenta",
+      "{CUENTA}"
+     ],
+     [
+      "Saldo Inicial",
+      "{SALDO_INICIAL|cl_pesos}"
+     ],
+     [
+      "Total Cargos",
+      "{TOTAL_CARGOS|cl_pesos}"
+     ],
+     [
+      "Total Abonos",
+      "{TOTAL_ABONOS|cl_pesos}"
+     ],
+     [
+      "Saldo Final",
+      "{SALDO_FINAL|cl_pesos}"
+     ]
+    ]
+   }
+  ],
+  "mutaciones": [
+   "ds102:copia_a_hoja_resumen_con_encabezado"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "hoja_resumen_antes",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "agregar_resumen_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "codigo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Copia lo ya filtrado a una hoja 'RESUMEN' antes de la cartola, le agrega un encabezado con el total arriba y borra el CODIGO.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds102"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA OPERACION",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "dd-mm-yyyy"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "s",
+    "fmt": "cl_pesos"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds103:montos_tecleados_como_texto"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "montos_como_texto",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "cl_pesos",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "formato_fecha",
+    "rol": "fecha",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "dd-mm-yyyy",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "renombrar_columna",
+    "rol": "fecha",
+    "titulo": "FECHA OPERACION",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "La clienta reescribe los abonos a mano con $ y puntos (quedan como texto) y las fechas como dd-mm-yyyy, renombrando FECHA a 'FECHA OPERACION'.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds103"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "",
+    "rol": "indice"
+   },
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "desc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "extras": {
+   "subtotal_dia": true
+  },
+  "mutaciones": [
+   "ds104:indice_y_orden_inverso_con_subtotales"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "columna_indice",
+    "rol": "otro_num",
+    "titulo": "N°",
+    "posicion": 0,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "cambiar_orden",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "desc",
+    "separador": ""
+   },
+   {
+    "op": "subtotal_por_dia",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Agrega un correlativo N° al inicio, ordena de más reciente a más antiguo y subtotaliza los abonos por día.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds104"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd"
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa"
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "formato": "csv",
+  "csv_sep": ";",
+  "mutaciones": [
+   "ds106:exportado_a_csv_punto_y_coma"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "exportar_csv",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ";"
+   },
+   {
+    "op": "quitar_saldo",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "montos_como_numero",
+    "rol": "monto",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "plano",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Guardó la planilla como CSV con separador punto y coma y dejó los montos como números planos para conciliar en su sistema.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds106"
+ },
+ {
+  "id": "bice-estado-de-cuenta-solo-abonos",
+  "familia": "BICE 'ESTADO DE CUENTA' editada: solo ABONOS y SALDO FINAL",
+  "origen": "deepseek-mutacion",
+  "evidencia": "1 cartola real (166 filas): 'todo entrada' correcto; nuevo: 'totales calzan pero nada dice cargo/abono' (el título ABONOS sí lo dice)",
+  "hoja": "cartola",
+  "arriba": [
+   [
+    "Fecha de emisión:",
+    "{FECHA}"
+   ],
+   [
+    "Saldo inicial",
+    "{SALDO_INICIAL}"
+   ],
+   [
+    "Saldo disponible",
+    "{SALDO_FINAL}"
+   ],
+   [
+    "Ejecutivo: {EJECUTIVO}"
+   ],
+   [
+    "Nota: los montos están en pesos"
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   [
+    "ESTADO DE CUENTA"
+   ],
+   [
+    "{EMPRESA}"
+   ],
+   [
+    "NOMBRE DEL CLIENTE",
+    "CUENTA"
+   ],
+   [
+    "{TITULAR}",
+    "{CUENTA_GUION}"
+   ],
+   [
+    "FECHA DESDE",
+    "FECHA HASTA"
+   ],
+   [
+    "{FECHA_DESDE_GUION}",
+    "{FECHA_HASTA_GUION}"
+   ],
+   [],
+   [
+    "MOVIMIENTOS DE LA CUENTA"
+   ]
+  ],
+  "titulos": true,
+  "todo_texto": true,
+  "columnas": [
+   {
+    "titulo": "FECHA",
+    "rol": "fecha",
+    "celda": "s",
+    "fmt": "yyyymmdd",
+    "span": 2
+   },
+   {
+    "titulo": "DOCUMENTO",
+    "rol": "doc"
+   },
+   {
+    "titulo": "CODIGO",
+    "rol": "vacia"
+   },
+   {
+    "titulo": "DESCRIPCION",
+    "rol": "glosa",
+    "span": 2
+   },
+   {
+    "titulo": "ABONOS",
+    "rol": "monto",
+    "celda": "n"
+   }
+  ],
+  "orden": "asc",
+  "direcciones": "solo_entradas",
+  "pie": [],
+  "abajo": [
+   [],
+   [
+    "",
+    "",
+    "SALDO FINAL"
+   ],
+   [
+    "",
+    "",
+    "{SALDO_FINAL}"
+   ],
+   [],
+   [
+    "",
+    "",
+    "",
+    "Movimientos al cierre del dia"
+   ]
+  ],
+  "filas_vacias_al_final": [
+   0,
+   3
+  ],
+  "movs": [
+   20,
+   200
+  ],
+  "filtrada": true,
+  "mutaciones": [
+   "ds107:encabezado_personal_y_celdas_combinadas"
+  ],
+  "ops_deepseek": [
+   {
+    "op": "mas_basura_arriba",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "celdas_combinadas",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "quitar_columna",
+    "rol": "codigo",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   },
+   {
+    "op": "vacio_como_guion",
+    "rol": "",
+    "titulo": "",
+    "posicion": -1,
+    "formato_fecha": "",
+    "formato_monto": "",
+    "orden": "",
+    "separador": ""
+   }
+  ],
+  "razon_deepseek": "Le puso sus datos personales arriba con el título en celdas combinadas, borró el CODIGO y dejó guiones en las celdas vacías.",
+  "variante": "bice-estado-de-cuenta-solo-abonos~ds107"
+ }
+]

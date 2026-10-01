@@ -1,6 +1,8 @@
 import type { AdapterConfig, Row } from "./types";
-import { parseChileanNumber } from "./apply";
+import { classifyTipoFlag, parseChileanNumber } from "./apply";
 import { cuadreSaldo } from "./saldo-cuadre";
+import { derivarNumberFormat, leerCeldaMonto, valorCeldaSuelta } from "./numeros";
+import { cellEsFecha, esColumnaCorrelativa, esColumnaDeCodigos } from "./celdas";
 import { encabezadoConSaldo, encabezadoConSalidas, normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
 
 /**
@@ -14,45 +16,29 @@ import { encabezadoConSaldo, encabezadoConSalidas, normalizarTitulo, RE_ENTRADA,
  * Returns null if no plausible cartola structure is detected. The caller
  * should then fall back to the next layer.
  */
-/**
- * ¿La celda parece una fecha? Cubre las TRES formas en que llega una fecha
- * desde XLSX (cellDates:true): Date nativo, serial de Excel (rango 2000-2099,
- * mismo criterio que apply.ts), o texto dd/mm/yyyy · yyyy-mm-dd. Antes solo
- * se aceptaba texto → una planilla con fechas REALES de Excel (el caso normal
- * de una planilla casera) era invisible para todos los detectores y caía a
- * la capa legacy → IA (bug cazado con la planilla M&E 2026-08-22).
- */
-export function cellEsFecha(cell: string | number | null | undefined | Date): boolean {
-  if (cell == null) return false;
-  if (cell instanceof Date) return !Number.isNaN(cell.getTime());
-  if (typeof cell === "number") return cell >= 36526 && cell <= 73050;
-  const s = String(cell).trim();
-  if (!s) return false;
-  if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$|^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(s)) return true;
-  // Date ya serializado a string (p.ej. "2026-08-08 00:00:00" o ISO)
-  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(s)) return true;
-  // BancoEstado (incidente 2026-09-23): "20260923" en la cartola y "02/09" (sin
-  // año) en la hoja Movimientos. Sin esto la hoja no parecía cartola y caía a la
-  // IA, que inventaba la glosa y clasificaba por giro. Ventana de año acotada
-  // para no confundir un N° de cuenta de 8 dígitos con una fecha.
-  const m8 = s.match(/^(20\d{2})(\d{2})(\d{2})$/);
-  if (m8) {
-    const y = parseInt(m8[1], 10); const mm = parseInt(m8[2], 10); const dd = parseInt(m8[3], 10);
-    return y >= 2015 && y <= new Date().getFullYear() + 1 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
-  }
-  const mSinAnio = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
-  if (mSinAnio) {
-    const dd = parseInt(mSinAnio[1], 10); const mm = parseInt(mSinAnio[2], 10);
-    return dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12;
-  }
-  return false;
-}
+// cellEsFecha vive en celdas.ts (lo usan también el lector y el censo); se
+// re-exporta acá porque validator y tests lo importan desde heuristic.
+export { cellEsFecha } from "./celdas";
 
 export function detectHeuristic(rows: Row[]): AdapterConfig | null {
+  const cfg = detectHeuristicSinFormato(rows);
+  if (!cfg) return null;
+  // number_format DERIVADO de las celdas de plata (punto 1, 2026-09-30): antes
+  // siempre "chilean" y applyAdapter lo ignoraba.
+  const c = cfg.columns;
+  cfg.number_format = derivarNumberFormat(rows as unknown[][], cfg.skip_rows_before_data, [c.cargo, c.abono, c.saldo, c.monto ?? -1]);
+  return cfg;
+}
+
+function detectHeuristicSinFormato(rows: Row[]): AdapterConfig | null {
   // Step 1: find the first run of >= 3 consecutive "transaction-looking" rows
   // (lowered from 5 to also accept smaller test cartolas)
-  const txStart = findTransactionBlockStart(rows);
-  if (txStart < 0) return null;
+  const inicio = findTransactionBlockStart(rows);
+  if (inicio < 0) return null;
+  // Glosa partida en 2 filas (adversarial-1 falla 3): el primer bloque de ≥3
+  // movimientos seguidos puede empezar DESPUÉS de movimientos separados por una
+  // fila de continuación. Se extiende hacia arriba para no perder el primero.
+  const txStart = extenderBloqueHaciaArriba(rows, inicio);
 
   // Step 2: collect a sample of tx rows to analyze column roles
   const sample: Row[] = [];
@@ -65,11 +51,10 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
   // Step 3: try layout detection (two_cols first, then single_col)
   const twoColsCfg = inferColumns(sample, txStart > 0 ? rows[txStart - 1] : undefined);
   if (twoColsCfg) {
-    const firstFecha = String(sample[0][twoColsCfg.fecha] ?? "");
     return {
       header_row: Math.max(0, txStart - 1),
       skip_rows_before_data: txStart,
-      date_format: detectDateFormat(firstFecha),
+      date_format: formatoFechaDeColumna(rows, txStart, twoColsCfg.fecha),
       number_format: "chilean",
       layout: "two_cols",
       columns: twoColsCfg,
@@ -78,14 +63,26 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
 
   const singleColCfg = inferSingleColLayout(sample);
   if (singleColCfg) {
-    const firstFecha = String(sample[0][singleColCfg.fecha] ?? "");
     return {
       header_row: Math.max(0, txStart - 1),
       skip_rows_before_data: txStart,
-      date_format: detectDateFormat(firstFecha),
+      date_format: formatoFechaDeColumna(rows, txStart, singleColCfg.fecha),
       number_format: "chilean",
       layout: "single_col",
       columns: singleColCfg,
+    };
+  }
+
+  // Monto con SIGNO en una sola columna (Falabella, vuelta 2 P5).
+  const conSigno = inferMontoConSigno(sample, txStart > 0 ? rows[txStart - 1] : undefined);
+  if (conSigno) {
+    return {
+      header_row: Math.max(0, txStart - 1),
+      skip_rows_before_data: txStart,
+      date_format: formatoFechaDeColumna(rows, txStart, conSigno.fecha),
+      number_format: "chilean",
+      layout: "monto_con_signo",
+      columns: conSigno,
     };
   }
 
@@ -101,11 +98,10 @@ export function detectHeuristic(rows: Row[]): AdapterConfig | null {
   if (encabezadoConSalidas(titulos) || encabezadoConSaldo(titulos)) return null;
   const txLogCfg = inferTransactionsLogLayout(sample);
   if (txLogCfg) {
-    const firstFecha = String(sample[0][txLogCfg.fecha] ?? "");
     return {
       header_row: Math.max(0, txStart - 1),
       skip_rows_before_data: txStart,
-      date_format: detectDateFormat(firstFecha),
+      date_format: formatoFechaDeColumna(rows, txStart, txLogCfg.fecha),
       number_format: "chilean",
       layout: "transactions_log",
       default_tipo_flujo: "entrada",
@@ -133,6 +129,37 @@ export function findTransactionBlockStart(rows: Row[]): number {
     }
   }
   return -1;
+}
+
+/**
+ * Sube el inicio del bloque mientras arriba haya movimientos, saltando filas de
+ * CONTINUACIÓN (sin fecha, con texto) que estén entre dos movimientos.
+ */
+export function extenderBloqueHaciaArriba(rows: Row[], inicio: number): number {
+  let s = inicio;
+  let i = inicio - 1;
+  while (i >= 0) {
+    const r = rows[i];
+    if (r && isTransactionRow(r)) { s = i; i--; continue; }
+    // Glosa partida en 2, 3 o 4 filas (vuelta 2, P2): se saltan hasta 3
+    // continuaciones seguidas si arriba de ellas hay un movimiento.
+    let j = i;
+    while (j >= 0 && i - j < 3 && rows[j] && esFilaDeContinuacion(rows[j])) j--;
+    if (j < i && j >= 0 && rows[j] && isTransactionRow(rows[j])) { i = j; continue; }
+    break;
+  }
+  return s;
+}
+
+/** Sin ninguna fecha y con texto (letras): el resto de una glosa partida. */
+function esFilaDeContinuacion(r: Row): boolean {
+  let texto = false;
+  for (const cell of r) {
+    if (cell == null || String(cell).trim() === "") continue;
+    if (cellEsFecha(cell)) return false;
+    if (typeof cell === "string" && /[a-záéíóúñ]/i.test(cell)) texto = true;
+  }
+  return texto;
 }
 
 /**
@@ -214,9 +241,13 @@ function inferColumns(sample: Row[], header?: Row): InferredCols | null {
         numSeries.push(0);
         continue;
       }
-      const n = parseChileanNumber(s);
+      // Plata = un monto LIMPIO (número tipado o "1.234.567", "$ 1.234",
+      // "1,234,567"): antes la regex exigía puros dígitos y separadores, así que
+      // "$ 1.234.567" (BancoEstado) no era plata y un RUT "10.111.222-3" sí.
+      const l = leerCeldaMonto(cell);
+      const n = l ? Math.abs(valorCeldaSuelta(l)) : 0;
       // "20260923" es una fecha, no un monto (BancoEstado, 2026-09-23).
-      if (n > 0 && /^[\d.,\- ]+$/.test(s) && !cellEsFecha(cell)) {
+      if (n > 0 && !cellEsFecha(cell)) {
         numbers++;
         numSum += n;
         if (n > numMax) numMax = n;
@@ -269,15 +300,38 @@ function inferColumns(sample: Row[], header?: Row): InferredCols | null {
     (s) => s.idx !== fechaCol.idx && s.idx !== descCol.idx && s.numberRatio > 0
   );
 
-  // saldo: numeric column that looks monotonic AND has values in every row
-  const saldoCol = numericCols
-    .filter((s) => s.isMonotonic && s.nonEmpty >= sample.length * 0.9 && !esColumnaId(sample, s.idx))
+  // Rol grueso por FORMA: un correlativo (5000, 5001…) o una columna de códigos
+  // nunca es plata ni saldo (Itaú sin títulos, 2026-09-30).
+  const plata = numericCols.filter((s) => !esColumnaNoPlata(sample, s.idx));
+
+  // (1) La ECUACIÓN primero (punto 4, 2026-09-30): probar TODAS las ternas
+  // (saldo, cargo, abono) entre las columnas de plata y quedarse con la que
+  // cierra saldo[i] = saldo[i-1] + abono − cargo. Es aritmética, no adivinanza;
+  // antes el saldo se elegía por "parece corrido" y la ecuación solo orientaba.
+  const terna = mejorTernaPorSaldo(sample, plata.map((s) => s.idx));
+  if (terna) {
+    const ndoc = numericCols
+      .filter((s) => s.idx !== terna.cargo && s.idx !== terna.abono && s.idx !== terna.saldo)
+      .sort((a, b) => b.nonEmpty - a.nonEmpty)[0];
+    return {
+      fecha: fechaCol.idx,
+      descripcion: descCol.idx,
+      n_documento: ndoc?.idx ?? -1,
+      cargo: terna.cargo,
+      abono: terna.abono,
+      saldo: terna.saldo,
+    };
+  }
+
+  // (2) Sin terna que cierre: forma. saldo = columna "corrida" llena.
+  const saldoCol = plata
+    // Lleno de PLATA (≠ 0) en casi todas las filas: un 0 tipado en la columna de
+    // abonos (Itaú) no es "lleno" — antes contaba y el abono pasaba por saldo.
+    .filter((s) => s.isMonotonic && s.numberRatio >= 0.9)
     .sort((a, b) => b.nonEmpty - a.nonEmpty)[0];
 
   // cargo & abono: two numeric columns that are mutually exclusive (sum of nonEmpty per row = 1 most of the time)
-  const candidateExclusive = numericCols.filter(
-    (s) => (!saldoCol || s.idx !== saldoCol.idx) && !esColumnaId(sample, s.idx)
-  );
+  const candidateExclusive = plata.filter((s) => !saldoCol || s.idx !== saldoCol.idx);
 
   // Find the pair (i,j) in candidateExclusive where rows with BOTH > 0 is minimal
   // AND rows with AT LEAST ONE > 0 is maximal.
@@ -348,6 +402,68 @@ function inferColumns(sample: Row[], header?: Row): InferredCols | null {
     abono: abonoCol,
     saldo: saldoCol?.idx ?? -1,
   };
+}
+
+/** Montos (absolutos) de una columna en la muestra; 0 si la celda no es plata. */
+function montosColumna(sample: Row[], col: number): number[] {
+  return sample.map((r) => {
+    const l = leerCeldaMonto(r[col]);
+    return l ? Math.abs(valorCeldaSuelta(l)) : 0;
+  });
+}
+
+/** ¿La columna NO puede ser plata por su forma (código, correlativo, id)? */
+function esColumnaNoPlata(sample: Row[], col: number): boolean {
+  const celdas = sample.map((r) => r[col]);
+  return esColumnaId(sample, col) || esColumnaDeCodigos(celdas) || esColumnaCorrelativa(celdas);
+}
+
+/**
+ * La terna (saldo, cargo, abono) que mejor cierra la ecuación del saldo, entre
+ * TODAS las columnas de plata. Exige: cargo/abono excluyentes (una fila trae uno
+ * u otro), ≥5 filas revisadas y ≤10% fallidas; y que la ganadora sea ÚNICA (si
+ * dos ternas distintas cierran igual, la ecuación no decide → null).
+ */
+export function mejorTernaPorSaldo(
+  sample: Row[],
+  cols: number[],
+): { saldo: number; cargo: number; abono: number; fallidas: number; revisadas: number } | null {
+  const montos = new Map(cols.map((c) => [c, montosColumna(sample, c)]));
+  const llenas = cols.filter((c) => montos.get(c)!.filter((n) => n > 0).length >= sample.length * 0.9);
+  // `estricta` = fallidas AL PESO: desempata lo que la tolerancia blanda (1% del
+  // saldo) no distingue. Con saldo alto y movimientos chicos, cargo↔abono al
+  // revés también "cuadra" blando; al peso, jamás (adversarial-1 falla 1).
+  type T = { saldo: number; cargo: number; abono: number; fallidas: number; revisadas: number; ratio: number; estricta: number };
+  const buenas: T[] = [];
+  for (const s of llenas) {
+    for (let i = 0; i < cols.length; i++) {
+      for (let j = i + 1; j < cols.length; j++) {
+        const x = cols[i]; const y = cols[j];
+        if (x === s || y === s) continue;
+        const mx = montos.get(x)!; const my = montos.get(y)!;
+        let both = 0; let either = 0;
+        for (let k = 0; k < sample.length; k++) {
+          if (mx[k] > 0 && my[k] > 0) both++;
+          if (mx[k] > 0 || my[k] > 0) either++;
+        }
+        if (either < sample.length * 0.9 || both > sample.length * 0.1) continue;
+        for (const [cargo, abono] of [[x, y], [y, x]]) {
+          const r = cuadreSaldo(sample, cargo, abono, s);
+          if (r.revisadas < 5) continue;
+          const ratio = r.fallidas / r.revisadas;
+          if (ratio > 0.1) continue;
+          const e = cuadreSaldo(sample, cargo, abono, s, "estricta");
+          buenas.push({ saldo: s, cargo, abono, ...r, ratio, estricta: e.revisadas ? e.fallidas / e.revisadas : 1 });
+        }
+      }
+    }
+  }
+  if (!buenas.length) return null;
+  buenas.sort((a, b) => a.estricta - b.estricta || a.ratio - b.ratio || b.revisadas - a.revisadas);
+  const [g, segunda] = buenas;
+  // Empate exacto entre dos asignaciones distintas: la aritmética no decide.
+  if (segunda && segunda.estricta === g.estricta && segunda.ratio === g.ratio && segunda.revisadas === g.revisadas) return null;
+  return { saldo: g.saldo, cargo: g.cargo, abono: g.abono, fallidas: g.fallidas, revisadas: g.revisadas };
 }
 
 /**
@@ -442,16 +558,13 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
   }
   if (tipoCol < 0) return null;
 
-  // Collect all candidate numeric columns
+  // Collect all candidate numeric columns (montos LIMPIOS; un correlativo o un
+  // código nunca es monto ni saldo — Santander "N° Documento" 1000, 1001…).
   const numericCols: number[] = [];
   for (let col = 0; col < ncols; col++) {
     if (col === fechaCol || col === descCol || col === tipoCol) continue;
-    let numericCount = 0;
-    for (const r of sample) {
-      const s = String(r[col] ?? "").trim();
-      if (!s) continue;
-      if (parseChileanNumberLocal(s) > 0) numericCount++;
-    }
+    if (esColumnaNoPlata(sample, col)) continue;
+    const numericCount = montosColumna(sample, col).filter((n) => n > 0).length;
     if (numericCount / sample.length >= 0.7) numericCols.push(col);
   }
 
@@ -486,9 +599,13 @@ function inferSingleColLayout(sample: Row[]): InferredCols | null {
       montoCol = bestPair.monto;
       saldoCol = bestPair.saldo;
     } else if (bestPair) {
-      // Couldn't verify via equation → fall back to first numeric col as monto
-      montoCol = numericCols[0];
-      saldoCol = numericCols[1] ?? -1;
+      // La ecuación no verificó: por FORMA, el monto es la columna que NO
+      // parece saldo corrido (antes "la primera numérica", y con las columnas
+      // en orden inverso el saldo pasaba a ser el monto en silencio).
+      const corridas = numericCols.filter((c) => isLikelyRunningBalance(montosColumna(sample, c)));
+      const noCorridas = numericCols.filter((c) => !corridas.includes(c));
+      montoCol = noCorridas[0] ?? numericCols[0];
+      saldoCol = corridas.find((c) => c !== montoCol) ?? numericCols.find((c) => c !== montoCol) ?? -1;
     }
   }
 
@@ -563,6 +680,13 @@ function orientarPorSaldo(
   const invertida = ratio(cuadreSaldo(sample, der, izq, saldo));
   if (normal <= 0.2 && normal < invertida) return { cargo: izq, abono: der };
   if (invertida <= 0.2 && invertida < normal) return { cargo: der, abono: izq };
+  // Empate blando (saldo alto, movimientos chicos): desempata AL PESO.
+  if (normal <= 0.2 && invertida <= 0.2) {
+    const ne = ratio(cuadreSaldo(sample, izq, der, saldo, "estricta"));
+    const ie = ratio(cuadreSaldo(sample, der, izq, saldo, "estricta"));
+    if (ne < ie) return { cargo: izq, abono: der };
+    if (ie < ne) return { cargo: der, abono: izq };
+  }
   return null;
 }
 
@@ -667,7 +791,7 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
   if (montoCol >= 0) break;
   for (let col = 0; col < ncols; col++) {
     if (col === fechaCol || col === descCol) continue;
-    if (esColumnaId(sample, col)) continue;
+    if (esColumnaNoPlata(sample, col)) continue;
     if (soloTipadas && !esNumericaTipada(col)) continue;
     let inRangeCount = 0;
     let totalNumeric = 0;
@@ -704,6 +828,17 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
   }
   if (montoCol < 0) return null;
 
+  // Si alguna columna es el SALDO CORRIDO de otra (|Δsaldo| = monto), la
+  // planilla tiene plata que entra y sale sin bandera que diga cuál: leerla
+  // "todo entrada" convierte egresos en ventas, y tomar el saldo como monto es
+  // peor. No se adivina: null → siguiente capa / el cliente (punto 4).
+  const plata: number[] = [];
+  for (let col = 0; col < ncols; col++) {
+    if (col === fechaCol || col === descCol || esColumnaNoPlata(sample, col)) continue;
+    if (montosColumna(sample, col).filter((n) => n > 0).length >= sample.length * 0.8) plata.push(col);
+  }
+  if (plata.some((s) => plata.some((m) => m !== s && saldoExplicadoPor(sample, s, m)))) return null;
+
   return {
     fecha: fechaCol,
     descripcion: descCol,
@@ -714,6 +849,82 @@ function inferTransactionsLogLayout(sample: Row[]): InferredCols | null {
     monto: montoCol,
     tipo_flujo_col: -1,
   };
+}
+
+/**
+ * UNA columna de monto CON SIGNO (negativo = cargo): Banco Falabella. Se acepta
+ * solo con prueba de forma: la columna trae negativos y positivos, y (a) hay una
+ * columna de saldo que cierra saldo = anterior + monto AL PESO en ≥90% de los
+ * pares (algún orden), o (b) sin saldo, su título dice monto/importe.
+ */
+function inferMontoConSigno(sample: Row[], header?: Row): InferredCols | null {
+  const ncols = Math.max(...sample.map((r) => r.length));
+  let fecha = -1;
+  for (let col = 0; col < ncols && fecha < 0; col++) {
+    if (sample.filter((r) => cellEsFecha(r[col])).length / sample.length >= 0.8) fecha = col;
+  }
+  if (fecha < 0) return null;
+  const valores = (col: number) => sample.map((r) => { const l = leerCeldaMonto(r[col]); return l ? valorCeldaSuelta(l) : null; });
+  const candidatas: number[] = [];
+  for (let col = 0; col < ncols; col++) {
+    if (col === fecha || esColumnaNoPlata(sample, col)) continue;
+    const v = valores(col);
+    const llenas = v.filter((x) => x != null && x !== 0) as number[];
+    if (llenas.length < sample.length * 0.9) continue;
+    candidatas.push(col);
+  }
+  const signadas = candidatas.filter((col) => {
+    const v = valores(col).filter((x) => x != null) as number[];
+    return v.some((x) => x < 0) && v.some((x) => x > 0);
+  });
+  const cierra = (m: number, s: number) => {
+    const medir = (orden: Row[]) => {
+      let ok = 0; let rev = 0;
+      for (let i = 1; i < orden.length; i++) {
+        const a = parseChileanNumber(orden[i - 1][s]); const b = parseChileanNumber(orden[i][s]); const x = parseChileanNumber(orden[i][m]);
+        if (!x) continue;
+        rev++;
+        if (Math.abs(b - (a + x)) <= 1) ok++;
+      }
+      return rev >= 4 ? ok / rev : 0;
+    };
+    return Math.max(medir(sample), medir([...sample].reverse())) >= 0.9;
+  };
+  for (const m of signadas) {
+    const saldo = candidatas.find((s) => s !== m && cierra(m, s));
+    const titulo = normalizarTitulo(header?.[m]);
+    if (saldo == null && !/\b(monto|importe|valor|amount)\b/.test(titulo)) continue;
+    // Hay una columna "Saldo" y no cierra con este monto: no se adivina.
+    if (saldo == null && encabezadoConSaldo(header)) continue;
+    // Glosa: la columna de texto más larga que no sea fecha, monto ni saldo.
+    let desc = -1; let largo = 0;
+    for (let col = 0; col < ncols; col++) {
+      if (col === fecha || col === m || col === saldo) continue;
+      const textos = sample.map((r) => String(r[col] ?? "").trim()).filter((t) => t && /[a-z]/i.test(t));
+      const prom = textos.length ? textos.reduce((a, t) => a + t.length, 0) / textos.length : 0;
+      if (prom > largo) { largo = prom; desc = col; }
+    }
+    if (desc < 0) return null;
+    return { fecha, descripcion: desc, n_documento: -1, cargo: m, abono: m, saldo: saldo ?? -1, monto: m, tipo_flujo_col: -1 };
+  }
+  return null;
+}
+
+/** ¿|saldo[i] − saldo[i−1]| = monto[i] en ≥80% de los pares (algún orden)? */
+function saldoExplicadoPor(sample: Row[], saldoCol: number, montoCol: number): boolean {
+  const medir = (orden: Row[]) => {
+    let ok = 0; let rev = 0;
+    for (let i = 1; i < orden.length; i++) {
+      const a = parseChileanNumber(orden[i - 1][saldoCol]);
+      const b = parseChileanNumber(orden[i][saldoCol]);
+      const m = Math.abs(parseChileanNumber(orden[i][montoCol]));
+      if (!m || (!a && !b)) continue;
+      rev++;
+      if (Math.abs(Math.abs(b - a) - m) <= 1) ok++;
+    }
+    return rev >= 4 ? ok / rev : 0;
+  };
+  return Math.max(medir(sample), medir([...sample].reverse())) >= 0.8;
 }
 
 function parseChileanNumberLocal(s: string): number {
@@ -732,29 +943,49 @@ function countEquationMatches(
   saldoCol: number,
   tipoCol: number
 ): number {
-  let matches = 0;
-  for (let i = 1; i < sample.length; i++) {
-    const prevSaldoRaw = sample[i - 1][saldoCol];
-    const currSaldoRaw = sample[i][saldoCol];
-    const currMontoRaw = sample[i][montoCol];
-    const currTipoRaw = sample[i][tipoCol];
+  // Ambos órdenes (hay bancos que listan lo más nuevo arriba) y banderas de una
+  // letra (A/C de Santander): antes la regex solo aceptaba palabras y la
+  // ecuación nunca contaba nada con "A"/"C" (2026-09-30).
+  const medir = (orden: Row[]) => {
+    let matches = 0;
+    for (let i = 1; i < orden.length; i++) {
+      const prevSaldo = parseChileanNumber(orden[i - 1][saldoCol]);
+      const currSaldo = parseChileanNumber(orden[i][saldoCol]);
+      const currMonto = Math.abs(parseChileanNumber(orden[i][montoCol]));
+      if (!prevSaldo || !currSaldo || !currMonto) continue;
+      const t = classifyTipoFlag(orden[i][tipoCol]);
+      if (!t) continue;
+      const expected = prevSaldo + (t === "ENTRADA" ? 1 : -1) * currMonto;
+      // Tolerance: 10 CLP absolute for rounding
+      if (Math.abs(currSaldo - expected) <= 10) matches++;
+    }
+    return matches;
+  };
+  return Math.max(medir(sample), medir([...sample].reverse()));
+}
 
-    const prevSaldo = parseChileanNumberLocal(String(prevSaldoRaw ?? ""));
-    const currSaldo = parseChileanNumberLocal(String(currSaldoRaw ?? ""));
-    const currMonto = parseChileanNumberLocal(String(currMontoRaw ?? ""));
-    if (!prevSaldo || !currSaldo || !currMonto) continue;
-
-    const tipoStr = String(currTipoRaw ?? "").trim().toLowerCase();
-    let sign = 0;
-    if (/^(abono|cr[eé]dito|credito|ingreso|dep[oó]sito|deposito)/.test(tipoStr)) sign = 1;
-    else if (/^(cargo|d[eé]bito|debito|egreso|giro)/.test(tipoStr)) sign = -1;
-    if (sign === 0) continue;
-
-    const expected = prevSaldo + sign * currMonto;
-    // Tolerance: 10 CLP absolute for rounding
-    if (Math.abs(currSaldo - expected) <= 10) matches++;
+/**
+ * Formato de fecha decidido por COLUMNA, como el de los números (adversarial-1
+ * falla 5): "a/b/yyyy" con algún a > 12 → dd/mm; con algún b > 12 y ningún a > 12
+ * → mm/dd; si ninguna celda distingue, dd/mm (Chile).
+ */
+export function formatoFechaDeColumna(rows: Row[], desde: number, col: number): AdapterConfig["date_format"] {
+  let diaPrimero = false;
+  let mesPrimero = false;
+  let primera: string | null = null;
+  for (let i = desde; i < rows.length; i++) {
+    const v = rows[i]?.[col] as unknown;
+    if (v == null || v instanceof Date || typeof v === "number") continue;
+    const t = String(v).trim();
+    if (!t) continue;
+    primera ??= t;
+    const m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-]\d{4}$/);
+    if (!m) continue;
+    if (parseInt(m[1], 10) > 12) diaPrimero = true;
+    if (parseInt(m[2], 10) > 12) mesPrimero = true;
   }
-  return matches;
+  if (mesPrimero && !diaPrimero) return "mm/dd/yyyy";
+  return detectDateFormat(primera ?? "");
 }
 
 function detectDateFormat(sample: string): AdapterConfig["date_format"] {

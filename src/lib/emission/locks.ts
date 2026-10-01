@@ -69,6 +69,37 @@ export async function acquireCuentaEmissionLock(args: {
   return { ok: true, jobId, lockedUntil };
 }
 
+/**
+ * Latido con LEASE (seguridad de emisión 2026-09-30, adversarial H5). Antes el PATCH
+ * renovaba el job aunque el candado de la cuenta ya fuera de OTRO job (o hubiera
+ * vencido y otro lo tomara): el UPDATE del lock calzaba 0 filas, no daba error y
+ * respondía ok → el zombi seguía emitiendo con el candado ajeno.
+ *
+ * Ahora UN solo UPDATE condicional sobre el candado (atómico en la fila): solo renueva
+ * si el candado de la cuenta es de ESTE job y sigue vivo. 0 filas = lease perdido.
+ * Lo que guarda un folio REAL (/result) no pasa por acá: un resultado tardío se
+ * registra siempre.
+ */
+export async function renovarLeaseCuenta(args: {
+  sb: Sb;
+  cuentaId: string;
+  jobId: string;
+  nuevaExpiracion: string;
+  estadoVisible: string;
+}): Promise<{ ok: true } | { ok: false; error: "LEASE_PERDIDO" } | { ok: false; error: "LOCK_UPDATE_FAILED"; detalle: string }> {
+  const ahora = new Date().toISOString();
+  const { data, error } = await args.sb
+    .from("emision_locks")
+    .update({ estado_visible: args.estadoVisible, heartbeat_at: ahora, locked_until: args.nuevaExpiracion })
+    .eq("cuenta_id", args.cuentaId)
+    .eq("job_id", args.jobId)
+    .gt("locked_until", ahora)
+    .select("job_id");
+  if (error) return { ok: false, error: "LOCK_UPDATE_FAILED", detalle: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "LEASE_PERDIDO" };
+  return { ok: true };
+}
+
 export async function releaseCuentaEmissionLock(args: {
   sb: Sb;
   cuentaId: string;
