@@ -3,7 +3,17 @@ import { createClient as createServiceClient, type SupabaseClient } from "@supab
 import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
-import { acquireCuentaEmissionLock, releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { acquireCuentaEmissionLock, releaseCuentaEmissionLock, renovarLeaseCuenta } from "@/lib/emission/locks";
+import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA } from "@/lib/emission/boleta-unica-lapida";
+import {
+  DETALLE_DATOS_FALTAN,
+  SELECT_PROPUESTA_DATOS,
+  compararDatosJob,
+  leerDatosEnviados,
+  textoDatosCambiaron,
+  type PropuestaDatos,
+} from "@/lib/emission/datos-job";
+import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
 import { revisarPostCandado, revisarPropuestaEmitible, revisarYaEmitida } from "@/lib/emission/propuesta-emitible";
 import { deleteRespetaSinRespuesta, estadoCierreSeguro } from "@/lib/emission/cierre-seguro";
 import { decidirAdopcion, origenAdopcion, type DecisionAdopcion } from "@/lib/emission/adopcion";
@@ -39,6 +49,8 @@ type ServiceDb = SupabaseClient<Database>;
 const TIPOS_SII_LOCAL = new Set([33, 34, 39, 41]);
 const TIPOS_SIMPLEAPI = new Set([33, 34, 39, 41]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DETALLE_LEASE_PERDIDO =
+  "Detuvimos esta emisión porque se empezó a emitir desde otra pantalla (o pasó mucho rato sin respuesta). Si alcanzó a salir en el SII, usa Recuperar emisión SII antes de volver a emitir.";
 
 function cleanText(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -275,7 +287,7 @@ export async function POST(request: Request) {
 
   const { data: empresa, error: empresaError } = await guard.service
     .from("empresas")
-    .select("rut, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default")
+    .select("rut, giro, razon_social, tipo_contribuyente, boletas_tipo_default, facturas_tipo_default, operacion_hint_default")
     .eq("id", guard.empresaId)
     .maybeSingle();
   if (empresaError) {
@@ -346,13 +358,14 @@ export async function POST(request: Request) {
   // enlazaría el folio a la propuesta de OTRO contribuyente → integridad rota. La
   // boleta única no manda propuesta_id (queda null, como hoy).
   const propuestaId = cleanText(payload.propuesta_id);
+  let propDatos: PropuestaDatos | null = null;
   if (propuestaId) {
     if (!UUID_RE.test(propuestaId)) {
       return NextResponse.json({ ok: false, error: "PROPUESTA_ID_INVALID" }, { status: 422 });
     }
     const { data: prop, error: propErr } = await guard.service
       .from("propuestas_ia")
-      .select("id, empresa_id, estado")
+      .select(SELECT_PROPUESTA_DATOS)
       .eq("id", propuestaId)
       .maybeSingle();
     if (propErr) {
@@ -361,6 +374,7 @@ export async function POST(request: Request) {
     if (!prop || prop.empresa_id !== guard.empresaId) {
       return NextResponse.json({ ok: false, error: "PROPUESTA_NO_PERTENECE" }, { status: 422 });
     }
+    propDatos = prop as unknown as PropuestaDatos;
     // Solo se emite lo APROBADO (incidente MH 2026-09-29, revisión adversarial): si
     // alguien devolvió la cartola a Check con un lote corriendo, las que aún no
     // empezaban ya no están en 'aprobado' y el runner las emitía igual → quedaban en
@@ -369,6 +383,33 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { ok: false, error: "PROPUESTA_NO_APROBADA", detalle: "Esta boleta volvió a Check: apruébala de nuevo para emitirla." },
         { status: 409 },
+      );
+    }
+  } else if (!cleanText(payload.adopta_job_id)) {
+    // BOLETA ÚNICA A MEDIAS (seguridad 2026-09-30, punto 1; boleta-unica-lapida.ts): la
+    // boleta única no tiene propuesta a la que amarrar la lápida y su candado vence a
+    // los 15 min. Mientras la empresa tenga una boleta única `revision_pendiente` (pudo
+    // salir en el SII), no se abre otra: primero se recupera su folio o se declara
+    // que no salió. Fail-closed si la consulta falla.
+    const lapida = await buscarLapidaBoletaUnica(guard.service, guard.empresaId);
+    if (!lapida.ok) {
+      if (lapida.error !== "BOLETA_A_MEDIAS") {
+        return NextResponse.json({ ok: false, error: lapida.error, detalle: lapida.detalle }, { status: lapida.status });
+      }
+      // Qué buscar en el SII y quién la lanzó (rev. adversarial M1/M2): cualquier
+      // persona de la cuenta con permiso puede resolverla, no solo quien la lanzó.
+      let lanzadaPor: string | null = null;
+      if (lapida.usuarioId && lapida.usuarioId !== guard.userId) {
+        const { data: u } = await guard.service.from("usuarios").select("nombre, email").eq("id", lapida.usuarioId).maybeSingle();
+        lanzadaPor = (u as { nombre?: string | null; email?: string | null } | null)?.nombre ?? (u as { email?: string | null } | null)?.email ?? "Otra persona de tu cuenta";
+      }
+      return NextResponse.json(
+        {
+          ok: false, error: lapida.error, job_id: lapida.jobId, detalle: lapida.detalle,
+          intento: lapida.intento, creada_at: lapida.creadaAt,
+          es_mia: !lapida.usuarioId || lapida.usuarioId === guard.userId, lanzada_por: lanzadaPor,
+        },
+        { status: lapida.status },
       );
     }
   }
@@ -429,6 +470,50 @@ export async function POST(request: Request) {
         { ok: false, error: emitible.error, detalle: emitible.detalle, folio: emitible.folio ?? null, boleta_id: emitible.boletaId ?? null, boleta_created_at: emitible.boletaCreatedAt ?? null },
         { status: emitible.status },
       );
+    }
+
+    // EL SERVIDOR MANDA EN LOS DATOS (seguridad 2026-09-30, punto 2; datos-job.ts): lo
+    // que la extensión va a teclear en el SII sale del navegador. Si no calza con la
+    // propuesta guardada (pestaña vieja, evento perdido, otra persona la editó) → 409
+    // ANTES de tomar el candado: no se emite un documento distinto al aprobado. Va
+    // DESPUÉS de "ya emitida / a medias" (esas se SALTAN sin frenar el lote). La
+    // verificación (adopción) no emite nada: queda fuera.
+    if (!adopcion) {
+      const enviados = leerDatosEnviados(payload.datos);
+      const emp = empresa as { giro?: string | null; razon_social?: string | null; tipo_contribuyente?: string | null; boletas_tipo_default?: string | null; facturas_tipo_default?: string | null; operacion_hint_default?: string | null } | null;
+      const hintEmp = emp?.operacion_hint_default ?? null;
+      const empresaCtx = emp
+        ? {
+            giro: emp.giro ?? null, razon_social: emp.razon_social ?? "", tipo_contribuyente: emp.tipo_contribuyente ?? null,
+            boletas_tipo_default: emp.boletas_tipo_default ?? null, facturas_tipo_default: emp.facturas_tipo_default ?? null,
+            operacion_default: (hintEmp && ["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"].includes(hintEmp) ? hintEmp : null) as DocumentoHint,
+          }
+        : null;
+      const cmp = enviados ? compararDatosJob(propDatos as PropuestaDatos, tipoDte, enviados, empresaCtx) : ({ ok: false, campos: ["datos"] } as const);
+      if (!cmp.ok) {
+        await recordOpsEvent({
+          sb: guard.service,
+          severity: "warn",
+          source: "emision",
+          eventName: "emission_datos_cambiaron",
+          summary: `El navegador pidió emitir con datos que no calzan con la propuesta (${cmp.campos.join(", ")})`,
+          cuentaId: guard.cuentaId,
+          empresaId: guard.empresaId,
+          usuarioId: guard.userId,
+          resourceType: "propuesta_ia",
+          resourceId: propuestaId,
+          metadata: { campos: cmp.campos, tipo_dte: tipoDte },
+        });
+        // Pestaña con JS viejo (no manda datos): además `code: EMISION_PAUSADA`, que el
+        // clasificador VIEJO ya entiende como pausa limpia (conserva lo pendiente y
+        // muestra el detalle) en vez de "¿Saltar y seguir?" boleta por boleta.
+        return NextResponse.json(
+          enviados
+            ? { ok: false, error: "DATOS_CAMBIARON", campos: cmp.campos, detalle: textoDatosCambiaron((propDatos as PropuestaDatos | null)?.mesa) }
+            : { ok: false, error: "DATOS_CAMBIARON", code: "EMISION_PAUSADA", campos: cmp.campos, detalle: DETALLE_DATOS_FALTAN },
+          { status: 409 },
+        );
+      }
     }
 
     // GATE DE CUOTA DEL PLAN (crítica #1 de la auditoría). Las masivas (con
@@ -504,7 +589,7 @@ export async function POST(request: Request) {
     userId: guard.userId,
     provider,
     // El enlace verificación → job adoptado nace con el job (lo valida el veredicto).
-    origin: adopcion ? origenAdopcion(adopcion.jobViejoId, adopcion.via) : cleanText(payload.origin) ?? "emision_directa",
+    origin: adopcion ? origenAdopcion(adopcion.jobViejoId, adopcion.via) : cleanText(payload.origin) ?? ORIGIN_BOLETA_UNICA,
     expectedEmisorRut,
     propuestaId,
     ttlSeconds: provider === "sii_local" ? 15 * 60 : 5 * 60,
@@ -560,6 +645,20 @@ export async function POST(request: Request) {
         { ok: false, error: post.error, detalle: post.detalle, folio: post.folio ?? null, boleta_id: post.boletaId ?? null, boleta_created_at: post.boletaCreatedAt ?? null },
         { status: post.status },
       );
+    }
+  }
+
+  // INTENTO de la boleta única (rev. adversarial M1): lo que se va a teclear en el SII
+  // (monto/tipo/receptor) queda en el job. Si queda a medias, la lápida dice QUÉ
+  // boleta buscar y su folio se registra con ESTOS datos, no con el borrador que la
+  // persona tenga abierto después. Best-effort: sin la migración (columna `intento`)
+  // el UPDATE falla y la emisión sigue igual (el folio a mano pide el monto).
+  if (!propuestaId && !adopcion) {
+    const intento = leerIntento(payload.intento);
+    if (intento) {
+      try {
+        await guard.service.from("emision_jobs").update({ intento } as never).eq("job_id", lock.jobId);
+      } catch { /* best-effort */ }
     }
   }
 
@@ -780,6 +879,15 @@ export async function DELETE(request: Request) {
   }
   const permisivoTerminal = job.estado === "failed" || job.estado === "cancelled" || job.estado === "expired";
   if (yaProtegido || (permisivoTerminal && estado !== "revision_pendiente")) {
+    // Lápida de boleta única: devolver su intento para que la vista diga qué boleta
+    // buscar en el SII (vuelta 2, V2-B1). `*` no rompe sin la migración.
+    if (job.estado === "revision_pendiente" && !job.propuesta_id) {
+      const { data: full } = await service.service.from("emision_jobs").select("*").eq("job_id", job.job_id).maybeSingle();
+      return NextResponse.json({
+        ok: true, estado: job.estado,
+        intento: leerIntento((full as { intento?: unknown } | null)?.intento), creada_at: job.created_at,
+      });
+    }
     return NextResponse.json({ ok: true, estado: job.estado });
   }
   await releaseCuentaEmissionLock({ sb: service.service, cuentaId: job.cuenta_id, jobId: job.job_id, estado });
@@ -863,9 +971,20 @@ export async function PATCH(request: Request) {
   // NUNCA debe resucitarlo. Antes faltaba en esta lista → un latido tardío lo
   // degradaba a 'running' (abajo), reabría su ventana, la lápida expiraba y la
   // propuesta volvía a ser emitible → doble folio. Ahora se trata como cerrado.
-  if (["completed", "failed", "cancelled", "expired", "revision_pendiente"].includes(job.estado)) return NextResponse.json({ ok: true, estado: job.estado, closed: true });
+  if (job.estado === "completed" || job.estado === "revision_pendiente") return NextResponse.json({ ok: true, estado: job.estado, closed: true });
+  // LEASE PERDIDO por cierre (seguridad 2026-09-30, punto 5): un job `cancelled` /
+  // `failed` / `expired` ya no tiene candado — p. ej. alguien apretó "liberar candado"
+  // desde OTRO computador mientras esta extensión seguía trabajando. Antes respondía
+  // ok y la página de este computador no se enteraba; ahora 409 y la página manda
+  // cerrar su ventana del SII (pre-emit se detiene; post-emit la extensión sigue
+  // capturando el folio, que /result registra siempre).
+  if (job.estado === "cancelled" || job.estado === "failed" || job.estado === "expired") {
+    return NextResponse.json(
+      { ok: false, error: "LEASE_PERDIDO", motivo: "job_cerrado", estado: job.estado, detalle: DETALLE_LEASE_PERDIDO },
+      { status: 409 },
+    );
+  }
 
-  const now = new Date().toISOString();
   const estado = cleanStatus(payload.estado ?? payload.status);
   // El heartbeat renueva la ventana del job: un RPA lento (SII lento, 2FA,
   // reintentos de PDF, cadencia humana del motor masivo) mantiene vivo el job
@@ -874,6 +993,55 @@ export async function PATCH(request: Request) {
   const ttlSeconds = job.provider === "sii_local" ? 15 * 60 : 5 * 60;
   const nuevaExpiracion = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
+  // PRIMERO el candado (seguridad 2026-09-30, punto 3): solo se renueva si el candado
+  // de la cuenta sigue siendo de ESTE job y está vivo. Si otro job lo tomó o venció →
+  // 409 LEASE_PERDIDO y el job NO se renueva (antes el job se renovaba igual y el
+  // UPDATE del candado calzaba 0 filas en silencio).
+  const lease = await renovarLeaseCuenta({ sb: service.service, cuentaId: job.cuenta_id, jobId: job.job_id, nuevaExpiracion, estadoVisible: estado });
+  if (!lease.ok && lease.error === "LEASE_PERDIDO") {
+    // Carrera con /result (rev. adversarial 2 M3): releaseCuentaEmissionLock borra el
+    // candado y RECIÉN DESPUÉS marca el job. Si el job ya quedó completed o a medias,
+    // este latido es tardío normal, no un candado perdido.
+    const { data: relectura } = await service.service.from("emision_jobs").select("estado").eq("job_id", job.job_id).maybeSingle();
+    const estadoAhora = (relectura as { estado?: string } | null)?.estado;
+    if (estadoAhora === "completed" || estadoAhora === "revision_pendiente") {
+      return NextResponse.json({ ok: true, estado: estadoAhora, closed: true });
+    }
+    await recordOpsEvent({
+      sb: service.service,
+      severity: "warn",
+      source: "emision",
+      eventName: "emission_lease_perdido",
+      summary: "Latido de un job que ya no tiene el candado de la cuenta (otro job lo tomó o venció)",
+      cuentaId: job.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: job.job_id,
+      metadata: { estado_visible: estado },
+    });
+    return NextResponse.json(
+      { ok: false, error: "LEASE_PERDIDO", motivo: "candado_ajeno_o_vencido", estado: job.estado, detalle: DETALLE_LEASE_PERDIDO },
+      { status: 409 },
+    );
+  }
+  if (!lease.ok) {
+    await recordOpsError({
+      sb: service.service,
+      severity: "error",
+      source: "emision",
+      eventName: "emission_lock_heartbeat_failed",
+      summary: "No se pudo actualizar heartbeat del lock de emision",
+      cuentaId: job.cuenta_id,
+      usuarioId: user.id,
+      resourceType: "emision_job",
+      resourceId: job.job_id,
+      error: lease.detalle,
+      metadata: { estado_visible: estado },
+    });
+    return NextResponse.json({ ok: false, error: "LOCK_UPDATE_FAILED", detalle: lease.detalle }, { status: 500 });
+  }
+
+  const now = new Date().toISOString();
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
     .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
@@ -898,28 +1066,6 @@ export async function PATCH(request: Request) {
       metadata: { estado_visible: estado },
     });
     return NextResponse.json({ ok: false, error: "JOB_UPDATE_FAILED", detalle: updateJobError.message }, { status: 500 });
-  }
-
-  const { error: updateLockError } = await service.service
-    .from("emision_locks")
-    .update({ estado_visible: estado, heartbeat_at: now, locked_until: nuevaExpiracion })
-    .eq("cuenta_id", job.cuenta_id)
-    .eq("job_id", job.job_id);
-  if (updateLockError) {
-    await recordOpsError({
-      sb: service.service,
-      severity: "error",
-      source: "emision",
-      eventName: "emission_lock_heartbeat_failed",
-      summary: "No se pudo actualizar heartbeat del lock de emision",
-      cuentaId: job.cuenta_id,
-      usuarioId: user.id,
-      resourceType: "emision_job",
-      resourceId: job.job_id,
-      error: updateLockError,
-      metadata: { estado_visible: estado },
-    });
-    return NextResponse.json({ ok: false, error: "LOCK_UPDATE_FAILED", detalle: updateLockError.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, estado, heartbeat_at: now });

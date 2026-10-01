@@ -14,6 +14,11 @@ import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso
 
 const BATCH_SIZE = 50;
 
+/** Desde dónde se puede aprobar (mismo allowlist que editarPropuesta y ponerListo). */
+const ESTADOS_APROBABLES = ["pendiente", "listo", "editado"];
+const MENSAJE_NO_APROBABLE =
+  "Este movimiento cambió mientras lo mirabas (otra persona lo aprobó, rechazó o emitió). Recarga para ver cómo quedó.";
+
 /**
  * Fetches the current user's empresa_id (with auth) and returns a service-role
  * Supabase client. Service role bypasses RLS — every UPDATE must be scoped
@@ -84,10 +89,15 @@ export async function aprobarPropuesta(
     .from("propuestas_ia")
     .update({ estado: "aprobado", cliente_id: clienteId ?? null }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
-    .eq("id", propuestaId);
+    .eq("id", propuestaId)
+    // Guard de estado (seguridad 2026-09-30, punto 4): con una vista vieja se
+    // resucitaba a `aprobado` lo que otra persona había rechazado/descartado (volvía a
+    // Emitir) o se le cambiaba el cliente a una ya aprobada/emitida. Filtro EN la
+    // misma consulta (atómico), mismo allowlist que editarPropuesta.
+    .in("estado", ESTADOS_APROBABLES);
 
   if (error) return { error: error.message };
-  if (!count) return { error: "No se pudo actualizar — propuesta no encontrada o sin permisos" };
+  if (!count) return { error: MENSAJE_NO_APROBABLE };
   await recordCuentaAudit({
     sb: ctx.sb,
     empresaId: ctx.empresaId,
@@ -566,7 +576,10 @@ export async function aprobarTodas(
       .from("propuestas_ia")
       .update({ estado: "aprobado" }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
-      .in("id", batch);
+      .in("id", batch)
+      // Guard de estado en la propia consulta (seguridad 2026-09-30, punto 4): las que
+      // otra persona rechazó/descartó o que ya están aprobadas no se tocan.
+      .in("estado", ESTADOS_APROBABLES);
 
     if (error) {
       return {

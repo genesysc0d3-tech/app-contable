@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { clasificarStartJob } from "./clasificar-start-job";
 
+describe("clasificarStartJob — DATOS_CAMBIARON (seguridad 2026-09-30, punto 2)", () => {
+  it("409 DATOS_CAMBIARON → frena el lote (lo que falta queda guardado) con motivo honesto", () => {
+    const r = clasificarStartJob(409, { ok: false, error: "DATOS_CAMBIARON", campos: ["monto"] });
+    expect(r.tipo).toBe("frenada");
+    if (r.tipo === "frenada") expect(r.motivo).toContain("cambió");
+  });
+});
+
 describe("clasificarStartJob — el lote no revienta en cadena", () => {
   it("candado PROPIO (caso LC 23:43) → frenada con motivo honesto, nunca 'Equipo'", () => {
     const r = clasificarStartJob(409, { ok: false, error: "EMISION_BLOQUEADA", bloqueo: { is_mine: true, locked_until: "2026-09-28T02:52:07Z" } });
@@ -40,5 +48,14 @@ describe("clasificarStartJob — el lote no revienta en cadena", () => {
     const r = clasificarStartJob(409, { error: "EMISION_BLOQUEADA", bloqueo: null });
     expect(r.tipo).toBe("frenada");
     if (r.tipo === "frenada") expect(r.motivo).not.toContain("Tu emisión anterior");
+  });
+});
+
+describe("clasificarStartJob — DATOS_CAMBIARON con el texto del server tal cual (rev 2 M1)", () => {
+  it("no le agrega nada al detalle y el fallback no miente a mitad de lote", () => {
+    const r = clasificarStartJob(409, { error: "DATOS_CAMBIARON", detalle: "Esta factura cambió X." });
+    expect(r).toEqual({ tipo: "frenada", motivo: "Esta factura cambió X." });
+    const f = clasificarStartJob(409, { error: "DATOS_CAMBIARON" });
+    if (f.tipo === "frenada") expect(f.motivo).not.toContain("No se emitió nada");
   });
 });

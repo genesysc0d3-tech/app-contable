@@ -28,11 +28,11 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
     const dedup = src.indexOf('.from("boletas_emitidas").select("id, propuesta_id")', fn);
     expect(dedup).toBeGreaterThan(fn);
     const guard1 = src.indexOf("existing.propuesta_id !== args.propuestaId", dedup);
-    const lift1 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId);", dedup);
+    const lift1 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId, ", dedup);
     expect(guard1).toBeGreaterThan(dedup);
     expect(guard1).toBeLessThan(lift1);
     const raced = src.indexOf("raced.propuesta_id !== args.propuestaId", lift1);
-    const lift2 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId);", lift1 + 10);
+    const lift2 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId, ", lift1 + 10);
     expect(raced).toBeGreaterThan(lift1);
     expect(raced).toBeLessThan(lift2);
   });

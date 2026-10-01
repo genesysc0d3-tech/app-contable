@@ -20,12 +20,21 @@ export type RecoverLatestResult =
  * existir el documento en el SII. El server exige que el intento tenga lápida
  * y deriva monto/tipo de la propuesta: el humano aporta el número, no la plata.
  */
-export async function registrarFolioAMano(jobId: string | null, folio: number): Promise<RecoverLatestResult> {
+export async function registrarFolioAMano(
+  jobId: string | null,
+  folio: number,
+  /** Boleta única sin intento guardado: monto y tipo de ESA boleta (declarados). */
+  declarado?: { monto: number; tipoDte: number } | null,
+): Promise<RecoverLatestResult> {
   try {
     const res = await fetch("/api/sii-local/result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: jobId, registrar_folio_manual: folio }),
+      body: JSON.stringify({
+        job_id: jobId,
+        registrar_folio_manual: folio,
+        ...(declarado ? { monto_declarado: declarado.monto, tipo_dte_declarado: declarado.tipoDte } : {}),
+      }),
     });
     const json = await res.json().catch(() => ({}));
     if (res.ok && json?.ok) {
