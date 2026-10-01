@@ -2,13 +2,28 @@ import { getAppEmpresaContext } from "@/lib/dal";
 import DevSupportBanner, { type BannerIntervencion } from "./escritorio/v5/DevSupportBanner";
 import ActualizadorInvisible from "@/components/ActualizadorInvisible";
 import { ESTILO_RESTAURANDO, SCRIPT_ANTES_DE_PINTAR } from "@/lib/actualizacion/estado-guardado";
+import { Suspense } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+import AvisosApp from "@/components/AvisosApp";
+import { avisosPendientes } from "@/lib/avisos/servidor";
+
+/**
+ * Avisos y novedades: viajan en ESTE render (que la app ya hace), con el cliente de
+ * la sesión (RLS: vigentes y de su empresa) y caché corta. En Suspense: la consulta
+ * no atrasa la página. Fail-safe: sin tabla, [] y no se pinta nada.
+ */
+async function AvisosDeLaSesion({ supabase, userId, empresaId }: { supabase: SupabaseClient<Database>; userId: string; empresaId: string }) {
+  const avisos = await avisosPendientes(supabase, { userId, empresaId }).catch(() => []);
+  return <AvisosApp key={userId} iniciales={avisos} userId={userId} />;
+}
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { empresa, supportMode } = await getAppEmpresaContext();
+  const { empresa, supportMode, supabase, usuario, empresaId } = await getAppEmpresaContext();
 
   // Estado de la intervención autorizada por el cliente (solo en modo soporte;
   // el CLIENTE ve lo suyo en Empresa → Acceso de soporte, no acá).
@@ -40,6 +55,12 @@ export default async function AppLayout({
       )}
       {children}
       <ActualizadorInvisible />
+      {/* En modo soporte el operador no consume (ni marca) avisos de la clienta. */}
+      {supportMode ? null : (
+        <Suspense fallback={null}>
+          <AvisosDeLaSesion supabase={supabase} userId={usuario.id} empresaId={empresaId} />
+        </Suspense>
+      )}
     </>
   );
 }

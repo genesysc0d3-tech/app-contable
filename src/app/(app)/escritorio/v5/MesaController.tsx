@@ -11,6 +11,7 @@ import { pendingResaltar, type ApuntableTipo } from "./apuntar";
 import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
+import { publicarAvisos } from "@/lib/avisos/bus";
 import { cadenciaDocs, crearEspaciador, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
 
 // La MESA es parte de la clave (bug transversal 2026-08-27): sin ella, boletas y
@@ -31,7 +32,10 @@ async function cargarMesa(params: { date?: string; month?: string; view?: string
     // Con tope: el recargador tiene UNA carga en vuelo; un fetch colgado para siempre
     // (socket muerto tras suspender el notebook) congelaría la mesa hasta F5.
     const r = await fetch(`/api/mesa?${qs.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_CARGA_MS) });
-    return (await r.json()) as CargarMesaResult;
+    const res = (await r.json()) as CargarMesaResult;
+    // Avisos y novedades: viajan gratis en esta misma respuesta (cero sondeo).
+    if (res.ok) publicarAvisos(res.avisos);
+    return res;
   } catch {
     return { ok: false, error: "FETCH_FAILED" };
   }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { _reiniciarCacheAvisos, avisosPendientes, olvidarAvisosDe } from "./servidor";
+import { _reiniciarCacheAvisos, avisosPendientes } from "./servidor";
 
 // Entrega de avisos en pedidos que la app YA hace (layout y /api/mesa): UNA
 // consulta indexada por vigencia, caché corta y fail-safe si la tabla no existe.
@@ -66,7 +66,7 @@ describe("avisosPendientes", () => {
     expect(r[0]).not.toHaveProperty("avisos_vistos");
   });
 
-  it("caché corta por usuario+empresa: la 2.ª carga no consulta; olvidarAvisosDe la limpia", async () => {
+  it("caché corta por usuario+empresa: la 2.ª carga no consulta; pasado el minuto, sí", async () => {
     const { sb, llamadas } = fakeSb(() => ({ data: [fila()], error: null }));
     await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: NOW });
     await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: new Date(NOW.getTime() + 30_000) });
@@ -75,9 +75,6 @@ describe("avisosPendientes", () => {
     expect(llamadas).toHaveLength(2);
     await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: new Date(NOW.getTime() + 61_000) });
     expect(llamadas).toHaveLength(3);
-    olvidarAvisosDe("u1");
-    await avisosPendientes(sb, { userId: "u1", empresaId: "e1", now: new Date(NOW.getTime() + 62_000) });
-    expect(llamadas).toHaveLength(4);
   });
 
   it("FAIL-SAFE sin tabla: devuelve [] y no reintenta en cada carga (caché negativa)", async () => {

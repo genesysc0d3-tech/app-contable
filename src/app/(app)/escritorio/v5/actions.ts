@@ -13,6 +13,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getUfClp, getUmbralIdentificacionClp } from "@/lib/sii/uf";
 import { mpConfigurado } from "@/lib/pagos/mercadopago";
 import { fetchMesaDateDependent, type MesaParams, type MesaDateDependent } from "./mesa-data";
+import { avisosPendientes } from "@/lib/avisos/servidor";
+import type { AvisoApp } from "@/lib/avisos/reglas";
 
 export type EmpresaSelectorRow = {
   id: string;
@@ -922,7 +924,9 @@ export async function obtenerFacturacion(): Promise<FacturacionResult> {
 }
 
 export type CargarMesaResult =
-  | { ok: true; mesa: MesaDateDependent }
+  // `avisos`: avisos vigentes no vistos que viajan GRATIS en la carga de la mesa
+  // (sin sondeo; ver lib/avisos/servidor.ts). Opcional: una pestaña vieja lo ignora.
+  | { ok: true; mesa: MesaDateDependent; avisos?: AvisoApp[] }
   | { ok: false; error: string };
 
 /**
@@ -941,12 +945,18 @@ export async function cargarMesa(params: MesaParams): Promise<CargarMesaResult> 
       .eq("id", ctx.empresaId)
       .maybeSingle();
     if (!empresa) return { ok: false, error: "EMPRESA_NO_ENCONTRADA" };
-    const mesa = await fetchMesaDateDependent(ctx.sb, ctx.empresaId, {
-      giro: empresa.giro,
-      razon_social: empresa.razon_social ?? "",
-      tipo_contribuyente: empresa.tipo_contribuyente,
-    }, params);
-    return { ok: true, mesa };
+    const [mesa, avisos] = await Promise.all([
+      fetchMesaDateDependent(ctx.sb, ctx.empresaId, {
+        giro: empresa.giro,
+        razon_social: empresa.razon_social ?? "",
+        tipo_contribuyente: empresa.tipo_contribuyente,
+      }, params),
+      // En paralelo y fail-safe (nunca tumba la mesa). En modo soporte el operador
+      // no consume avisos de la clienta. ctx.sb es service role: la consulta filtra
+      // explícito por vigencia, empresa y vistos de ESTE usuario.
+      ctx.supportMode ? Promise.resolve([] as AvisoApp[]) : avisosPendientes(ctx.sb, { userId: ctx.userId, empresaId: ctx.empresaId }),
+    ]);
+    return { ok: true, mesa, avisos };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "CARGAR_MESA_FAILED" };
   }
