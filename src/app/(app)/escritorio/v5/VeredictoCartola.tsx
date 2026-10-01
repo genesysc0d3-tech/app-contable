@@ -98,7 +98,6 @@ export default function VeredictoCartola({
   // /Aprobar se esconden hasta confirmar las columnas. Cualquier otra cartola
   // (comprobada, ya confirmada, plantilla) mantiene el visor de siempre.
   const columnas = cuadre ? revisarColumnas(cuadre) : null;
-  const revisionPendiente = !!columnas?.abrir && !decidida;
 
   // Split exenta/afecta: del agregado server-side si está, si no lo cuento acá.
   const esExenta = (p: Propuesta) => {
@@ -118,6 +117,10 @@ export default function VeredictoCartola({
   const sinLapidas = aMediasIds ?? new Set<string>();
   const esTerminada = (p: Propuesta) => terminadaDe(p, sinLapidas) !== null;
   const { emitidas, aMedias } = contarTerminadas(propuestas, sinLapidas);
+  // Con emitidas o a medias, reprocesar está bajo el doble candado: el popup no
+  // podría releerla y el CTA se quedaría para siempre tapando Editar → el visor
+  // de siempre (revisión adversarial 2026-09-30).
+  const revisionPendiente = !!columnas?.abrir && !decidida && emitidas === 0 && aMedias === 0;
   const aprobadas = propuestas.filter((p) => p.estado === "aprobado" && !esTerminada(p)).length;
   const listasProps = propuestas.filter((p) => p.estado === "listo" && !esTerminada(p));
   const listas = listasProps.length;

@@ -203,6 +203,16 @@ const btn = (primario: boolean, disabled: boolean): React.CSSProperties => ({
   boxShadow: primario && !disabled ? "0 10px 26px color-mix(in srgb, var(--accent) 28%, transparent)" : "none",
 });
 
+/**
+ * Aviso tras "Listo": solo promete releer si el reproceso de verdad partió (con
+ * emitidas o a medias, reprocesar está bajo el doble candado y no parte).
+ */
+export function avisoTrasGuardar(j: { reprocessStarted?: boolean }): string {
+  return j.reprocessStarted
+    ? "Listo: guardamos tus columnas y estamos leyendo tu cartola de nuevo"
+    : "Guardamos tus columnas para tus próximas cartolas. Esta no se volvió a leer: revísala en Editar.";
+}
+
 export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant = "modal" }: FieldMapperProps & { variant?: FieldMapperVariant }) {
   const { toast } = useToast();
   // Semilla desde caché: si ya se prefetcheó, arranca sin spinner.
@@ -329,7 +339,7 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || "No se pudieron guardar tus columnas");
-      toast("Listo: guardamos tus columnas y estamos leyendo tu cartola de nuevo");
+      toast(avisoTrasGuardar(j));
       onSaved?.(); onClose();
     } catch (err) { toast(err instanceof Error ? err.message : "No se pudieron guardar tus columnas", "error"); }
     setSaving(false);

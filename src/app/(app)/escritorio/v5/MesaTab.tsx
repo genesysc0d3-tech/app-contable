@@ -344,7 +344,9 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       {/* ── VISOR (permanente, altura fija) ── */}
       <div style={{ flexShrink: 0, height: "clamp(172px, 24vh, 224px)", minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "thin", borderBottom: "1px solid var(--bg-muted)" }}>
         {/* Microatribución del team: quién hizo qué con este documento (solo con equipo). */}
-        {selDoc && <AtribucionDoc key={selDoc.id} documentoId={selDoc.id} />}
+        {/* key con prefijo: es HERMANO del visor (VeredictoCartola key={selDoc.id});
+            la misma key en los dos daba "two children with the same key". */}
+        {selDoc && <AtribucionDoc key={`atrib-${selDoc.id}`} documentoId={selDoc.id} />}
         {!selDoc ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", color: "var(--text3)" }}>
             <div style={{ maxWidth: 250 }}>

@@ -137,3 +137,30 @@ describe("la mesa no repite documentos", () => {
     expect(sinDocsRepetidos([{ id: "a", n: 1 }, { id: "b", n: 2 }, { id: "a", n: 3 }]).map((d) => d.n)).toEqual([1, 2]);
   });
 });
+
+describe("revisión adversarial 2026-09-30", () => {
+  it("con emitidas o a medias el visor NO se vuelve solo-CTA (reprocesar está bajo candado): Editar sigue", async () => {
+    const { default: VeredictoCartola } = await import("./VeredictoCartola");
+    const emitida = { id: "p1", estado: "aprobado", total: 1000, boletas_emitidas: [{ folio: 12, estado: "aceptada" }] };
+    const viva = { id: "p2", estado: "pendiente", total: 2000 };
+    const html = renderToStaticMarkup(createElement(VeredictoCartola, { ...props(cuadre), propuestas: [emitida, viva] as never }));
+    expect(html).not.toContain('data-testid="cta-columnas"');
+    expect(html).toMatch(/>\s*Editar\s*</);
+    const aMedias = renderToStaticMarkup(createElement(VeredictoCartola, { ...props(cuadre), propuestas: [{ id: "p3", estado: "aprobado", total: 1 }, viva] as never, aMediasIds: new Set(["p3"]) }));
+    expect(aMedias).not.toContain('data-testid="cta-columnas"');
+  });
+
+  it("si el reproceso no partió (p. ej. tiene emitidas), el aviso no promete 'leyendo de nuevo'", async () => {
+    const { avisoTrasGuardar } = await import("@/components/upload/FieldMapper");
+    expect(avisoTrasGuardar({ reprocessStarted: true })).toMatch(/leyendo tu cartola de nuevo/);
+    expect(avisoTrasGuardar({ reprocessStarted: false })).not.toMatch(/leyendo/);
+    expect(avisoTrasGuardar({})).toMatch(/próximas cartolas/);
+  });
+
+  it("warning de keys duplicadas: AtribucionDoc no comparte key con el visor de la cartola (son hermanos)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/app/(app)/escritorio/v5/MesaTab.tsx", "utf8");
+    expect(src).not.toMatch(/<AtribucionDoc key=\{selDoc\.id\}/);
+    expect(src).toMatch(/<VeredictoCartola key=\{selDoc\.id\}/);
+  });
+});
