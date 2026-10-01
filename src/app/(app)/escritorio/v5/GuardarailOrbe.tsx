@@ -343,7 +343,7 @@ export default function GuardarailOrbe({ guardarail, team = null, empresaId = nu
       {apuntando && (
         <>
           <div className="ap-veil" aria-hidden data-actualizacion-espera="" />
-          <div className="ap-hint" role="status">Toca lo que quieres que vea <b>{apuntando.para}</b> · Esc para salir</div>
+          <div className="ap-hint" data-actualizacion-espera="" role="status">Toca lo que quieres que vea <b>{apuntando.para}</b> · Esc para salir</div>
         </>
       )}
 

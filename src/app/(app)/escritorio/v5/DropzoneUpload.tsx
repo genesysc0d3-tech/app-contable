@@ -297,7 +297,7 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
       {/* Popup de contexto. Encima del modal, no dentro: es una decisión cerrada
           (entras, escribes, sales) y el botón de subir no se mueve de lugar. */}
       {ctxArchivo && (
-        <div className="dz-ctx-velo" role="presentation" onClick={() => setCtxId(null)}>
+        <div className="dz-ctx-velo" data-actualizacion-espera="" role="presentation" onClick={() => setCtxId(null)}>
           <div className="dz-ctx" role="dialog" aria-modal="true" aria-labelledby="dz-ctx-t"
             onClick={(e) => e.stopPropagation()}>
             <h4 id="dz-ctx-t">¿Qué es esta plata?</h4>

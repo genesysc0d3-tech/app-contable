@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { CABECERA_VERSION } from "./version";
@@ -59,6 +60,17 @@ describe("momentos NO seguros declarados", () => {
     expect(faltan).toEqual([]);
   });
 
+  it("el inventario no se burla: fixed multilínea, con top/left, Tailwind, libre lejano o marca en otra etiqueta", () => {
+    const dir = mkdtempSync(join(tmpdir(), "inv-"));
+    writeFileSync(join(dir, "a.tsx"), `export const A = () => (\n  <div\n    onClick={() => {}}\n    style={{\n      zIndex: 9,\n      position: "fixed",\n      top: 0, left: 0, right: 0, bottom: 0,\n    }}>\n    <input />\n  </div>\n);\n`);
+    writeFileSync(join(dir, "b.tsx"), `export const B = () => <div className="fixed inset-0 bg-black/50"><textarea /></div>;\n`);
+    writeFileSync(join(dir, "c.tsx"), `// actualizacion-libre: lejos\n\n\n\nexport const C = () => <div style={{ position: "fixed", inset: 0 }} />;\n`);
+    writeFileSync(join(dir, "d.tsx"), `export const D = () => <div data-actualizacion-espera="">\n  <div style={{ position: "fixed", inset: 0 }} />\n</div>;\n`);
+    writeFileSync(join(dir, "ok.tsx"), `export const Ok = () => (\n  <div\n    data-actualizacion-espera=""\n    style={{ position: "fixed", inset: 0 }} />\n);\n`);
+    const faltan = inventarioOverlaysSinMarca([dir]).map((x) => x.replace(dir + "/", ""));
+    expect(faltan).toEqual(["a.tsx:2", "b.tsx:1", "c.tsx:5", "d.tsx:2"]);
+  });
+
   it("A2: tras una escritura se reintenta con setTimeout (nunca microtask) y con margen", () => {
     const src = fuente("src/components/ActualizadorInvisible.tsx");
     expect(src).not.toMatch(/queueMicrotask/);
@@ -102,31 +114,68 @@ function tsxDe(dir: string): string[] {
   return out;
 }
 
+/** Texto de la etiqueta JSX de apertura que contiene `pos` (de `<Tag` hasta su `>`). */
+function etiquetaEn(src: string, pos: number): { inicio: number; texto: string } | null {
+  // Retrocede hasta el `<Letra` de apertura más cercano que no esté cerrado antes de pos.
+  for (let k = pos; k >= 0; k--) {
+    if (src[k] === "<" && /[A-Za-z]/.test(src[k + 1] ?? "")) {
+      const fin = finDeEtiqueta(src, k);
+      if (fin >= pos) return { inicio: k, texto: src.slice(k, fin + 1) };
+    }
+  }
+  return null;
+}
+function finDeEtiqueta(src: string, k: number): number {
+  let llaves = 0;
+  let comilla: string | null = null;
+  for (let j = k + 1; j < src.length; j++) {
+    const c = src[j];
+    if (comilla) { if (c === comilla && src[j - 1] !== "\\") comilla = null; continue; }
+    if (c === '"' || c === "'" || c === "`") { comilla = c; continue; }
+    if (c === "{") llaves++;
+    else if (c === "}") llaves--;
+    else if (c === ">" && llaves === 0 && src[j - 1] !== "=") return j;
+  }
+  return src.length - 1;
+}
+function lineaDe(src: string, pos: number): number { return src.slice(0, pos).split("\n").length; }
+
 export function inventarioOverlaysSinMarca(raices = ["src/app/(app)", "src/components"]): string[] {
   const archivos = raices.flatMap(tsxDe);
-  // Clases CSS que en cualquier archivo se definen como velo de pantalla completa.
-  const clasesVelo = new Set<string>();
+  // Clases CSS definidas como fixed (en cualquier forma) en cualquier archivo.
+  const clasesFixed = new Set<string>();
   for (const f of archivos) {
-    for (const m of fuente(f).matchAll(/\.([\w-]+)\s*\{\s*position:\s*fixed;\s*inset:\s*0/g)) clasesVelo.add(m[1]);
+    for (const m of fuente(f).matchAll(/\.([\w-]+)\s*\{[^}]*position:\s*fixed/g)) clasesFixed.add(m[1]);
   }
-  const SITIO = [
-    /createPortal\(/,
-    /position:\s*"fixed",\s*inset:\s*0\b/,
-    /role="dialog"/,
-  ];
-  const CLASE_SITIO = /(overlay|-pop|popup|modal|velo|veil)$/;
-  const MARCA = /data-actualizacion-espera|aria-modal="true"|actualizacion-libre:/;
-  const faltan: string[] = [];
+  const MARCA = /data-actualizacion-espera|aria-modal="true"/;
+  const faltan = new Set<string>();
   for (const f of archivos) {
-    const lineas = fuente(f).split("\n");
-    lineas.forEach((l, i) => {
-      const usaClaseVelo = [...l.matchAll(/className=\{?[`"]([^`"]*)[`"]/g)].some((m) => m[1].split(/\s+/).some((c) => clasesVelo.has(c) || CLASE_SITIO.test(c)));
-      if (!usaClaseVelo && !SITIO.some((r) => r.test(l))) return;
-      const ventana = lineas.slice(Math.max(0, i - 2), i + 4).join("\n");
-      // Portal de un COMPONENTE (<FieldMapper …/>): su overlay se inventaría en su archivo.
-      if (/createPortal\(/.test(l) && /createPortal\(\s*\n?\s*<[A-Z]/.test(lineas.slice(i, i + 3).join("\n"))) return;
-      if (!MARCA.test(ventana)) faltan.push(`${f}:${i + 1}`);
-    });
+    const src = fuente(f);
+    const sitios: number[] = [];
+    // 1) position fixed inline en cualquier forma (una o varias líneas, con top/left/inset…)
+    for (const m of src.matchAll(/position:\s*["']fixed["']/g)) sitios.push(m.index!);
+    // 2) role="dialog"
+    for (const m of src.matchAll(/role="dialog"/g)) sitios.push(m.index!);
+    // 3) clases: Tailwind `fixed`, clases CSS fixed, o nombres de overlay/pop/modal/velo
+    for (const m of src.matchAll(/className=\{?[`"]([^`"]*)[`"]/g)) {
+      const cls = m[1].split(/\s+/);
+      if (cls.some((c) => c === "fixed" || clasesFixed.has(c) || /(overlay|-pop|popup|modal|velo|veil)$/.test(c))) sitios.push(m.index!);
+    }
+    // 4) portales: la PRIMERA etiqueta del portal (si es un componente, se inventaría en su archivo)
+    for (const m of src.matchAll(/createPortal\(\s*(\(\s*)?<([A-Za-z])/g)) {
+      if (/[A-Z]/.test(m[2])) continue;
+      sitios.push(src.indexOf("<", m.index!) + 1);
+    }
+    for (const pos of sitios) {
+      const tag = etiquetaEn(src, pos);
+      if (!tag) { faltan.add(`${f}:${lineaDe(src, pos)}`); continue; }
+      if (MARCA.test(tag.texto)) continue;
+      // Libre: SOLO un comentario en la línea inmediatamente anterior a la etiqueta.
+      const lineas = src.split("\n");
+      const n = lineaDe(src, tag.inicio);
+      if (/actualizacion-libre:\s*\S/.test(lineas[n - 2] ?? "")) continue;
+      faltan.add(`${f}:${n}`);
+    }
   }
-  return faltan;
+  return [...faltan].sort();
 }

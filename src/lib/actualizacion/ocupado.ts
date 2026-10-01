@@ -11,8 +11,12 @@
 
 export const SELECTOR_ESPERA = "[data-actualizacion-espera], [aria-modal='true']";
 
-const bloqueos = new Map<string, number>();
-const oyentes = new Set<() => void>();
+// Una sola instancia por pestaña aunque el módulo se cargue dos veces (chunks del
+// layout y de la página): si no, un bloqueo de emisión tomado en la página sería
+// invisible para el actualizador del layout.
+const G = globalThis as typeof globalThis & { __massdteBloqueos?: { bloqueos: Map<string, number>; oyentes: Set<() => void> } };
+G.__massdteBloqueos ??= { bloqueos: new Map(), oyentes: new Set() };
+const { bloqueos, oyentes } = G.__massdteBloqueos;
 
 export function tomarBloqueo(motivo: string): () => void {
   bloqueos.set(motivo, (bloqueos.get(motivo) ?? 0) + 1);

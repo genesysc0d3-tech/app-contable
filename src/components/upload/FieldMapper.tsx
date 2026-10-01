@@ -417,7 +417,7 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant
 // Modal standalone (visor de la mesa y DocCardList).
 export default function FieldMapper(props: FieldMapperProps) {
   return (
-    <div style={{
+    <div data-actualizacion-espera="" style={{
       position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center",
       padding: 20, background: "rgba(0,0,0,.5)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
     }}>
@@ -691,8 +691,8 @@ function Tooltip({ content, children }: { content: string; children: React.React
     <span ref={ref} onMouseEnter={() => { if (ref.current) { const r = ref.current.getBoundingClientRect(); setPos({ top: r.bottom + 6, left: r.left + r.width / 2 }); setShow(true); } }}
       onMouseLeave={() => setShow(false)} style={{ display: "inline-block" }}>
       {children}
-      {/* actualizacion-libre: tooltip de hover, no guarda nada */}
       {show && pos && typeof document !== "undefined" && createPortal(
+        // actualizacion-libre: tooltip de hover, no guarda nada
         <div style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-50%)", zIndex: 300, pointerEvents: "none", maxWidth: 260, padding: "8px 12px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 10, lineHeight: 1.4, boxShadow: "0 8px 24px rgba(0,0,0,.2)" }}>{content}</div>, document.body,
       )}
     </span>

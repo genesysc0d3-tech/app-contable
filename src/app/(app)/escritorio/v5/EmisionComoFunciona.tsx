@@ -180,8 +180,8 @@ export default function EmisionComoFunciona() {
         <div className="ecf-emit">Emitir 43</div>
 
         {/* popup de subir cartola: aprietas MassDTE → subes → procesa */}
-        {/* actualizacion-libre: maqueta animada de la guía, sin datos */}
         {enPopup && (
+          // actualizacion-libre: maqueta animada de la guía, sin datos
           <div className="ecf-pop">
             <div className="ecf-pop-head">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 8l5-5 5 5M5 21h14" /></svg>

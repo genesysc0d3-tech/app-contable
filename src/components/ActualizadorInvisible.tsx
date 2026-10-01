@@ -25,9 +25,10 @@ import { useEffect } from "react";
 import { crearActualizador, tocaConsultarVersion } from "@/lib/actualizacion/actualizador";
 import { versionDelCliente } from "@/lib/actualizacion/version";
 import { alLiberarBloqueo, bloqueosActivos, MARGEN_TRAS_ESCRITURA_MS, motivoOcupado } from "@/lib/actualizacion/ocupado";
-import { ATRIBUTO_RESTAURANDO, guardarEstado, FORMATO_ESTADO, necesitaTapar, TOPE_TAPADO_MS } from "@/lib/actualizacion/estado-guardado";
-import { capturarPiezas, descartarRestauracion, estadoARestaurar, momentoUltimaRestauracion, piezasPorRestaurar } from "@/lib/actualizacion/piezas";
-import { aplicarScroll, capturarScroll } from "@/lib/actualizacion/scroll";
+import { ATRIBUTO_RESTAURANDO, guardarEstado, TOPE_TAPADO_MS } from "@/lib/actualizacion/estado-guardado";
+import { descartarRestauracion, estadoARestaurar, momentoPrimeraRestauracion, momentoUltimaRestauracion, piezasPorRestaurar } from "@/lib/actualizacion/piezas";
+import { aplicarScroll } from "@/lib/actualizacion/scroll";
+import { capturarEstadoVisible, debeDescartarRestauracion } from "@/lib/actualizacion/capturar";
 
 const REINTENTO_MS = 5_000;
 // Tras soltar un bloqueo o terminar una escritura: margen para que el código que
@@ -35,7 +36,7 @@ const REINTENTO_MS = 5_000;
 const REINTENTO_TRAS_LIBERAR_MS = 400;
 // Destapar: sin piezas pendientes, o 1,5 s sin que se restaure otra, o 3 s sin
 // ninguna (la mesa no llegó). Lo que monte después igual se restaura al montarse
-// (chunks fríos tras el deploy) hasta el tope de 8 s.
+// (chunks fríos tras el deploy) según debeDescartarRestauracion.
 const ESPERA_ENTRE_PIEZAS_MS = 1_500;
 const ESPERA_SIN_PIEZAS_MS = 3_000;
 // El scroll se re-aplica mientras la lista crece (datos que llegan tarde), hasta 3 s
@@ -47,19 +48,14 @@ type VentanaConMarca = Window & { __massdteActualizador?: boolean };
 
 function guardarLoVisible(desde: string): void {
   const activo = document.activeElement as HTMLElement | null;
-  const piezas = capturarPiezas();
-  const scroll = capturarScroll(document);
-  guardarEstado(window.sessionStorage, {
-    formato: FORMATO_ESTADO,
-    desde,
-    at: Date.now(),
+  guardarEstado(window.sessionStorage, capturarEstadoVisible({
+    raiz: document,
     ruta: window.location.pathname + window.location.search,
-    piezas,
-    scroll,
+    ahora: Date.now(),
+    desde,
     foco: activo && activo !== document.body && activo.id ? activo.id : null,
     ventana: { x: window.scrollX, y: window.scrollY },
-    tapar: necesitaTapar(piezas, scroll) || window.scrollY > 0,
-  });
+  }));
 }
 
 /** Tras la recarga: espera a que las piezas se monten, re-aplica scroll y foco, y destapa. */
@@ -78,12 +74,23 @@ function terminarRestauracion(): () => void {
     if (document.hidden) { const t = setTimeout(() => { timers.delete(t); cb(); }, 50); timers.add(t); }
     else raf = requestAnimationFrame(cb);
   };
-  // Lo que no alcanzó a montarse en 8 s se descarta (no se aplica a destiempo).
-  const tope = setTimeout(() => descartarRestauracion(), TOPE_TAPADO_MS);
-  timers.add(tope);
-
   let toco = false;
-  const alTocar = () => { toco = true; };
+  // Primer toque de la clienta: ya siguió con otra cosa → lo que falte por restaurar
+  // se abandona (no se le cambia la pestaña ni el doc bajo los dedos).
+  const alTocar = () => { toco = true; descartarRestauracion(); };
+  // Lo que monta tarde (la mesa streameada, chunks fríos) se sigue restaurando al
+  // montarse; se abandona según debeDescartarRestauracion (no un tope desde la carga).
+  const vigilarDescarte = () => {
+    if (cancelado || piezasPorRestaurar() === 0) return;
+    const primera = momentoPrimeraRestauracion();
+    if (debeDescartarRestauracion({ msDesdeCarga: performance.now() - inicio, msDesdePrimeraRestauracion: primera === null ? null : Date.now() - primera, toco })) { descartarRestauracion(); return; }
+    const t = setTimeout(() => { timers.delete(t); vigilarDescarte(); }, 1_000);
+    timers.add(t);
+  };
+  vigilarDescarte();
+  // La página nunca queda invisible más que el tope (4 s), pase lo que pase.
+  const tope = setTimeout(() => mostrar(), TOPE_TAPADO_MS);
+  timers.add(tope);
   for (const ev of EVENTOS_INTERACCION) window.addEventListener(ev, alTocar, { capture: true, passive: true, once: true });
   const soltarOyentes = () => { for (const ev of EVENTOS_INTERACCION) window.removeEventListener(ev, alTocar, { capture: true }); };
 

@@ -107,6 +107,7 @@ export default function RightColumnView({
     </GlowWrap>
     {fullscreen && originStyle && expanded && (
       <div
+        data-actualizacion-espera=""
         style={{
           position: "fixed",
           zIndex: 70,

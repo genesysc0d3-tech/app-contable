@@ -75,9 +75,10 @@ export function leerEstado(s: StorageLike, { ahora, ruta }: { ahora: number; rut
  * mesa y la vista restaurada difiere de la por defecto, marca <html> y la página
  * queda INVISIBLE (sin contenido que pintar, Chrome sostiene el último cuadro de la
  * página anterior — "paint holding") hasta restaurar: sin silueta ni destello.
- * Con tope propio: a los 8 s se destapa pase lo que pase.
+ * Con tope propio: a los 4 s se destapa pase lo que pase.
  */
 export const ATRIBUTO_RESTAURANDO = "data-massdte-restaurando";
-export const TOPE_TAPADO_MS = 8_000;
+// Tope de la página invisible (revisión adversarial, vuelta 2: 8 s era demasiado).
+export const TOPE_TAPADO_MS = 4_000;
 export const SCRIPT_ANTES_DE_PINTAR = `try{if(location.pathname==="/massdte"){var r=sessionStorage.getItem(${JSON.stringify(CLAVE_ESTADO)});if(r){var e=JSON.parse(r),n=Date.now();if(e&&e.tapar===true&&e.formato===${FORMATO_ESTADO}&&n-e.at<${TTL_ESTADO_MS}&&e.at<=n+5000&&e.ruta===location.pathname+location.search){var d=document.documentElement;d.setAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)},"");setTimeout(function(){d.removeAttribute(${JSON.stringify(ATRIBUTO_RESTAURANDO)})},${TOPE_TAPADO_MS})}}}}catch(_){}`;
 export const ESTILO_RESTAURANDO = `html[${ATRIBUTO_RESTAURANDO}] body>*{visibility:hidden!important}`;

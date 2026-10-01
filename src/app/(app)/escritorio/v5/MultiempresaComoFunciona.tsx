@@ -78,6 +78,7 @@ export default function MultiempresaComoFunciona() {
 
       {/* actualizacion-libre: maqueta animada de la guía, sin datos */}
       <div className="mef-stage" data-fase={fase} aria-hidden>
+        {/* actualizacion-libre: maqueta animada de la guía, sin datos */}
         <div className="mef-pop">
           <div className="mef-pop-h">Tus empresas · 2 de 3</div>
           {EMPRESAS.map((e, i) => (
