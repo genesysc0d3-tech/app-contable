@@ -987,7 +987,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       // termina fallido (el motivo real del fallo suele venir en el último status).
       if (data.message) lastStatusMsgRef.current = String(data.message).slice(0, 500);
 
-      void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
+      // Se guarda la promesa: el cierre `failed`/`cancelled` de abajo la espera (carrera
+      // DELETE vs PATCH, "arregla todo" oct-2026): el server decide si un `cancelled` es
+      // lápida mirando el ÚLTIMO status del latido; si el DELETE llegaba primero, juzgaba
+      // con el status anterior.
+      const latido = heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
       // Seguridad 2026-09-30 (punto 1): `emision_incierta` (canal muerto tras mandar la
       // emisión) y `result_needs_review` pudieron dejar una boleta REAL en el SII → se
       // muestran y se sellan como lápida, nunca como un error re-emitible.
@@ -1033,7 +1037,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         // formaba cuando la extensión quedaba huérfana y el bridge respondía con
         // otro status "error" para el mismo job).
         closedJobIdsRef.current.add(data.job_id);
-        void closeEmissionJobEvent(data.job_id, cierre.cerrar);
+        const jobCerrar = data.job_id;
+        const estadoCerrar = cierre.cerrar;
+        void latido.finally(() => closeEmissionJobEvent(jobCerrar, estadoCerrar));
         // Cerrar también la ventana worker de ese job: si quedaba viva con su botón
         // "Reintentar" mientras acá se re-habilitaba Emitir, había dos cerebros
         // capaces de emitir dos boletas reales. (Post-emit la extensión la protege.)

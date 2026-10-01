@@ -53,6 +53,61 @@ export function crearRecargador<P, R>(opts: {
   };
 }
 
+// ── Carga puntual que no pisa una navegación posterior ─────────────────────────
+
+/**
+ * Carga y aplica SOLO si, al volver la respuesta, la clave `vigente()` sigue siendo
+ * la que era al pedir. Bug fundador 2026-10-01 ("me voy a otra fecha y a unos
+ * minutos me manda a hoy"): la carga post-subida y la navegación del calendario
+ * aplicaban su respuesta sin mirar si el usuario se había movido entre medio → una
+ * respuesta lenta/vieja le cambiaba la mesa (y la fecha) por debajo.
+ * `guardar` corre SIEMPRE con una respuesta buena (p. ej. sembrar la caché: el dato
+ * sirve aunque ya no se muestre). Devuelve true si aplicó.
+ */
+export async function cargarSiSigueVigente<R>(args: {
+  vigente: () => string;
+  cargar: () => Promise<R | null>;
+  aplicar: (r: R) => void;
+  guardar?: (r: R) => void;
+}): Promise<boolean> {
+  const clave = args.vigente();
+  const r = await args.cargar();
+  if (r === null) return false;
+  args.guardar?.(r);
+  if (args.vigente() !== clave) return false;
+  args.aplicar(r);
+  return true;
+}
+
+/**
+ * ¿La recarga trajo EXACTAMENTE lo mismo que ya se mostraba? Si sí, MesaController
+ * no re-renderiza ni re-difunde la mesa (menos trabajo en cada paso de la vigilancia
+ * post-subida y en los sondeos). NO decide la frescura de la caché: los otros rangos
+ * se envejecen igual, porque el evento pudo cambiar un rango que no es el visible.
+ * Comparación por contenido serializado (la respuesta es determinista dado el mismo
+ * dato). Ante cualquier duda (no serializable) responde false = aplicar, como antes.
+ */
+export function mismaMesa(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Atenuación de la mesa: solo mientras carga el ÚLTIMO rango pedido. Al terminar la
+ * carga de `terminada`, el "cargando" se apaga solo si era ESE; si el usuario ya
+ * pidió otro (o lo sirvió la caché → null) se respeta. Antes dependía del isPending
+ * global de la transición: clic en 5 (lento) → clic en 6 (caché) dejaba la mesa del
+ * 6 atenuada hasta que llegaba/expiraba la del 5.
+ */
+export function cargandoTras(cargando: string | null, terminada: string): string | null {
+  return cargando === terminada ? null : cargando;
+}
+
 // ── Espaciador: coalesce ráfagas (debounce) y separa recargas (intervalo mínimo) ──
 
 export interface Timers {

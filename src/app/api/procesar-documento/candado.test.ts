@@ -35,7 +35,7 @@ vi.mock("@/lib/supabase/server", () => ({
       q.single = async () =>
         tabla === "usuarios"
           ? { data: { empresa_id: "E1", rol: "owner" } }
-          : { data: { id: "D1", empresa_id: "E1", storage_path: "cartolas/a.xlsx", tipo: "cartola", estado: "procesado" } };
+          : { data: { id: "D1", empresa_id: "E1", storage_path: "E1/D1/a.xlsx", tipo: "cartola", estado: "procesado" } };
       return q;
     },
   }),

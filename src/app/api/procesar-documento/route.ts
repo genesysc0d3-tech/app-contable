@@ -10,6 +10,7 @@ import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/auto-drenaje";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { MENSAJE_NO_PUDIMOS_REVISAR, revisarBloqueoDocumento } from "@/lib/emission/bloqueo-borrado";
+import { esPathDeEmpresa } from "@/lib/storage";
 
 function cleanGroupedImages(value: unknown, args: { empresaId: string; documentoId: string }) {
   if (!Array.isArray(value)) return [];
@@ -125,6 +126,11 @@ export async function POST(request: Request) {
   }
   const storagePath = groupedImages[0]?.path ?? documento.storage_path;
   if (storagePath === "memoria") {
+    return NextResponse.json({ ok: false, error: "Archivo original no disponible en almacenamiento — subilo nuevamente desde el escritorio" }, { status: 422 });
+  }
+  // El worker baja este path con service role: solo archivos de ESTA empresa (auditoría
+  // 2026-10-01: una fila propia con storage_path ajeno exfiltraba el archivo de otra).
+  if (!esPathDeEmpresa(storagePath, usuario.empresa_id)) {
     return NextResponse.json({ ok: false, error: "Archivo original no disponible en almacenamiento — subilo nuevamente desde el escritorio" }, { status: 422 });
   }
 
