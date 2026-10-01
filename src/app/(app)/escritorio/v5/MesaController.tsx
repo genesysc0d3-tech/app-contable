@@ -275,7 +275,9 @@ export default function MesaController({
       // fundador 2026-10-01): si el usuario navegó a otra fecha mientras cargaba, no
       // se lo devuelve al día de la subida. La caché del día queda sembrada igual.
       void cargarSiSigueVigente({
-        vigente: () => keyDeMesa(mesaRef.current),
+        // Incluye el último rango PEDIDO (revisión adversarial B-A1): un clic a una fecha
+        // aún en vuelo cuenta como navegar, aunque la mesa todavía no haya cambiado.
+        vigente: () => `${keyDeMesa(mesaRef.current)}#${ultimoPedidoRef.current ?? ""}`,
         cargar: async () => { const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva }); return res.ok ? res.mesa : null; },
         guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
         aplicar: (fresca) => { ultimoPedidoRef.current = key; aplicarMesa(fresca); },

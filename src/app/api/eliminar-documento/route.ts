@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { deleteFromR2 } from "@/lib/r2";
+import { esPathDeEmpresa } from "@/lib/storage";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 import {
@@ -164,7 +165,9 @@ export async function POST(request: Request) {
   // Álbum Telegram: varias imágenes bajo el mismo provider del documento.
   const album = (documento.album_imagenes as Array<{ path?: string }> | null) ?? [];
   const paths = [documento.storage_path, ...album.map((img) => img?.path)]
-    .filter((p): p is string => Boolean(p) && p !== "memoria");
+    // Solo archivos de ESTA empresa (auditoría 2026-10-01): un path ajeno escrito en la
+    // fila borraría con service role el archivo de otra empresa. Lo ajeno se ignora.
+    .filter((p): p is string => Boolean(p) && p !== "memoria" && esPathDeEmpresa(p, documento.empresa_id));
   if (documento.storage_provider === "r2") {
     for (const p of paths) {
       try {
