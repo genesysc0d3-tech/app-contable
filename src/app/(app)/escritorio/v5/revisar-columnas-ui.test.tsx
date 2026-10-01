@@ -28,27 +28,57 @@ describe("la tarjeta 'Así la leímos' ya no existe", () => {
     expect(existsSync("src/app/(app)/escritorio/v5/lectura-actions.ts")).toBe(false);
   });
 
-  it("el visor muestra el aviso de una línea 'Revisa las columnas' con su botón, no la muestra ni el saldo final", async () => {
+  it("revisión de columnas pendiente: el visor deja un CTA grande 'Revisar columnas' con el porqué, sin Editar ni Aprobar", async () => {
     const { default: VeredictoCartola } = await import("./VeredictoCartola");
     const html = renderToStaticMarkup(createElement(VeredictoCartola, props(cuadre)));
-    expect(html).toContain("Revisa las columnas");
-    expect(html).toContain('data-testid="aviso-columnas"');
+    expect(html).toContain('data-testid="cta-columnas"');
+    expect(html).toContain("Revisar columnas");
+    expect(html).toContain("no pudimos comprobar");
+    expect(html).not.toMatch(/>\s*Editar\s*</);
+    expect(html).not.toContain("Aprobar");
     expect(html).not.toContain("Así la leímos");
     expect(html).not.toContain("Se ve bien");
     expect(html).not.toContain("Saldo final en tu portal");
   });
 
-  it("formato ya confirmado y archivo sin nada raro: sin aviso", async () => {
+  it("sin revisión pendiente (formato confirmado, nada raro): el visor de siempre, intacto", async () => {
     const { default: VeredictoCartola } = await import("./VeredictoCartola");
     const ok: CuadreCartola = { ...cuadre, mapa: { adapter_id: "a", estado: "confirmado", nuevo: false } };
-    expect(renderToStaticMarkup(createElement(VeredictoCartola, props(ok)))).not.toContain('data-testid="aviso-columnas"');
+    const html = renderToStaticMarkup(createElement(VeredictoCartola, props(ok)));
+    expect(html).not.toContain('data-testid="cta-columnas"');
+    expect(html).not.toContain("Revisar columnas");
+    expect(html).toMatch(/Editar/);
+    expect(html).toContain("Aprobar");
   });
 
-  it("formato confirmado pero ESTE archivo no calza: el aviso dice por qué", async () => {
+  it("cartola comprobada sola (saldo) o confirmada por el cliente: el visor de siempre", async () => {
+    const { default: VeredictoCartola } = await import("./VeredictoCartola");
+    for (const v of [{ tipo: "saldo" as const, detalle: "" }, { tipo: "cliente" as const, detalle: "" }]) {
+      const html = renderToStaticMarkup(createElement(VeredictoCartola, props({ ...cuadre, verificacion: v })));
+      expect(html).not.toContain('data-testid="cta-columnas"');
+      expect(html).toContain("Aprobar");
+    }
+  });
+
+  it("formato confirmado pero ESTE archivo no calza: el CTA dice por qué", async () => {
     const { default: VeredictoCartola } = await import("./VeredictoCartola");
     const raro: CuadreCartola = { ...cuadre, verificacion: { tipo: "sin_comprobar", alerta: true, detalle: "2 fila(s) oculta(s) con plata" }, mapa: { adapter_id: "a", estado: "confirmado", nuevo: false } };
     const html = renderToStaticMarkup(createElement(VeredictoCartola, props(raro)));
+    expect(html).toContain('data-testid="cta-columnas"');
     expect(html).toContain("Esta vez algo no calza");
+  });
+});
+
+describe("el popup muestra fechas y montos legibles (solo presentación)", () => {
+  it("serial de Excel → dd/mm/aaaa; monto sin formato → $94.000; el resto tal cual", async () => {
+    const { celdaLegible } = await import("@/components/upload/FieldMapper");
+    expect(celdaLegible("46296.375", "fecha")).toBe("01/10/2026");
+    expect(celdaLegible("05/10/2026", "fecha")).toBe("05/10/2026");
+    expect(celdaLegible("94000", "abono")).toBe("$94.000");
+    expect(celdaLegible("-12500.5", "monto")).toBe("-$12.501");
+    expect(celdaLegible("$ 1.234", "cargo")).toBe("$ 1.234");
+    expect(celdaLegible("100201", "n_documento")).toBe("100201");
+    expect(celdaLegible("94000", "ignorar")).toBe("94000");
   });
 });
 
@@ -98,5 +128,12 @@ describe("el popup se abre SOLO una vez, donde la clienta está mirando", () => 
     const sola = { ...reciente, progreso_ia: { cuadre: { ...cuadre, mapa: { adapter_id: "a", estado: "confirmado", nuevo: false } } } };
     expect(docParaAbrirSolo([sola], { vistosProcesando: new Set(), yaAbiertos: new Set(), ahora })).toBeNull();
     expect(docParaAbrirSolo([{ ...reciente, estado: "procesando" }], { vistosProcesando: new Set(), yaAbiertos: new Set(), ahora })).toBeNull();
+  });
+});
+
+describe("la mesa no repite documentos", () => {
+  it("sinDocsRepetidos deja una sola vez cada id (la primera)", async () => {
+    const { sinDocsRepetidos } = await import("./mesa-data-util");
+    expect(sinDocsRepetidos([{ id: "a", n: 1 }, { id: "b", n: 2 }, { id: "a", n: 3 }]).map((d) => d.n)).toEqual([1, 2]);
   });
 });
