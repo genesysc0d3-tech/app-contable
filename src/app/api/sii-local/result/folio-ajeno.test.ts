@@ -9,7 +9,7 @@ const src = readFileSync(join(__dirname, "route.ts"), "utf8");
 
 describe("result/route.ts — folio de otro documento nunca cierra el job", () => {
   it("la rama `existing` lee propuesta_id y el guard va ANTES de sellar 'completed'", () => {
-    const sel = src.indexOf('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total")');
+    const sel = src.indexOf('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id")');
     expect(sel).toBeGreaterThan(0);
     // Auditoría oct-2026 #1: la decisión (huérfana → enlazar o ajena) va por el helper.
     const decision = src.indexOf("await resolverFolioExistente(sb, { existing, propuestaId: job.propuesta_id ?? null, tipoDte })", sel);
@@ -32,13 +32,13 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
 
   it("el backfill (job cerrado) y su carrera NO levantan la lápida con folio ajeno ni huérfano que no calza", () => {
     const fn = src.indexOf("async function backfillFolioSinJobVivo(");
-    const dedup = src.indexOf('.from("boletas_emitidas").select("id, propuesta_id, monto_total, estado")', fn);
+    const dedup = src.indexOf('.from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta")', fn);
     expect(dedup).toBeGreaterThan(fn);
-    const guard1 = src.indexOf("if (!folioCierraLaPropuesta(decision)) return { ok: false, error: \"FOLIO_DE_OTRO_DOCUMENTO\" };", dedup);
+    const guard1 = src.indexOf("if (!folioCierraLaPropuesta(decision)) return { ok: false, error: \"FOLIO_DE_OTRO_DOCUMENTO\"", dedup);
     const lift1 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId, ", dedup);
     expect(guard1).toBeGreaterThan(dedup);
     expect(guard1).toBeLessThan(lift1);
-    const raced = src.indexOf("if (!folioCierraLaPropuesta(decisionRaced)) return { ok: false, error: \"FOLIO_DE_OTRO_DOCUMENTO\" };", lift1);
+    const raced = src.indexOf("if (!folioCierraLaPropuesta(decisionRaced)) return { ok: false, error: \"FOLIO_DE_OTRO_DOCUMENTO\"", lift1);
     const lift2 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId, ", lift1 + 10);
     expect(raced).toBeGreaterThan(lift1);
     expect(raced).toBeLessThan(lift2);
@@ -96,5 +96,21 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
     const strong = src.indexOf("const hasStrongEvidence = (result?.folio_confidence === \"high\" && !vetoCalce)");
     expect(veto).toBeGreaterThan(0);
     expect(strong).toBeGreaterThan(veto);
+  });
+
+  it("las selects que alimentan resolverFolioExistente traen track_id/proveedor_respuesta (sin eso NINGUNA huérfana sería RCV)", () => {
+    const n = src.split("track_id, proveedor_respuesta").length - 1;
+    expect(n).toBeGreaterThanOrEqual(3); // backfill, su carrera y la carrera del camino vivo
+    expect(src).toContain('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id")');
+  });
+
+  it("«no salió» del lote ignora folios rechazados por ajenos (rev. adversarial #7)", () => {
+    expect(src).toContain("const folioQueBloquea = (conFolio ?? []).find(folioBloqueaNoSalio);");
+  });
+
+  it("solo el folio a mano acepta una huérfana RCV sin monto", () => {
+    expect(src.split("aceptarMontoDesconocido: true").length - 1).toBe(1);
+    const manual = src.indexOf("const respaldoManual = await backfillFolioSinJobVivo(");
+    expect(src.indexOf("aceptarMontoDesconocido: true", manual)).toBeGreaterThan(manual);
   });
 });

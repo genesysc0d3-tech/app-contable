@@ -4,7 +4,7 @@ import type { Database } from "@/lib/database.types";
 import { requireAccountApiAccess } from "@/lib/api/account-guard";
 import { reserveSimpleApiFolio } from "@/lib/emission/folio-reservas";
 import { acquireCuentaEmissionLock, releaseCuentaEmissionLock, renovarLeaseCuenta } from "@/lib/emission/locks";
-import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA } from "@/lib/emission/boleta-unica-lapida";
+import { buscarLapidaBoletaUnica, leerIntento, ORIGIN_BOLETA_UNICA, marcarEstadoVisibleLatido } from "@/lib/emission/boleta-unica-lapida";
 import {
   DETALLE_DATOS_FALTAN,
   SELECT_PROPUESTA_DATOS,
@@ -1059,7 +1059,9 @@ export async function PATCH(request: Request) {
   const now = new Date().toISOString();
   const { error: updateJobError } = await service.service
     .from("emision_jobs")
-    .update({ estado: "running", estado_visible: estado, heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
+    // estado_visible va aparte (marcarEstadoVisibleLatido, abajo): no puede borrar la
+    // marca de posible clic que decide la lápida de la boleta única (rev. adversarial #3).
+    .update({ estado: "running", heartbeat_at: now, updated_at: now, expires_at: nuevaExpiracion, locked_until: nuevaExpiracion })
     .eq("job_id", job.job_id)
     // Cinturón y tiradores: aunque el corte de arriba ya cubre los estados
     // terminales, gateamos el UPDATE a solo activos para que ningún estado
@@ -1081,6 +1083,16 @@ export async function PATCH(request: Request) {
       metadata: { estado_visible: estado },
     });
     return NextResponse.json({ ok: false, error: "JOB_UPDATE_FAILED", detalle: updateJobError.message }, { status: 500 });
+  }
+  // Monótona: un status pre-clic no pisa uno post-clic. Best-effort como la caja negra:
+  // si falla, el latido ya renovó el job y el candado.
+  const marca = await marcarEstadoVisibleLatido(service.service, job.job_id, estado);
+  if (marca.error) {
+    await recordOpsError({
+      sb: service.service, severity: "error", source: "emision", eventName: "emission_job_estado_visible_failed",
+      summary: "No se pudo anotar el estado visible del latido", cuentaId: job.cuenta_id, usuarioId: user.id,
+      resourceType: "emision_job", resourceId: job.job_id, error: marca.error.message, metadata: { estado_visible: estado },
+    });
   }
 
   return NextResponse.json({ ok: true, estado, heartbeat_at: now });
