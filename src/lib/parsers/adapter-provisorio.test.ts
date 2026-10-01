@@ -107,17 +107,17 @@ describe("prod SIN la migración 20260930140000 (revisión adversarial 2026-09-3
   // pedir "Revisa las columnas" (y escondía Editar/Aprobar). Mientras la columna
   // falte, se emula el backfill de la migración: manual y plantilla = confirmados.
   it("sin columna estado: manual → confirmado/manual, plantilla → confirmado/plantilla, el resto provisorio", () => {
-    const manual = store.conEstadoLegado({ source: "manual", config: {} } as never);
+    const manual = store.conEstadoLegado({ source: "manual", config: {} } as Parameters<typeof store.conEstadoLegado>[0]);
     expect(manual.estado).toBe("confirmado");
     expect(manual.confirmado_por).toBe("manual");
-    const plantilla = store.conEstadoLegado({ source: "named", config: { plantilla: true } } as never);
+    const plantilla = store.conEstadoLegado({ source: "named", config: { plantilla: true } } as Parameters<typeof store.conEstadoLegado>[0]);
     expect(plantilla.estado).toBe("confirmado");
     expect(plantilla.confirmado_por).toBe("plantilla");
-    expect(store.conEstadoLegado({ source: "heuristic", config: {} } as never).estado).toBe("provisorio");
+    expect(store.conEstadoLegado({ source: "heuristic", config: {} } as Parameters<typeof store.conEstadoLegado>[0]).estado).toBe("provisorio");
   });
   it("con la columna (aunque sea null o provisorio) no se toca", () => {
-    expect(store.conEstadoLegado({ source: "manual", config: {}, estado: "provisorio" } as never).estado).toBe("provisorio");
-    expect(store.conEstadoLegado({ source: "manual", config: {}, estado: null } as never).estado).toBeNull();
+    expect(store.conEstadoLegado({ source: "manual", config: {}, estado: "provisorio" } as Parameters<typeof store.conEstadoLegado>[0]).estado).toBe("provisorio");
+    expect(store.conEstadoLegado({ source: "manual", config: {}, estado: null } as Parameters<typeof store.conEstadoLegado>[0]).estado).toBeNull();
   });
   it("getAdapterByFingerprint lo aplica: el manual propio (fila sin columna estado) llega confirmado", async () => {
     filasLista = [{ id: "m1", source: "manual", config: {}, confianza: 1, disabled_until: null, creado_por_empresa_id: "e1" }];
