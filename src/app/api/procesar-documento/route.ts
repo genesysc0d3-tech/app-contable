@@ -9,6 +9,7 @@ import { respuestaTopeIa, verificarTopeDiarioIa, type JobsCountClient } from "@/
 import { enqueueDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { iniciarDrenaje } from "@/lib/document-processing/auto-drenaje";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
+import { MENSAJE_NO_PUDIMOS_REVISAR, revisarBloqueoDocumento } from "@/lib/emission/bloqueo-borrado";
 
 function cleanGroupedImages(value: unknown, args: { empresaId: string; documentoId: string }) {
   if (!Array.isArray(value)) return [];
@@ -75,6 +76,24 @@ export async function POST(request: Request) {
   const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!svcUrl || !svcKey) return NextResponse.json({ ok: false, error: "BACKEND_CONFIG_MISSING" }, { status: 500 });
   const svc = createServiceClient<Database>(svcUrl, svcKey);
+
+  // Doble candado (2026-09-30): reprocesar BORRA los movimientos/propuestas previos
+  // del documento (limpiarInsercionesPrevias). Con boletas emitidas o una emisión
+  // abierta/a medias eso está prohibido (el processor y el trigger lo frenan), pero
+  // llegar hasta allá deja el documento en 'error'. Se avisa acá, antes de encolar.
+  const { data: movsPrevios, error: movsErr } = await svc
+    .from("movimientos_raw")
+    .select("id")
+    .eq("documento_id", documento.id);
+  if (movsErr) return NextResponse.json({ ok: false, error: MENSAJE_NO_PUDIMOS_REVISAR }, { status: 503 });
+  const bloqueo = await revisarBloqueoDocumento(svc, (movsPrevios ?? []).map((m) => m.id));
+  if ("error" in bloqueo) return NextResponse.json({ ok: false, error: MENSAJE_NO_PUDIMOS_REVISAR }, { status: 503 });
+  if (bloqueo.emitidas > 0 || bloqueo.emisionesAbiertas > 0) {
+    return NextResponse.json(
+      { ok: false, error: "Este documento tiene boletas emitidas o una emisión a medias en el SII: no se puede reprocesar. Las emitidas nunca vuelven." },
+      { status: 409 },
+    );
+  }
 
   // Mismo cortafuegos de costo que la subida: el reproceso también crea jobs
   // de IA y sin techo acumulado el 6/min se gotea a miles al día.

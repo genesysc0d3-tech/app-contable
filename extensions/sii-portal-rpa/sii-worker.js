@@ -7,6 +7,7 @@
   let currentJobId = null;
   let automationClickInProgress = false;
   let autoCloseTimer = null;
+  let ackFallbackTimer = null; // 0.2.9: "Guardando…" sin noticias del librero → AWAITING_ACK
   let capturedSharePdf = null; // PDF capturado vía COMPARTIR (hook MAIN world)
   let currentJobLogoutAfter = false; // boleta única → cerrar sesión SII al final
   // CAJA NEGRA: la glosa ("Detalle") se pidió pero NO se pudo escribir. Best-effort
@@ -47,30 +48,56 @@
     return overlay;
   }
 
-  function renderOverlay(mode, message) {
+  // 0.2.9 (H2, carrera de los 5 s): `opts.autoClose` = el librero confirmó que massDTE
+  // GUARDÓ el resultado (ack del POST /api/sii-local/result). Solo entonces el DONE
+  // arma el cierre automático. Antes cualquier DONE lo armaba y, con el POST lento
+  // (>5 s), el "close" llegaba sin el ack → "Cerraste tras emitir…" → el lote se
+  // frenaba aunque la boleta sí quedaba guardada (18/18 casos del 25 al 27-sep).
+  // AWAITING_ACK = folio emitido y enviado, massDTE aún no confirma: sin autocierre,
+  // con botón para cerrar (el folio queda en el stash de la extensión).
+  function renderOverlay(mode, message, opts = {}) {
     currentMode = mode;
     if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+    if (ackFallbackTimer) { clearTimeout(ackFallbackTimer); ackFallbackTimer = null; }
+    // Red propia del worker: si el service worker muere esperando el ack (MV3 lo
+    // recicla tras ~30 s sin eventos), nadie manda el DONE ni el AWAITING_ACK y la
+    // ventana quedaría bloqueada en "Guardando…" sin botón. Pasado el plazo, se
+    // habilita cerrar con el folio a la vista (el folio ya está en el stash).
+    const ackFallbackMs = Number(opts?.ackFallbackMs);
+    if (mode === "LOCKED_AUTOMATION" && Number.isFinite(ackFallbackMs) && ackFallbackMs > 0) {
+      ackFallbackTimer = setTimeout(() => {
+        ackFallbackTimer = null;
+        if (currentMode !== "LOCKED_AUTOMATION") return;
+        const base = String(message || "").replace(/\s*Guardándola en massDTE…?\s*$/, "");
+        renderOverlay("AWAITING_ACK", `${base} massDTE todavía no confirma el guardado; se guardará solo. No la emitas de nuevo.`);
+      }, ackFallbackMs);
+    }
     const overlay = ensureOverlay();
     const locked = mode === "LOCKED_AUTOMATION";
     const paused = mode === "PAUSED";
     const done = mode === "DONE";
+    const awaitingAck = mode === "AWAITING_ACK";
     const panelBackground = locked
       ? "rgba(15,16,20,.96)"
       : done
         ? "rgba(20,120,78,.96)"
-        : "rgba(232,85,62,.96)";
+        : awaitingAck
+          ? "rgba(146,98,12,.96)"
+          : "rgba(232,85,62,.96)";
     const helperText = locked
       ? "Estamos trabajando. No escribas ni hagas click en esta ventana."
       : done
         ? "Proceso finalizado. Puedes cerrar esta ventana segura."
-        : "Interaccion habilitada para login, captcha, 2FA o confirmacion.";
+        : awaitingAck
+          ? "La boleta ya salió. Puedes cerrar esta ventana: el folio queda guardado en la extensión y se entrega solo a massDTE. No la emitas de nuevo."
+          : "Interaccion habilitada para login, captcha, 2FA o confirmacion.";
     const actions = paused
       ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <button type="button" data-app-contable-action="capture" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#16181d;font-size:12px;font-weight:800;cursor:pointer;">Capturar folio</button>
           <button type="button" data-app-contable-action="retry" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#16181d;font-size:12px;font-weight:800;cursor:pointer;">Reintentar</button>
           <button type="button" data-app-contable-action="cancel" style="border:1px solid rgba(255,255,255,.45);border-radius:999px;padding:7px 12px;background:transparent;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">Cancelar</button>
         </div>`
-      : done
+      : done || awaitingAck
         ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
             <button type="button" data-app-contable-action="${currentJobLogoutAfter ? "logout_and_close" : "close"}" style="border:0;border-radius:999px;padding:7px 12px;background:#fff;color:#0f5132;font-size:12px;font-weight:800;cursor:pointer;">${currentJobLogoutAfter ? "Cerrar sesión y ventana" : "Cerrar ventana"}</button>
           </div>`
@@ -88,10 +115,10 @@
       </div>
     `;
 
-    if (done) {
-      // Ya emitió y la app guardó el folio: la ventana se cierra sola tras unos
-      // segundos (deja ver el folio un momento). Es automático; el botón
-      // "Cerrar ventana" queda solo por si quieres cerrarla antes.
+    if (done && opts?.autoClose === true) {
+      // Ya emitió y la app CONFIRMÓ que guardó el folio (ack): la ventana se cierra
+      // sola tras unos segundos (deja ver el folio un momento). El botón "Cerrar
+      // ventana" queda por si quieres cerrarla antes.
       autoCloseTimer = setTimeout(() => {
         // Single: clickLogout hace power → confirmar CERRAR SESIÓN → y cierra la
         // ventana él mismo (en su confirm-handler). Si no encuentra el botón
@@ -112,8 +139,17 @@
         type: "APP_CONTABLE_SII_WORKER_ACTION",
         job_id: currentJobId,
         action,
-      }, () => {
-        if (!chrome.runtime.lastError) return;
+      }, (response) => {
+        if (!chrome.runtime.lastError) {
+          // 0.2.9 (M2): el service worker se reinició y ya no conoce este trabajo →
+          // "Cerrar ventana" quedaba muerto. Se intenta cerrar desde acá; si Chrome no
+          // lo deja, se dice cómo (el folio ya está en el stash de la extensión).
+          if (response?.error === "JOB_NOT_FOUND" && action === "close") {
+            try { window.close(); } catch { /* sigue el aviso */ }
+            renderOverlay("HUMAN_REQUIRED", "La extensión se reinició y ya no controla esta ventana. Ciérrala con la X; si la boleta salió, su folio quedó guardado en la extensión y se entrega solo a massDTE.");
+          }
+          return;
+        }
         renderOverlay("PAUSED", "La extensión fue recargada y esta ventana perdió conexión. Vuelve a la app para guardar el PDF SII detectado.");
       });
     } catch {
@@ -596,6 +632,19 @@
         header_hora: reI(rp.header_hora, /^HORA/i),
         header_monto: reI(rp.header_monto, /MONTO\s*TOTAL|^TOTAL$|^MONTO$/i),
         header_tipo: reI(rp.header_tipo, /^TIPO/i),
+        // 0.2.9 (aditivas; <=0.2.8 las ignora): columna "Boleta" y el texto que dice
+        // exenta (41) / afecta (39). CALIBRADO 2026-09-29 en el portal real (MV, solo
+        // lectura, 4 boletas: folio 2 Afecta, 18/19/20 Exenta): las columnas "Tipo" y
+        // "Boleta" traen literalmente "Afecta" o "Exenta". Headers reales: Nro Folio |
+        // Boleta | Neto | IVA | Total | Tipo | Vendedor | Sucursal | Estado | Fecha |
+        // Acciones (Fecha "dd/mm/aaaa hh:mm:ss"). La exenta se revisa ANTES
+        // (clasificarTipoDte): "Exenta" no calza afecta y "Afecta" no calza exenta. El
+        // "ELECTRONICA" de afecta es un resto tolerante sin evidencia en el portal real.
+        // Una exclusión por tipo nunca da "high" ni "no salió" (calzarFolioEnReportes /
+        // verificarEnReportes): lo peor de clasificar mal es "a medias".
+        header_boleta: reI(rp.header_boleta, /^BOLETA$/i),
+        tipo_exenta: reI(rp.tipo_exenta, /EXENT|NO\s*AFECTA|^41$/i),
+        tipo_afecta: reI(rp.tipo_afecta, /AFECTA|ELECTRONICA|^39$/i),
         ventana_antes_min: minutosLibreto(rp.ventana_antes_min, 2),
         ventana_despues_min: minutosLibreto(rp.ventana_despues_min, 6),
         menu_item: reI(rp.menu_item, /RESUMEN DE VENTAS/i),
@@ -1113,6 +1162,17 @@
     }
   }
 
+  // 0.2.9 (revisión adversarial B1): `expires_at` se chequeaba solo en el scan del
+  // librero, no en el worker. Un worker que siguió vivo (SW muerto, pestaña de la app
+  // cerrada, login humano largo) podía apretar EMITIR con un job que la app ya dio por
+  // vencido y re-emitió: dos folios. Pre-emit: error reintentable, sin folio.
+  function assertJobVigente(job) {
+    const t = Date.parse(job?.expires_at || "");
+    if (Number.isFinite(t) && t <= Date.now()) {
+      throw siiError("Este intento de emisión venció antes del EMITIR final; no se presionó. Vuelve a la app y emite de nuevo.", { code: "JOB_VENCIDO_PRE_EMIT" });
+    }
+  }
+
   // Espera (best-effort) a que el botón EMITIR se HABILITE — el SII lo deshabilita un
   // instante mientras valida el receptor (lookup del RUT). NO bloquea: apenas está
   // habilitado, o al agotar el timeout, retorna y el caller lo clickea igual. Antes
@@ -1348,6 +1408,52 @@
       return h != null && mi != null ? `${String(Number(h) % 24).padStart(2, "0")}:${mi}` : null;
     } catch { return null; }
   }
+  // 0.2.9 (calce, bug a): tipo de la fila según el texto de su celda. Exenta primero
+  // ("Boleta no afecta o exenta" contiene AFECTA). null = no se sabe.
+  function clasificarTipoDte(celda) {
+    if (celda == null) return null;
+    const t = normalizeSearchText(celda);
+    if (!t) return null;
+    if (LB.reportes.tipo_exenta.test(t)) return 41;
+    if (LB.reportes.tipo_afecta.test(t)) return 39;
+    return null;
+  }
+  // Días calendario de `desde` a `hasta` (ambas YYYY-MM-DD). null si alguna no parsea.
+  function diasEntre(desde, hasta) {
+    const a = Date.parse(`${desde}T00:00:00Z`); const b = Date.parse(`${hasta}T00:00:00Z`);
+    return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : null;
+  }
+  // Fecha calendario en Chile (YYYY-MM-DD) de un instante.
+  function fechaChile(ms) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms));
+      const y = parts.find((p) => p.type === "year")?.value; const m = parts.find((p) => p.type === "month")?.value; const d = parts.find((p) => p.type === "day")?.value;
+      return y && m && d ? `${y}-${m}-${d}` : null;
+    } catch { return null; }
+  }
+  // 0.2.9 (calce, bug b: medianoche): las fechas aceptables salen de la hora REAL del
+  // EMITIR (no del `fecha_emision` fijado al abrir el modal). Si la ventana
+  // [emitir - antes, emitir + después] cruza las 00:00 se aceptan las dos fechas.
+  // `cubreHoy`: el Resumen muestra SOLO HOY; si alguna fecha posible no es hoy, la tabla
+  // visible no puede probar que la boleta "no salió" (el librero lo exige).
+  function rangoFechasEmision(job, ctx) {
+    const clampMin = (v, max, def) => (Number.isInteger(v) && v >= 0 && v <= max ? v : def);
+    const antes = clampMin(ctx?.ventana_antes_min, 30, LB.reportes.ventana_antes_min);
+    const despues = clampMin(ctx?.ventana_despues_min, 10, LB.reportes.ventana_despues_min);
+    const finalEmitAt = readFinalEmitAt(job?.job_id, ctx);
+    let fechas = null;
+    if (finalEmitAt) {
+      fechas = new Set([fechaChile(finalEmitAt - antes * 60000), fechaChile(finalEmitAt), fechaChile(finalEmitAt + despues * 60000)].filter(Boolean));
+      if (fechas.size === 0) fechas = null;
+    }
+    if (!fechas) {
+      const fechaJob = String(job?.fecha_emision || "").slice(0, 10) || null;
+      fechas = fechaJob ? new Set([fechaJob]) : null;
+    }
+    const hoy = fechaChile(Date.now());
+    const cubreHoy = Boolean(fechas && hoy && fechas.size === 1 && fechas.has(hoy));
+    return { fechas, cubreHoy, antes, despues, finalEmitAt };
+  }
   function parseReportesTabla() {
     if (!location.href.includes("/reportes")) return null;
     const R = LB.reportes;
@@ -1360,6 +1466,7 @@
         hora: headers.findIndex((h) => R.header_hora.test(h)),
         monto: headers.findIndex((h) => R.header_monto.test(h)),
         tipo: headers.findIndex((h) => R.header_tipo.test(h)),
+        boleta: headers.findIndex((h) => R.header_boleta.test(h)),
       };
       if (idx.folio < 0 || idx.monto < 0) continue;
       const bodyRows = Array.from(table.querySelectorAll("tbody tr"));
@@ -1385,6 +1492,8 @@
           hora,
           monto: parseMontoClp(cells[idx.monto]),
           tipo: idx.tipo >= 0 ? normalizeText(cells[idx.tipo]) : null,
+          // 0.2.9: 39 | 41 | null (la celda no dice el tipo con palabras explícitas).
+          tipoDte: clasificarTipoDte(idx.tipo >= 0 ? cells[idx.tipo] : null) ?? clasificarTipoDte(idx.boleta >= 0 ? cells[idx.boleta] : null),
         });
       }
       // COMPLETITUD (auditoría pre-publicación B1): la tabla está paginada y la boleta
@@ -1414,16 +1523,23 @@
     // la completitud; nunca se sugiere una fila).
     if (tabla.filas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", candidatas: 0, completa: tabla.completa === true } };
     const montoJob = Math.round(Number(job?.totales?.monto_total ?? 0));
-    const fechaJob = String(job?.fecha_emision || "").slice(0, 10) || null;
+    const rango = rangoFechasEmision(job, ctx);
+    const fechasOk = rango.fechas;
+    const fechaJob = fechasOk ? Array.from(fechasOk).sort().join("|") : null;
     const conocidos = new Set((Array.isArray(job?.folios_hoy) ? job.folios_hoy : []).map(Number));
     const emisorActivo = readActiveEmisorRut();
     const emisorJob = job?.emisor_rut ? normalizeRut(job.emisor_rut) : null;
     const emisorMismatch = Boolean(emisorActivo && emisorJob && normalizeRut(emisorActivo) !== emisorJob);
-    const candidatas = tabla.filas.filter((f) => f.monto === montoJob && !f.fechaIlegible && (!f.fecha || !fechaJob || f.fecha === fechaJob) && !conocidos.has(f.folio));
-    const base = { candidatas: candidatas.length, monto: montoJob, fecha: fechaJob, emisor_mismatch: emisorMismatch };
+    const preTipo = tabla.filas.filter((f) => f.monto === montoJob && !f.fechaIlegible && (!f.fecha || !fechasOk || fechasOk.has(f.fecha)) && !conocidos.has(f.folio));
+    // 0.2.9 (bug a): una fila de OTRO tipo (39 vs 41) del mismo monto no es candidata.
+    const tipoJob = [39, 41].includes(Number(job?.tipo_dte)) ? Number(job.tipo_dte) : null;
+    const tablaTraeTipo = tabla.filas.some((f) => f.tipoDte != null);
+    const candidatas = preTipo.filter((f) => !(tipoJob && f.tipoDte != null && f.tipoDte !== tipoJob));
+    const excluidasPorTipo = preTipo.length - candidatas.length;
+    const base = { candidatas: candidatas.length, monto: montoJob, fecha: fechaJob, emisor_mismatch: emisorMismatch, excluidas_por_tipo: excluidasPorTipo, tipo_en_tabla: tablaTraeTipo };
     const sugerido = candidatas[0]?.folio ?? null;
     if (candidatas.length === 0) return { folio: null, confidence: "none", evidence: { source: "reportes_sin_candidatas", ...base } };
-    const finalEmitAt = readFinalEmitAt(job?.job_id, ctx);
+    const finalEmitAt = rango.finalEmitAt;
     const horaEmit = finalEmitAt ? horaChile(finalEmitAt) : null;
     const medium = (motivo, extra = {}) => ({ folio: sugerido, confidence: "medium", evidence: { source: "reportes_ambiguo", motivo, ...base, ...extra } });
     if (emisorMismatch) return medium("emisor_distinto");
@@ -1433,17 +1549,38 @@
     if (!horaEmit || !tabla.tieneHora) return medium(!horaEmit ? "sin_hora_emitir" : "sin_hora_en_tabla");
     const mEmit = minutosDeHora(horaEmit);
     // Verificación (cuadre por evento): el librero manda la ventana del intento fallido.
-    const clampMin = (v, max, def) => (Number.isInteger(v) && v >= 0 && v <= max ? v : def);
-    const antes = clampMin(ctx?.ventana_antes_min, 30, LB.reportes.ventana_antes_min);
-    const despues = clampMin(ctx?.ventana_despues_min, 10, LB.reportes.ventana_despues_min);
+    const { antes, despues } = rango;
+    // Distancia en MINUTOS ABSOLUTOS: con fecha en la fila se suma el salto de días
+    // contra la fecha (Chile) del EMITIR; así una fila del día D a las 00:01 queda a
+    // -1437 min de un EMITIR del D a las 23:58 (no a +3). La vuelta de ±1440 solo
+    // cuando la fila no trae fecha (no hay otra forma de saber el día).
+    const fechaEmit = fechaChile(finalEmitAt);
     const enVentana = candidatas.filter((f) => {
       const m = minutosDeHora(f.hora);
       if (m == null) return false;
-      let d = m - mEmit; if (d > 720) d -= 1440; if (d < -720) d += 1440; // cruce de medianoche
+      let d;
+      if (f.fecha) {
+        const dias = diasEntre(fechaEmit, f.fecha);
+        if (dias == null) return false;
+        d = m + 1440 * dias - mEmit;
+      } else {
+        d = m - mEmit; if (d > 720) d -= 1440; if (d < -720) d += 1440; // cruce de medianoche
+      }
       return d >= -antes && d <= despues;
     });
     if (enVentana.length === 1) {
       const f = enVentana[0];
+      // La tabla SÍ dice el tipo en otras filas pero no en ésta: no se puede afirmar
+      // que sea del tipo del job, nunca cierra sola (igual que fechaIlegible).
+      if (tipoJob && tablaTraeTipo && f.tipoDte == null) return medium("tipo_ilegible", { en_ventana: 1, hora_emitir: horaEmit });
+      // Revisión 0.2.9 (I1): mientras el texto de la columna Tipo no esté calibrado en
+      // MV, descartar una fila SOLO por el tipo no alcanza para cerrar sola: si la
+      // descartada era la nuestra (mal clasificada), la otra del mismo monto quedaría
+      // "única" y se le asignaría un folio ajeno. Con exclusiones → a medias.
+      if (excluidasPorTipo > 0) return medium("excluidas_por_tipo", { en_ventana: 1, hora_emitir: horaEmit });
+      // El Resumen muestra SOLO HOY: si la ventana del EMITIR no cae entera en hoy, la
+      // "única" visible no prueba nada (la nuestra puede estar en el día que no se ve).
+      if (!rango.cubreHoy) return medium("rango_fuera_de_hoy", { en_ventana: 1, hora_emitir: horaEmit, hora_fila: f.hora });
       return { folio: f.folio, confidence: "high", evidence: { source: "reportes_calce_unico", hora_fila: f.hora, hora_emitir: horaEmit, ...base, en_ventana: 1 } };
     }
     return medium(enVentana.length === 0 ? "ninguna_en_ventana" : "varias_en_ventana", { en_ventana: enVentana.length, hora_emitir: horaEmit });
@@ -1555,7 +1692,10 @@
       reportes_tabla_leida: Boolean(tablaReportes),
       // "No salió" en la verificación exige haber visto la tabla COMPLETA (B1).
       reportes_tabla_completa: Boolean(tablaReportes && tablaReportes.completa === true),
-      reportes_calce: calce ? { source: calce.evidence?.source ?? null, candidatas: calce.evidence?.candidatas ?? null } : null,
+      // 0.2.9 (medianoche): false = alguna fecha posible del intento no es HOY, y el
+      // Resumen solo muestra hoy: la tabla no puede probar "no salió".
+      reportes_rango_cubre_emision: Boolean(tablaReportes && rangoFechasEmision(job, ctx).cubreHoy),
+      reportes_calce: calce ? { source: calce.evidence?.source ?? null, candidatas: calce.evidence?.candidatas ?? null, excluidas_por_tipo: calce.evidence?.excluidas_por_tipo ?? 0 } : null,
       page: {
         url: location.href,
         title: document.title,
@@ -1893,6 +2033,7 @@
     dialog = activeEmitDialog(); // re-capturar: el modal pudo re-renderizarse al validar
     if (!dialog) throw siiError("Modal Emitir e-Boleta cerrado antes de emitir; no se presiono el EMITIR final.", { code: "MODAL_CERRADO_PRE_EMIT", ancla: "selectores.dialogo_activo", paso: "emitir" });
     assertEmisorNoCambio(job); // ÚLTIMA COMPUERTA: aborta si el emisor cambió (THROW aquí = ANTES de notifyFinalEmitClicked → job reintentable, sin folio, sin doble emisión)
+    assertJobVigente(job); // 0.2.9 (B1): job vencido → NO se clickea (la app pudo darlo por muerto y re-emitir)
     await clickFinalEmitInDialog(dialog);
     notifyFinalEmitClicked(); // arma el candado en el librero AL INSTANTE (no espera los 16s)
     // ⚠️ ZONA POST-EMIT: el EMITIR real YA se cliqueó. Cualquier fallo de aquí en
@@ -1950,7 +2091,9 @@
           const sharePdf = await tryCaptureSharePdf();
           if (sharePdf) result.pdf = sharePdf;
         }
-        renderOverlay("DONE", `Boleta emitida. Folio ${result.folio}.`);
+        // 0.2.9: todavía NO es "DONE": falta que massDTE confirme el guardado (el
+        // librero manda el DONE con autocierre recién con el ack).
+        renderOverlay("LOCKED_AUTOMATION", `Boleta emitida. Folio ${result.folio}. Guardándola en massDTE…`, { ackFallbackMs: 90000 });
         return result;
       }
     }
@@ -1987,7 +2130,7 @@
         // la segunda lectura la ve llegar y el calce deja de ser único.
         if (calceEstable === reportResult.folio) {
           reportResult.estado = "emitida_capturada_reportes";
-          renderOverlay("DONE", `Boleta emitida. Folio ${reportResult.folio} confirmado en reportes.`);
+          renderOverlay("LOCKED_AUTOMATION", `Boleta emitida. Folio ${reportResult.folio} confirmado en reportes. Guardándola en massDTE…`, { ackFallbackMs: 90000 });
           return reportResult; // sin tryCaptureSharePdf: en /reportes no hay "Compartir" del recibo
         }
         calceEstable = reportResult.folio;
@@ -2021,7 +2164,7 @@
     if (message.job_id) currentJobId = message.job_id;
     if (message.job && typeof message.job.logout_after === "boolean") currentJobLogoutAfter = message.job.logout_after;
     if (message.type === "APP_CONTABLE_SII_WORKER_OVERLAY") {
-      renderOverlay(message.mode || "HUMAN_REQUIRED", message.message || "Ventana segura SII activa.");
+      renderOverlay(message.mode || "HUMAN_REQUIRED", message.message || "Ventana segura SII activa.", { autoClose: message.auto_close === true, ackFallbackMs: message.ack_fallback_ms });
       return;
     }
     if (message.type === "APP_CONTABLE_SII_SCAN_PAGE") {

@@ -5,6 +5,12 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import {
+  esErrorCandadoBD,
+  MENSAJE_CANDADO_BD,
+  MENSAJE_NO_PUDIMOS_REVISAR,
+  revisarBloqueoDocumento,
+} from "@/lib/emission/bloqueo-borrado";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -74,67 +80,56 @@ export async function POST(request: Request) {
     }
   }
 
-  // Delete in FK order: propuestas → movimientos → ia_uso → reset documento
-  // First get movimiento IDs for this document
-  const { data: movimientos } = await svc
+  // Orden: revisar (candado 1) → movimientos (cascada a propuestas, candado 2) →
+  // ia_uso → reset documento.
+  const { data: movimientos, error: movErr } = await svc
     .from("movimientos_raw")
     .select("id")
     .eq("documento_id", documento_id);
+  if (movErr) {
+    return NextResponse.json({ error: MENSAJE_NO_PUDIMOS_REVISAR }, { status: 503 });
+  }
 
   const movIds = (movimientos ?? []).map((m) => m.id);
 
   if (movIds.length > 0) {
-    // INTEGRIDAD TRIBUTARIA: si alguna propuesta de este documento ya tiene una
-    // boleta emitida (folio real en el SII), NO se puede deshacer — se corrige
-    // vía Nota de Crédito. Deshacer orfanaría folios reales. (El UI ya lo oculta;
-    // este guard es la defensa server-side.)
-    const { data: props } = await svc.from("propuestas_ia").select("id").in("movimiento_id", movIds);
-    const propIds = (props ?? []).map((p) => p.id);
-    if (propIds.length > 0) {
-      const { count } = await svc
-        .from("boletas_emitidas")
-        .select("id", { count: "exact", head: true })
-        .eq("empresa_id", usuario.empresa_id)
-        .neq("estado", "anulada")
-        .in("propuesta_id", propIds);
-      if ((count ?? 0) > 0) {
-        return NextResponse.json(
-          { error: `Este documento tiene ${count} boleta(s) emitida(s) en el SII. No se puede deshacer; para corregir o anular, emite una Nota de Crédito.` },
-          { status: 409 },
-        );
-      }
-      // INTEGRIDAD DE FOLIO: además de boletas ya registradas, bloquear si hay un
-      // job de emisión EN VUELO ('created'/'running') o una LÁPIDA
-      // 'revision_pendiente' (folio posiblemente emitido, aún sin registrar).
-      // Borrar la propuesta pone emision_jobs.propuesta_id en NULL (ON DELETE SET
-      // NULL): la lápida queda huérfana y reprocesar la cartola crea una propuesta
-      // nueva SIN candado → re-emisión de un folio ya quemado, o doble boleta
-      // cuando el job en vuelo aterrice.
-      const { count: jobsActivos } = await svc
-        .from("emision_jobs")
-        .select("job_id", { count: "exact", head: true })
-        .in("propuesta_id", propIds)
-        .in("estado", ["created", "running", "revision_pendiente"]);
-      if ((jobsActivos ?? 0) > 0) {
-        return NextResponse.json(
-          { error: "Esta boleta tiene una emisión en curso o quedó a medias en el SII. Espera a que termine o recupera su folio antes de deshacer." },
-          { status: 409 },
-        );
-      }
+    // CANDADO 1 (fail-closed, doble candado 2026-09-30). INTEGRIDAD TRIBUTARIA: si
+    // alguna propuesta ya tiene boleta emitida (folio real en el SII), NO se
+    // deshace — se corrige vía Nota de Crédito. INTEGRIDAD DE FOLIO: tampoco con
+    // un job de emisión abierto (created/running, vencido o no) ni una LÁPIDA
+    // 'revision_pendiente': borrar la propuesta pone emision_jobs.propuesta_id en
+    // NULL (ON DELETE SET NULL), la lápida queda huérfana y reprocesar la cartola
+    // crea una propuesta nueva SIN candado → doble folio. Si CUALQUIER consulta
+    // falla, no se borra nada (antes el error se ignoraba y se borraba igual).
+    const bloqueo = await revisarBloqueoDocumento(svc, movIds);
+    if ("error" in bloqueo) {
+      console.error("[deshacer-documento] revisión de emitidas falló:", bloqueo.error);
+      return NextResponse.json({ error: MENSAJE_NO_PUDIMOS_REVISAR }, { status: 503 });
     }
-    // Delete propuestas linked to these movimientos
-    const { error: propDelErr } = await svc.from("propuestas_ia").delete().in("movimiento_id", movIds);
-    if (propDelErr) {
-      // No dejar el documento a medias: si el borrado falla, abortamos ANTES de
-      // resetear a 'subido' (antes se ignoraba y el estado quedaba inconsistente).
-      return NextResponse.json({ error: "No se pudo deshacer. Intenta de nuevo." }, { status: 500 });
+    if (bloqueo.emitidas > 0) {
+      return NextResponse.json(
+        { error: `Este documento tiene ${bloqueo.emitidas} boleta(s) emitida(s) en el SII. No se puede deshacer; para corregir o anular, emite una Nota de Crédito.` },
+        { status: 409 },
+      );
     }
-  }
+    if (bloqueo.emisionesAbiertas > 0) {
+      return NextResponse.json(
+        { error: "Esta boleta tiene una emisión en curso o quedó a medias en el SII. Espera a que termine o recupera su folio antes de deshacer." },
+        { status: 409 },
+      );
+    }
 
-  // Delete movimientos
-  const { error: movDelErr } = await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
-  if (movDelErr) {
-    return NextResponse.json({ error: "No se pudo deshacer. Intenta de nuevo." }, { status: 500 });
+    // UNA sentencia: movimientos_raw → propuestas_ia es ON DELETE CASCADE, así que
+    // el borrado es atómico (sin .in() gigante) y pasa por el trigger de la base
+    // (candado 2). Si salta, se revierte todo y el documento queda como estaba.
+    const { error: movDelErr } = await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
+    if (movDelErr) {
+      if (esErrorCandadoBD(movDelErr)) {
+        return NextResponse.json({ error: MENSAJE_CANDADO_BD }, { status: 409 });
+      }
+      // No dejar el documento a medias: abortamos ANTES de resetear a 'subido'.
+      return NextResponse.json({ error: "No se pudo deshacer. No se borró nada; inténtalo de nuevo." }, { status: 500 });
+    }
   }
 
   // Delete ia_uso

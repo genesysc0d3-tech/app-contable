@@ -143,10 +143,26 @@
             result: { ...(message.result ?? {}), persisted },
           });
         })
-        .catch(() => postToPage({
-          ...message,
-          result: { ...(message.result ?? {}), persisted: { ok: false, error: "PERSISTENCE_FAILED" } },
-        }));
+        .catch(() => {
+          // Red caída / fetch roto: igual se avisa al SW (ack fallido) para que la
+          // ventana no diga "se guardará sola" sin haberlo confirmado. PERSISTENCE_FAILED
+          // NO es permanente → el stash se conserva y reintenta en el próximo ping.
+          try {
+            chrome.runtime.sendMessage({
+              source: EXT_SOURCE,
+              type: "APP_CONTABLE_SII_RESULT_PERSISTED",
+              job_id: message.job_id ?? null,
+              ok: false,
+              error: "PERSISTENCE_FAILED",
+            }, () => { void chrome.runtime.lastError; });
+          } catch {
+            // Extensión recargada: el stash reintenta solo.
+          }
+          postToPage({
+            ...message,
+            result: { ...(message.result ?? {}), persisted: { ok: false, error: "PERSISTENCE_FAILED" } },
+          });
+        });
       return;
     }
     if (message.type === "APP_CONTABLE_SII_CAPTURE_DEBUG") {

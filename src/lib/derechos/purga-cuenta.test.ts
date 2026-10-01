@@ -15,7 +15,7 @@ vi.mock("@/lib/r2", () => ({
 const { purgarCuentaCompleta } = await import("./purga-cuenta");
 
 /** Supabase de mentira: solo lo que la purga usa, registrando el orden. */
-function fakeSb(docs: Array<Record<string, unknown>>) {
+function fakeSb(docs: Array<Record<string, unknown>>, jobsAbiertos = 0) {
   const filasBorradas: string[] = [];
   const sb = {
     from(tabla: string) {
@@ -24,12 +24,14 @@ function fakeSb(docs: Array<Record<string, unknown>>) {
         delete: () => { secuencia.push(`delete:${tabla}`); filasBorradas.push(tabla); return api; },
         eq: () => api,
         in: () => api,
+        not: () => api,
         then: undefined,
       };
       // Cada consulta devuelve lo que esa tabla necesita.
       const resultado =
         tabla === "cuenta_empresas" ? { data: [{ empresa_id: "e1" }], error: null }
         : tabla === "boletas_emitidas" ? { count: 0, error: null }
+        : tabla === "emision_jobs" ? { count: jobsAbiertos, error: null }
         : tabla === "documentos_subidos" ? { data: docs, error: null }
         : { data: [], error: null, count: 0 };
       Object.assign(api, resultado, { then: (r: (v: unknown) => void) => r(resultado) });
@@ -81,5 +83,12 @@ describe("purga de cuenta — el derecho de supresión también borra los binari
     const r = await purgarCuentaCompleta(sb, "c1");
     expect(borradosR2).toEqual([]);
     expect(r.archivos).toBe(0);
+  });
+
+  it("★ doble candado: emisión abierta/lápida frena la purga ANTES de borrar archivos", async () => {
+    const { sb, filasBorradas } = fakeSb([{ id: "d1", storage_path: "cartolas/a.xlsx", storage_provider: "r2", album_imagenes: null }], 1);
+    await expect(purgarCuentaCompleta(sb, "c1")).rejects.toThrow(/PURGA_BLOQUEADA/);
+    expect(borradosR2).toEqual([]);
+    expect(filasBorradas).toEqual([]);
   });
 });
