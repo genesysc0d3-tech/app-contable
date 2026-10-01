@@ -6,7 +6,7 @@
 import { redirect } from "next/navigation";
 import { getDevOperatorContext } from "@/lib/dev/support-mode";
 import { versionPublicadaDelServidor } from "@/lib/actualizacion/version";
-import { fechaDeBuild } from "@/lib/avisos/version";
+import { fechaDeCommit } from "@/lib/avisos/version";
 import { C, DevNav, Section } from "../ui";
 import { AvisosEditor, type AvisoFila } from "./AvisosEditor";
 
@@ -64,7 +64,7 @@ export default async function DevAvisosPage() {
             avisos={avisos}
             ahoraIso={ahoraIso()}
             versionActual={versionPublicadaDelServidor() ?? "—"}
-            buildActual={fechaDeBuild()}
+            commitActual={fechaDeCommit()}
             deshabilitado={Boolean(errorLectura)}
           />
         </Section>

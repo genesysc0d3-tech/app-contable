@@ -954,7 +954,7 @@ export async function cargarMesa(params: MesaParams): Promise<CargarMesaResult> 
       // En paralelo y fail-safe (nunca tumba la mesa). En modo soporte el operador
       // no consume avisos de la clienta. ctx.sb es service role: la consulta filtra
       // explícito por vigencia, empresa y vistos de ESTE usuario.
-      ctx.supportMode ? Promise.resolve([] as AvisoApp[]) : avisosPendientes(ctx.sb, { userId: ctx.userId, empresaId: ctx.empresaId }),
+      ctx.supportMode ? Promise.resolve([] as AvisoApp[]) : avisosPendientes(ctx.sb, { userId: ctx.userId, empresaId: ctx.empresaId, cliente: "servicio" }),
     ]);
     return { ok: true, mesa, avisos };
   } catch (error) {

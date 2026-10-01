@@ -13,7 +13,10 @@ export const TIPOS: readonly TipoAviso[] = ["novedad", "mantencion", "urgente"];
 export const FORMATOS: readonly FormatoAviso[] = ["toast", "tarjeta", "popup"];
 export const MESAS: readonly MesaAviso[] = ["boletas", "facturas"];
 
-/** Lo que viaja al navegador (sin activo/creado_por: no le importan a la clienta). */
+/**
+ * Lo que viaja al navegador: columnas mínimas. Sin activo/creado_por y sin
+ * empresa_ids (UUIDs de OTRAS empresas cuando un aviso apunta a varias).
+ */
 export interface AvisoApp {
   id: string;
   tipo: TipoAviso;
@@ -22,7 +25,6 @@ export interface AvisoApp {
   formato: FormatoAviso;
   desde: string;
   hasta: string;
-  empresa_ids: string[] | null;
   mesa: MesaAviso | null;
   version_min: string | null;
   created_at: string | null;
@@ -48,7 +50,7 @@ export function avisoVigente(a: Pick<AvisoApp, "desde" | "hasta">, now: Date | n
 }
 
 /** empresa_ids null = todas; con lista, solo la empresa activa si está en ella. */
-export function avisoParaEmpresa(a: Pick<AvisoApp, "empresa_ids">, empresaId: string | null): boolean {
+export function avisoParaEmpresa(a: { empresa_ids: string[] | null }, empresaId: string | null): boolean {
   if (a.empresa_ids == null) return true;
   return !!empresaId && a.empresa_ids.includes(empresaId);
 }
@@ -67,24 +69,26 @@ export function mesaDeUbicacion(pathname: string, search: string): MesaAviso | n
   return mesa === "factura" ? "facturas" : "boletas";
 }
 
-export type VersionPestana = { version: string; builtAt: string | null };
+/** fechaCommit: fecha ISO del commit con que se construyó la pestaña (null = no se sabe). */
+export type VersionPestana = { version: string; fechaCommit: string | null };
 const ISO_RE = /^\d{4}-\d{2}-\d{2}/;
 
 /**
  * "Novedades de esta versión". version_min puede ser:
- *  - una fecha ISO de build → la pestaña construida en esa fecha o después cumple
- *    (las versiones son commits, sin orden: el orden lo da la fecha de build);
+ *  - una fecha ISO de COMMIT → la pestaña de ese commit o uno posterior cumple
+ *    (las versiones son SHAs, sin orden: el orden lo da la fecha del commit, que es
+ *    determinista — un redeploy de un commit viejo no la adelanta);
  *  - un commit (≥ 7 caracteres) → solo esa versión exacta.
- * Sin versión mínima, siempre. Pestaña sin fecha de build: no (quizás no tiene la novedad).
+ * Sin versión mínima, siempre. Pestaña sin fecha de commit: no (quizás no tiene la novedad).
  */
 export function versionCumple(min: string | null | undefined, pestana: VersionPestana): boolean {
   const m = (min ?? "").trim();
   if (!m) return true;
   if (ISO_RE.test(m)) {
     const req = Date.parse(m);
-    const built = pestana.builtAt ? Date.parse(pestana.builtAt) : NaN;
-    if (!Number.isFinite(req) || !Number.isFinite(built)) return false;
-    return built >= req;
+    const propia = pestana.fechaCommit ? Date.parse(pestana.fechaCommit) : NaN;
+    if (!Number.isFinite(req) || !Number.isFinite(propia)) return false;
+    return propia >= req;
   }
   if (m.length < 7) return false;
   return pestana.version === m || pestana.version.startsWith(m);
@@ -118,10 +122,13 @@ export function esAvisoValido(x: unknown): x is AvisoApp {
 // ── Markdown mínimo: **negrita** y [texto](url). Nada de HTML. ──────────────────
 export type ParteMd = { t: "texto"; v: string } | { t: "negrita"; v: string } | { t: "link"; v: string; href: string };
 
-/** Solo https/http absolutos o rutas internas "/algo" (no "//host", no javascript:). */
+/**
+ * Solo https:// o rutas internas "/" + letra ("/empresa"). Nada de "//host",
+ * "/\\host" (el navegador lo lee como "//host"), http plano ni javascript:.
+ */
 export function hrefSeguro(url: string): boolean {
-  if (/^\/(?!\/)/.test(url)) return true;
-  return /^https?:\/\/[^\s]+$/i.test(url);
+  if (/^\/[A-Za-z][^\s\\]*$/.test(url)) return true;
+  return /^https:\/\/[A-Za-z0-9][^\s\\]*$/.test(url);
 }
 
 const TOKEN_RE = /\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\(([^)\s]+)\)/g;

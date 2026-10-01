@@ -26,7 +26,16 @@ const MAX_AVISOS = 20;
 // Tabla o relación inexistente (PostgREST / Postgres).
 const CODIGOS_AUSENTE = new Set(["PGRST205", "PGRST200", "42P01"]);
 
-const COLUMNAS = "id, tipo, titulo, cuerpo, formato, desde, hasta, empresa_ids, mesa, version_min, created_at, avisos_vistos(user_id)";
+// Columnas MÍNIMAS (B1): lo que la clienta puede leer por RLS + grant de columnas.
+// Con el cliente de la SESIÓN no se pide empresa_ids (no tiene el privilegio; el RLS ya
+// filtra su empresa). Con service role (cargarMesa) se pide para filtrar acá y se
+// QUITA antes de responder: al navegador nunca viajan UUIDs de otras empresas.
+const COLUMNAS_SESION = "id, tipo, titulo, cuerpo, formato, desde, hasta, mesa, version_min, created_at, avisos_vistos(user_id)";
+const COLUMNAS_SERVICIO = "id, tipo, titulo, cuerpo, formato, desde, hasta, mesa, version_min, created_at, empresa_ids, avisos_vistos(user_id)";
+
+/** Tope de la consulta (M5): si tarda más, la mesa/página sigue sin avisos. */
+export const TOPE_CONSULTA_MS = 1_500;
+const TIMEOUT = Symbol("timeout");
 
 type Entrada = { at: number; avisos: AvisoApp[] };
 const G = globalThis as typeof globalThis & { __massdteAvisosCache?: { porClave: Map<string, Entrada>; ausenteHasta: number } };
@@ -35,9 +44,18 @@ function cache() {
   return G.__massdteAvisosCache;
 }
 
+type FilaServer = AvisoApp & { empresa_ids?: string[] | null; avisos_vistos?: unknown[] | null };
+
 export async function avisosPendientes(
   sb: Sb,
-  args: { userId: string; empresaId: string | null; now?: Date },
+  args: {
+    userId: string;
+    empresaId: string | null;
+    /** "sesion" (RLS, por defecto) o "servicio" (service role: filtra empresa explícito). */
+    cliente?: "sesion" | "servicio";
+    now?: Date;
+    timeoutMs?: number;
+  },
 ): Promise<AvisoApp[]> {
   const now = args.now ?? new Date();
   const t = now.getTime();
@@ -48,37 +66,44 @@ export async function avisosPendientes(
   const hit = c.porClave.get(clave);
   if (hit && t - hit.at < CACHE_AVISOS_MS) return hit.avisos.filter((a) => avisoVigente(a, t));
 
-  let avisos: AvisoApp[] = [];
+  const servicio = args.cliente === "servicio";
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const nowIso = now.toISOString();
-    const { data, error } = await sb
+    const consulta = sb
       .from("avisos_app")
-      .select(COLUMNAS)
+      .select(servicio ? COLUMNAS_SERVICIO : COLUMNAS_SESION)
       .eq("activo", true)
       .lte("desde", nowIso)
       .gt("hasta", nowIso)
       .eq("avisos_vistos.user_id", args.userId)
       .order("desde", { ascending: true })
       .limit(MAX_AVISOS);
+    const tope = new Promise<typeof TIMEOUT>((ok) => { timer = setTimeout(() => ok(TIMEOUT), args.timeoutMs ?? TOPE_CONSULTA_MS); });
+    const res = await Promise.race([Promise.resolve(consulta), tope]);
+    // Tardó: [] SIN cachear (la próxima carga reintenta).
+    if (res === TIMEOUT) return [];
+    const { data, error } = res;
+    const avisos: AvisoApp[] = [];
     if (error) {
       if (CODIGOS_AUSENTE.has(String((error as { code?: string }).code ?? ""))) c.ausenteHasta = t + TABLA_AUSENTE_MS;
-      avisos = [];
     } else {
-      for (const fila of (data ?? []) as unknown as (AvisoApp & { avisos_vistos?: unknown[] | null })[]) {
-        const { avisos_vistos: vistos, ...a } = fila;
+      for (const fila of (data ?? []) as unknown as FilaServer[]) {
+        const { avisos_vistos: vistos, empresa_ids: empresas, ...a } = fila;
         if (Array.isArray(vistos) && vistos.length > 0) continue; // ya lo cerró
         if (!esAvisoValido(a)) continue;
-        if (!avisoParaEmpresa(a, args.empresaId)) continue; // espejo del RLS
+        if (servicio && !avisoParaEmpresa({ empresa_ids: empresas ?? null }, args.empresaId)) continue; // espejo del RLS
         avisos.push(a);
       }
     }
+    if (c.porClave.size >= MAX_ENTRADAS) c.porClave.clear();
+    c.porClave.set(clave, { at: t, avisos });
+    return avisos;
   } catch {
-    avisos = [];
+    return [];
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-
-  if (c.porClave.size >= MAX_ENTRADAS) c.porClave.clear();
-  c.porClave.set(clave, { at: t, avisos });
-  return avisos;
 }
 
 /** Solo tests. */

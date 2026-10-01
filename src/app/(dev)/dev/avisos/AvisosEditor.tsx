@@ -8,7 +8,7 @@ import { C } from "../colors";
 import { desactivarAviso, guardarAviso } from "./actions";
 import { horaChileAIso, isoAHoraChile } from "./fechas";
 
-export type AvisoFila = AvisoApp & { activo: boolean; creado_por: string | null; vistos: number };
+export type AvisoFila = AvisoApp & { empresa_ids: string[] | null; activo: boolean; creado_por: string | null; vistos: number };
 
 type Form = {
   tipo: TipoAviso;
@@ -85,13 +85,14 @@ export function AvisosEditor({
   avisos,
   ahoraIso,
   versionActual,
-  buildActual,
+  commitActual,
   deshabilitado,
 }: {
   avisos: AvisoFila[];
   ahoraIso: string;
   versionActual: string;
-  buildActual: string | null;
+  /** Fecha del commit publicado (null si el build no la supo: se propone el SHA exacto). */
+  commitActual: string | null;
   deshabilitado: boolean;
 }) {
   const router = useRouter();
@@ -117,7 +118,6 @@ export function AvisosEditor({
     cuerpo: form.cuerpo,
     desde: input.desde,
     hasta: input.hasta,
-    empresa_ids: null,
     mesa: null,
     version_min: form.versionMin.trim() || null,
     created_at: null,
@@ -125,9 +125,13 @@ export function AvisosEditor({
 
   async function guardar() {
     if (estado === "loading" || !validacion.ok) return;
+    // Un popup urgente a TODAS las empresas tapa la pantalla de todas las clientas:
+    // confirmación explícita (el server también la exige).
+    const paraTodas = validacion.fila.formato === "popup" && validacion.fila.empresa_ids === null;
+    if (paraTodas && !window.confirm(`Vas a mostrar un POPUP URGENTE a TODAS las empresas:\n\n«${validacion.fila.titulo}»\n\n¿Publicar?`)) return;
     setEstado("loading");
     setMensaje(null);
-    const r = await guardarAviso(editando, input);
+    const r = await guardarAviso(editando, input, { confirmadoParaTodas: paraTodas });
     setEstado("idle");
     if ("error" in r) { setMensaje({ tono: "error", texto: r.error }); return; }
     setMensaje({ tono: "ok", texto: editando ? "Aviso actualizado." : "Aviso creado. Sale en la próxima carga de la mesa (≤ 1 min)." });
@@ -195,13 +199,13 @@ export function AvisosEditor({
             </label>
           </div>
           <div style={{ fontSize: 11, color: C.text3, lineHeight: 1.5 }}>
-            Publicada ahora: <b style={{ color: C.text2 }}>{versionActual}</b>{buildActual ? <> · build {fmt(buildActual)}</> : null}.{" "}
-            {buildActual ? (
-              <button type="button" onClick={() => set("versionMin", buildActual)} style={{ ...BTN_GRIS, padding: "3px 8px", fontSize: 10.5 }}>
+            Publicada ahora: <b style={{ color: C.text2 }}>{versionActual}</b>{commitActual ? <> · commit del {fmt(commitActual)}</> : null}.{" "}
+            {commitActual || /^[0-9a-f]{7,}$/i.test(versionActual) ? (
+              <button type="button" onClick={() => set("versionMin", commitActual ?? versionActual)} style={{ ...BTN_GRIS, padding: "3px 8px", fontSize: 10.5 }}>
                 Usar esta versión
               </button>
             ) : null}{" "}
-            Con versión mínima, solo lo ven las pestañas que ya se actualizaron a esa versión o una más nueva («Novedades de esta versión»).
+            Con versión mínima solo lo ven las pestañas que ya corren esa versión: con fecha de commit, esa o una más nueva; con SHA, solo esa exacta («Novedades de esta versión»).
           </div>
           <label style={LABEL}>Empresas (IDs, uno por línea · vacío = todas)
             <textarea value={form.empresas} rows={2} onChange={(e) => set("empresas", e.target.value)} placeholder="vacío = todas las empresas" style={{ ...INPUT, fontFamily: "ui-monospace, monospace", fontSize: 11 }} />

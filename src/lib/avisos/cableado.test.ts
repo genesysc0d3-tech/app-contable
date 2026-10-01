@@ -22,7 +22,7 @@ describe("entrega sin gasto extra", () => {
   it("/api/mesa los suma a su respuesta normal (en paralelo, sin modo soporte) y la mesa los publica", () => {
     // /api/mesa devuelve tal cual lo que arma cargarMesa
     expect(fuente("src/app/api/mesa/route.ts")).toMatch(/NextResponse\.json\(res,/);
-    expect(fuente("src/app/(app)/escritorio/v5/actions.ts")).toMatch(/ctx\.supportMode \? Promise\.resolve\(\[\] as AvisoApp\[\]\) : avisosPendientes\(ctx\.sb, \{ userId: ctx\.userId, empresaId: ctx\.empresaId \}\)/);
+    expect(fuente("src/app/(app)/escritorio/v5/actions.ts")).toMatch(/ctx\.supportMode \? Promise\.resolve\(\[\] as AvisoApp\[\]\) : avisosPendientes\(ctx\.sb, \{ userId: ctx\.userId, empresaId: ctx\.empresaId, cliente: "servicio" \}\)/);
     expect(fuente("src/app/(app)/escritorio/v5/MesaController.tsx")).toMatch(/publicarAvisos\(/);
   });
 

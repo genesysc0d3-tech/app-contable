@@ -13,18 +13,28 @@ import { esUuid, validarAvisoInput, type AvisoInput } from "@/lib/avisos/reglas"
 
 const NO_OPERADOR = { error: "Solo operador Genesys" } as const;
 
-/** id null = crear; id = editar ese aviso. */
+const COLUMNAS_AUDITORIA = "tipo, formato, titulo, cuerpo, desde, hasta, empresa_ids, mesa, version_min, activo";
+
+/**
+ * id null = crear; id = editar ese aviso. Un popup urgente para TODAS las empresas
+ * exige `confirmadoParaTodas` (la pantalla lo pide con un confirm explícito).
+ */
 export async function guardarAviso(
   id: string | null,
   input: AvisoInput,
+  opciones: { confirmadoParaTodas?: boolean } = {},
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const operador = await getDevOperatorContext();
   if (!operador.ok) return NO_OPERADOR;
   if (id !== null && !esUuid(id)) return { error: "Aviso inválido" };
   const v = validarAvisoInput(input);
   if (!v.ok) return { error: v.error };
+  if (v.fila.formato === "popup" && v.fila.empresa_ids === null && opciones.confirmadoParaTodas !== true) {
+    return { error: "Un popup urgente para TODAS las empresas necesita tu confirmación explícita" };
+  }
 
   let avisoId: string;
+  let antes: unknown = null;
   if (id === null) {
     const { data, error } = await operador.sb
       .from("avisos_app")
@@ -34,6 +44,9 @@ export async function guardarAviso(
     if (error || !data) return { error: error?.message ?? "No se pudo crear el aviso" };
     avisoId = data.id;
   } else {
+    // Auditoría con antes/después (B8).
+    const previo = await operador.sb.from("avisos_app").select(COLUMNAS_AUDITORIA).eq("id", id).maybeSingle();
+    antes = previo.data ?? null;
     const { error } = await operador.sb
       .from("avisos_app")
       .update({ ...v.fila, updated_at: new Date().toISOString() })
@@ -59,6 +72,7 @@ export async function guardarAviso(
       empresas: v.fila.empresa_ids?.length ?? "todas",
       mesa: v.fila.mesa ?? "todas",
       version_min: v.fila.version_min,
+      ...(id === null ? {} : { antes, despues: v.fila }),
     },
   }).catch(() => {});
 

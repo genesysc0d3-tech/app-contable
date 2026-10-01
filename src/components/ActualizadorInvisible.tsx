@@ -24,7 +24,7 @@
 import { useEffect } from "react";
 import { crearActualizador, tocaConsultarVersion } from "@/lib/actualizacion/actualizador";
 import { versionDelCliente } from "@/lib/actualizacion/version";
-import { alLiberarBloqueo, bloqueosActivos, MARGEN_TRAS_ESCRITURA_MS, motivoOcupado } from "@/lib/actualizacion/ocupado";
+import { alLiberarBloqueo, anotarEscritura, bloqueosActivos, MARGEN_TRAS_ESCRITURA_MS, motivoOcupado } from "@/lib/actualizacion/ocupado";
 import { ATRIBUTO_RESTAURANDO, guardarEstado, TOPE_TAPADO_MS } from "@/lib/actualizacion/estado-guardado";
 import { descartarRestauracion, estadoARestaurar, momentoPrimeraRestauracion, momentoUltimaRestauracion, piezasPorRestaurar, ventanaRestauracionAbierta } from "@/lib/actualizacion/piezas";
 import { aplicarScroll } from "@/lib/actualizacion/scroll";
@@ -197,7 +197,7 @@ export default function ActualizadorInvisible() {
     const envuelto: typeof window.fetch = async (input, init) => {
       const metodo = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
       const escribe = metodo !== "GET" && metodo !== "HEAD";
-      if (escribe) mutacionesEnVuelo++;
+      if (escribe) { mutacionesEnVuelo++; anotarEscritura("inicio"); }
       try {
         const res = await original.call(window, input, init);
         try {
@@ -212,6 +212,7 @@ export default function ActualizadorInvisible() {
         if (escribe) {
           mutacionesEnVuelo = Math.max(0, mutacionesEnVuelo - 1);
           ultimaEscrituraFin = Date.now();
+          anotarEscritura("fin"); // también lo lee el popup de avisos urgentes
           // setTimeout, NO microtask: el que hizo el POST alcanza a leer su respuesta
           // (y a mostrar un error) antes de que se evalúe recargar (A2).
           if (mutacionesEnVuelo === 0) intentarPronto(MARGEN_TRAS_ESCRITURA_MS + REINTENTO_TRAS_LIBERAR_MS);

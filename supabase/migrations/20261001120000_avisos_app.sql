@@ -13,8 +13,8 @@
 --   empresa_ids  null = todas; si no, solo esas empresas (la ACTIVA del usuario)
 --   mesa         null = en cualquier parte; 'boletas'|'facturas' = mirando esa mesa
 --                (el RLS no sabe qué mesa se mira: eso lo filtra la pantalla)
---   version_min  "novedades de esta versión": fecha ISO de build (la pestaña igual
---                o más nueva) o commit (solo esa versión). Lo filtra la pantalla.
+--   version_min  "novedades de esta versión": fecha ISO del COMMIT (esa versión o
+--                una posterior) o SHA (solo esa versión). Lo filtra la pantalla.
 
 create table if not exists public.avisos_app (
   id uuid primary key default gen_random_uuid(),
@@ -89,13 +89,14 @@ create policy avisos_vistos_marcar_propios on public.avisos_vistos
     and exists (select 1 from public.avisos_app a where a.id = aviso_id)
   );
 
--- Cinturón: aunque alguien agregue una policy por error, los roles del cliente
--- no tienen el privilegio de escribir avisos ni de editar/borrar vistos.
-revoke all on public.avisos_app from anon;
-revoke all on public.avisos_vistos from anon;
-revoke insert, update, delete, truncate on public.avisos_app from anon, authenticated;
-revoke update, delete, truncate on public.avisos_vistos from anon, authenticated;
-grant select on public.avisos_app to authenticated;
+-- Privilegios (revisión adversarial B1/B3): se revoca TODO lo que el default ACL da
+-- a anon/authenticated (incluidos REFERENCES, TRIGGER y MAINTAIN) y se concede lo
+-- justo. La clienta lee SOLO columnas mínimas: ni creado_por (correo del operador)
+-- ni empresa_ids (UUIDs de OTRAS empresas cuando un aviso apunta a varias). El RLS
+-- usa empresa_ids en la policy sin que la clienta tenga privilegio sobre la columna.
+revoke all on public.avisos_app from anon, authenticated;
+revoke all on public.avisos_vistos from anon, authenticated;
+grant select (id, tipo, titulo, cuerpo, formato, desde, hasta, mesa, version_min, activo, created_at) on public.avisos_app to authenticated;
 grant select, insert on public.avisos_vistos to authenticated;
 
 -- DOWN: archivo hermano 20261001120000_avisos_app_DOWN.sql

@@ -3,11 +3,11 @@
 import { versionDelCliente } from "@/lib/actualizacion/version";
 import type { VersionPestana } from "./reglas";
 
-/** Fecha ISO del build (next.config → NEXT_PUBLIC_APP_BUILD_AT). Server y cliente. */
-export function fechaDeBuild(): string | null {
-  return process.env.NEXT_PUBLIC_APP_BUILD_AT || null;
+/** Fecha ISO del commit de este build (next.config → NEXT_PUBLIC_APP_COMMIT_AT). Server y cliente. */
+export function fechaDeCommit(): string | null {
+  return process.env.NEXT_PUBLIC_APP_COMMIT_AT || null;
 }
 
 export function versionPestana(): VersionPestana {
-  return { version: versionDelCliente(), builtAt: fechaDeBuild() };
+  return { version: versionDelCliente(), fechaCommit: fechaDeCommit() };
 }

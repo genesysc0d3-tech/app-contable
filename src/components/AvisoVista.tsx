@@ -144,8 +144,9 @@ const CSS = `
 .av-acciones{display:flex;justify-content:flex-end;margin-top:12px}
 .av-acciones-centro{justify-content:center;margin-top:18px}
 
-/* toast: carbón siempre (también en claro), abajo a la derecha */
-.av-toast{position:fixed;right:20px;bottom:20px;z-index:125;display:flex;align-items:flex-start;gap:10px;width:min(360px,calc(100vw - 32px));padding:12px 10px 12px 12px;border-radius:14px;background:#1c1c1f;border:1px solid rgba(255,255,255,.08);box-shadow:0 18px 44px -12px rgba(0,0,0,.55);animation:avSube .28s cubic-bezier(.2,.9,.3,1.2) both}
+/* toast: carbón siempre (también en claro), abajo a la derecha. z-index 90: BAJO los
+   modales de la app (z-100+), nunca queda encima de un wizard o un popup (M3). */
+.av-toast{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:flex-start;gap:10px;width:min(360px,calc(100vw - 32px));padding:12px 10px 12px 12px;border-radius:14px;background:#1c1c1f;border:1px solid rgba(255,255,255,.08);box-shadow:0 18px 44px -12px rgba(0,0,0,.55);animation:avSube .28s cubic-bezier(.2,.9,.3,1.2) both}
 .av-toast .av-titulo{color:#f2f2f2}
 .av-toast .av-cuerpo{color:rgba(255,255,255,.66)}
 .av-toast .av-cuerpo strong{color:#fff}
@@ -155,7 +156,7 @@ const CSS = `
 .av-x:hover{background:var(--av-acento);color:#fff}
 
 /* tarjeta: esquina inferior derecha, discreta */
-.av-tarjeta{position:fixed;right:20px;bottom:20px;z-index:125;width:min(340px,calc(100vw - 32px));padding:16px 16px 14px;border-radius:16px;background:var(--av-bg);border:1px solid var(--av-borde);border-top:3px solid var(--av-acento);box-shadow:var(--av-sombra);animation:avSube .32s cubic-bezier(.2,.9,.3,1.2) both}
+.av-tarjeta{position:fixed;right:20px;bottom:20px;z-index:90;width:min(340px,calc(100vw - 32px));padding:16px 16px 14px;border-radius:16px;background:var(--av-bg);border:1px solid var(--av-borde);border-top:3px solid var(--av-acento);box-shadow:var(--av-sombra);animation:avSube .32s cubic-bezier(.2,.9,.3,1.2) both}
 
 /* popup urgente: modal centrado sobre velo */
 .av-velo{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:20px;background:rgba(8,9,12,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:avFundido .22s ease both}

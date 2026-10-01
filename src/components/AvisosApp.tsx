@@ -18,15 +18,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AvisoVista } from "@/components/AvisoVista";
 import { supabase } from "@/lib/supabase";
-import { alLiberarBloqueo, bloqueosActivos, motivoOcupado } from "@/lib/actualizacion/ocupado";
+import { alLiberarBloqueo, bloqueosActivos, estadoEscrituras, motivoOcupado, msDesdeUltimaLiberacion } from "@/lib/actualizacion/ocupado";
 import { ATRIBUTO_RESTAURANDO } from "@/lib/actualizacion/estado-guardado";
 import { crearColaAvisos, guardarVistoLocal, leerVistosLocales } from "@/lib/avisos/cola";
 import { escucharAvisos } from "@/lib/avisos/bus";
-import { mesaDeUbicacion, type AvisoApp } from "@/lib/avisos/reglas";
+import { motivoEsperaAviso } from "@/lib/avisos/espera";
+import { formatoEfectivo, mesaDeUbicacion, type AvisoApp } from "@/lib/avisos/reglas";
 import { versionPestana } from "@/lib/avisos/version";
 
 const REINTENTO_OCUPADO_MS = 3_000;
 const PAUSA_ENTRE_AVISOS_MS = 700;
+// Re-evaluar el aviso en pantalla al vencer (tope: setTimeout no aguanta plazos largos).
+const TOPE_TIMER_VENCE_MS = 60 * 60_000;
 
 function storageSeguro(): Storage | null {
   try { return window.localStorage; } catch { return null; }
@@ -42,35 +45,54 @@ export default function AvisosApp({ iniciales, userId }: { iniciales: AvisoApp[]
   const recibirRef = useRef<(avisos: AvisoApp[]) => void>(() => {});
   const cerrarRef = useRef<(id: string) => void>(() => {});
   const inicialesRef = useRef(iniciales);
-  const userIdRef = useRef(userId);
-  useEffect(() => { userIdRef.current = userId; }, [userId]);
 
   useEffect(() => {
     const storage = storageSeguro();
-    const vistos = leerVistosLocales(storage);
+    // Por usuario (M4): en un computador compartido, lo que cerró otra persona no cuenta.
+    const vistos = leerVistosLocales(storage, userId);
     let reintento: ReturnType<typeof setTimeout> | null = null;
     let pausa: ReturnType<typeof setTimeout> | null = null;
+    let vence: ReturnType<typeof setTimeout> | null = null;
 
     const cola = crearColaAvisos({
       ahora: () => Date.now(),
-      ocupado: () => {
+      ocupado: (aviso) => {
         // Recién recargada por la actualización invisible y aún restaurando: espera.
         if (document.documentElement.hasAttribute(ATRIBUTO_RESTAURANDO)) return "restaurando";
-        return motivoOcupado({ bloqueos: bloqueosActivos(), mutacionesEnVuelo: 0, doc: document });
+        const esc = estadoEscrituras();
+        const base = motivoOcupado({ bloqueos: bloqueosActivos(), mutacionesEnVuelo: 0, msDesdeUltimaEscritura: Date.now() - esc.ultimaFin, doc: document });
+        // El popup urgente además espera escrituras en vuelo, el margen tras una
+        // emisión y a que no haya un toast de la app a la vista (M2).
+        return motivoEsperaAviso(formatoEfectivo(aviso), {
+          base,
+          escriturasEnVuelo: esc.enVuelo,
+          msDesdeLiberacion: msDesdeUltimaLiberacion(),
+          toastDeLaApp: Boolean(document.querySelector("[data-massdte-toasts] > *")),
+        });
       },
       oculta: () => document.hidden,
       mesa: () => mesaDeUbicacion(window.location.pathname, window.location.search),
       version: versionPestana,
       yaVisto: (id) => vistos.has(id),
-      anotarVisto: (id) => { vistos.add(id); guardarVistoLocal(storage, id); },
-      marcarVistoRemoto: (id) => { void marcarVistoEnSupabase(id, userIdRef.current).catch(() => {}); },
+      anotarVisto: (id) => { vistos.add(id); guardarVistoLocal(storage, userId, id); },
+      marcarVistoRemoto: (id) => { void marcarVistoEnSupabase(id, userId).catch(() => {}); },
     });
 
     const evaluar = () => {
       if (reintento) { clearTimeout(reintento); reintento = null; }
+      if (vence) { clearTimeout(vence); vence = null; }
       const r = cola.evaluar();
-      setActual(cola.actual());
-      if (r === "ocupado") reintento = setTimeout(evaluar, REINTENTO_OCUPADO_MS);
+      const enPantalla = cola.actual();
+      setActual(enPantalla);
+      // Esperando momento seguro, o un urgente esperando para desplazar lo que está en pantalla.
+      if (r === "ocupado" || (enPantalla && enPantalla.tipo !== "urgente" && cola.urgentesEsperando() > 0)) {
+        reintento = setTimeout(evaluar, REINTENTO_OCUPADO_MS);
+      }
+      // El aviso en pantalla se retira solo al vencer (M1/B4: un popup vencido no bloquea nada).
+      if (enPantalla) {
+        const ms = Math.min(Math.max(Date.parse(enPantalla.hasta) - Date.now(), 0) + 500, TOPE_TIMER_VENCE_MS);
+        vence = setTimeout(evaluar, ms);
+      }
     };
     const evaluarPronto = (ms: number) => {
       if (pausa) clearTimeout(pausa);
@@ -101,10 +123,12 @@ export default function AvisosApp({ iniciales, userId }: { iniciales: AvisoApp[]
       window.removeEventListener("popstate", onNavegar);
       if (reintento) clearTimeout(reintento);
       if (pausa) clearTimeout(pausa);
+      if (vence) clearTimeout(vence);
     };
-  }, []);
+  }, [userId]);
 
-  // El layout vuelve a renderizar (router.refresh): lo nuevo entra a la cola.
+  // El layout vuelve a renderizar (router.refresh, cambio de empresa): su lista es la
+  // verdad y reemplaza la cola (lo de la empresa anterior sale sin marcarse visto).
   useEffect(() => {
     if (iniciales === inicialesRef.current) return;
     inicialesRef.current = iniciales;
