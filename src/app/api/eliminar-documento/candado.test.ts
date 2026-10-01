@@ -33,7 +33,7 @@ vi.mock("@/lib/supabase/server", () => ({
           : {
               data: {
                 id: "D1", empresa_id: "E1", nombre_archivo: "cartola.xlsx", tipo: "cartola",
-                estado: "procesado", storage_path: "cartolas/a.xlsx", storage_provider: "supabase", album_imagenes: null,
+                estado: "procesado", storage_path: "E1/D1/a.xlsx", storage_provider: "supabase", album_imagenes: null,
               },
             };
       return q;
