@@ -101,6 +101,7 @@ export default function VisualizarArchivo({
   return createPortal(
     <div
       onClick={onClose}
+      data-actualizacion-espera=""
       style={{
         position: "fixed", inset: 0, zIndex: 100, display: "grid", placeItems: "center", padding: 28,
         background: "rgba(0,0,0,.5)",
@@ -120,7 +121,7 @@ export default function VisualizarArchivo({
 
       {/* Cerrar flotante arriba: solo para la tarjeta pdf/planilla (la imagen usa el de abajo) */}
       {!esImagen && !loading && !error && (
-        <button onClick={onClose} title="Cerrar"
+        <button onClick={onClose} title="Cerrar" data-actualizacion-espera=""
           style={{ position: "fixed", top: 18, right: 22, zIndex: 2, width: 34, height: 34, borderRadius: 9, border: "1px solid var(--border)", background: "color-mix(in srgb, var(--bg) 72%, transparent)", color: "var(--text2)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }}>×</button>
       )}
 
@@ -143,7 +144,7 @@ export default function VisualizarArchivo({
               </div>
             )}
           </div>
-          <button onClick={onClose}
+          <button onClick={onClose} data-actualizacion-espera=""
             style={{ position: "fixed", bottom: 30, left: "50%", zIndex: 3, display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 22px", borderRadius: 999, border: "1px solid color-mix(in srgb, var(--text) 16%, transparent)", background: "color-mix(in srgb, var(--bg) 40%, transparent)", color: "var(--text)", fontSize: 12, fontWeight: 600, cursor: "pointer", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", boxShadow: "0 10px 34px rgba(0,0,0,.3)", animation: "lbFade .32s ease .08s both" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>
             Cerrar

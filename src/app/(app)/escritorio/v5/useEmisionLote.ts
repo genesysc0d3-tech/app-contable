@@ -22,6 +22,8 @@ import { verificarJobColgado } from "./verificar-colgado";
 import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
 import { datosParaJob } from "@/lib/emission/datos-job-cliente";
+import { useBloqueoActualizacion } from "@/lib/actualizacion/hooks";
+import { pestanaQuedoVieja, versionDelCliente } from "@/lib/actualizacion/version";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
 export interface ItemLoteEmision extends ItemLote {
@@ -65,6 +67,9 @@ interface Waiter {
 }
 
 const origin = () => window.location.origin;
+
+const DETALLE_PONIENDOSE_AL_DIA =
+  "Esta pestaña tenía una versión anterior de massDTE y se está poniendo al día sola. Lo que falta quedó guardado: al cerrar este aviso, vuelve a emitir.";
 
 export function useEmisionLote(args: { empresaId: string; empresaRut?: string | null }) {
   const { empresaId, empresaRut } = args;
@@ -151,6 +156,10 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     return () => window.removeEventListener("beforeunload", handler);
   }, [corriendo]);
 
+  // Actualización invisible: con el lote corriendo (hasta que el último resultado
+  // queda registrado) la pestaña NUNCA se recarga sola.
+  useBloqueoActualizacion(corriendo, "emision_lote");
+
   // Avisa a la mesa que hay un lote PROPIO corriendo: espacia sus recargas y al
   // terminar hace una recarga final (cubre todos los cierres: terminada, detenida,
   // a medias, pausa remota, cerrar el modal). plan-costo-vercel §5 d.
@@ -207,7 +216,10 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
       const c = clasificarStartJob(res.status, json);
       switch (c.tipo) {
         case "ok": return { jobId: c.jobId, expiresAt: c.expiresAt, emisorRut: c.emisorRut, foliosHoy: c.foliosHoy };
-        case "pausada": return { pausada: true, detalle: c.detalle };
+        // Pestaña vieja (el server lo marca y su versión es OTRA): el actualizador la pone
+        // al día sola al cerrar este aviso; no se pide recargar a mano. Con la misma
+        // versión eso sería mentira (A3): va el detalle del server.
+        case "pausada": return { pausada: true, detalle: pestanaQuedoVieja(res.headers, versionDelCliente()) ? DETALLE_PONIENDOSE_AL_DIA : c.detalle };
         case "ya_emitida": return { yaEmitida: true, folio: c.folio, boletaId: c.boletaId, boletaCreatedAt: c.boletaCreatedAt };
         case "frenada": return { frenada: true, motivo: c.motivo };
         case "a_medias": return { yaAMedias: true };

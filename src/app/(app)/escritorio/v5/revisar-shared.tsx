@@ -16,6 +16,7 @@ import { formatShortDateEsCl } from "@/lib/display-date";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { useMesaReload } from "./mesa-reload";
 import { obtenerUmbralReceptorClp } from "./actions";
+import { useBloqueoActualizacion } from "@/lib/actualizacion/hooks";
 
 export type Propuesta = Tables<"propuestas_ia"> & {
   movimientos_raw: Tables<"movimientos_raw"> & {
@@ -278,6 +279,8 @@ function GlosaEmitibleInline({ propuesta, onAction, onClose }: {
   const { toast } = useToast();
   const [glosa, setGlosa] = useState<string>(propuesta.notas?.trim() ?? "");
   const [busy, setBusy] = useState(false);
+  // Actualización invisible: con la glosa editada sin guardar, la pestaña no se recarga sola.
+  useBloqueoActualizacion(busy || glosa !== (propuesta.notas?.trim() ?? ""), "edicion_glosa");
   const guardar = async () => {
     if (busy) return;
     setBusy(true);
@@ -383,6 +386,17 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   const [email, setEmail] = useState<string>(extra.receptor_email ?? "");
   const [telefono, setTelefono] = useState<string>(extra.receptor_telefono ?? "");
   const [medioPago, setMedioPago] = useState<string>(extra.medio_pago ?? "");
+  // Actualización invisible: con cambios sin guardar (o guardando), la pestaña no se recarga sola.
+  const sinGuardar = busy
+    || tipo !== tipoInicial
+    || total !== Math.round(propuesta.total ?? propuesta.movimientos_raw?.monto ?? 0)
+    || detalle !== (propuesta.notas?.trim() ?? "")
+    || rut !== (propuesta.receptor_rut ?? "") || razon !== (propuesta.receptor_nombre ?? "")
+    || direccion !== (extra.receptor_direccion ?? "") || comuna !== (extra.receptor_comuna ?? "")
+    || email !== (extra.receptor_email ?? "") || telefono !== (extra.receptor_telefono ?? "")
+    || medioPago !== (extra.medio_pago ?? "")
+    || selClienteId !== (propuesta.cliente_id ?? "") || newClienteNombre !== "" || newClienteRut !== "";
+  useBloqueoActualizacion(sinGuardar, "edicion_propuesta");
   // Progresivos (gobernados por 135 UF): bajo el umbral el receptor va escondido tras
   // un link; dirección/comuna detrás de "más datos" (nunca obligatorias). Se abren si
   // ya traen dato o si el usuario los despliega.

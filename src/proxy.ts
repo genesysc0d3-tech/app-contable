@@ -1,7 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
+import { CABECERA_VERSION, versionPublicadaDelServidor } from "@/lib/actualizacion/version";
 
+// ACTUALIZACIÓN INVISIBLE (2026-09-30): toda respuesta que pasa por el proxy lleva
+// la versión del deploy vivo. La pestaña la compara con la suya en los pedidos que
+// YA hace (cero pedidos extra) y, si cambió, se pone al día sola en un momento
+// seguro (src/components/ActualizadorInvisible.tsx). Kill switch: ACTUALIZACION_AUTO=false.
 export async function proxy(request: NextRequest) {
+  const res = await proxyBase(request);
+  const version = versionPublicadaDelServidor();
+  if (version) res.headers.set(CABECERA_VERSION, version);
+  return res;
+}
+
+async function proxyBase(request: NextRequest) {
   if (request.nextUrl.pathname === "/masssdte") {
     const target = request.nextUrl.clone();
     target.pathname = "/massdte";

@@ -80,7 +80,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
         mesa.boletasCount === 0 ? (
           compactEmpty("boletas", mesa.mesaActiva === "factura")
         ) : (
-          <div className="r-scroll">
+          <div className="r-scroll" data-restaurar-scroll="boletas.lista">
             <div className="sec">
               <div className="bl-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 0 8px" }}>
                 <span style={{ fontSize: 10, color: "var(--text)", fontWeight: 600 }}>Últimas emitidas</span>

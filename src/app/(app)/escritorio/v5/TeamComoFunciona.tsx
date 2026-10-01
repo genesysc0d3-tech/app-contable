@@ -153,6 +153,7 @@ export default function TeamComoFunciona() {
           <div className="tcf-tadd">+ Agregar alguien al team</div>
         </div>
 
+        {/* actualizacion-libre: maqueta animada de la guía, sin datos */}
         <div className="tcf-veil" />
         <div className="tcf-hint">Toca lo que quieres que vea <b>Persona 2</b> · Esc para salir</div>
         <svg className="tcf-cur" viewBox="0 0 16 16" fill="none" stroke="#fff" strokeWidth="1.6"><path d="M8 1v14M1 8h14" /><circle cx="8" cy="8" r="3" stroke="var(--accent)" /></svg>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import ConectoresChips from "./ConectoresChips";
+import { usePiezaEstado } from "@/lib/actualizacion/hooks";
 
 const baseTabs = [
   { id: "subidos", label: "Check de agregados",
@@ -28,6 +29,8 @@ export default function TabsV5({
   // declararlo como dependencia y el compilador de React se salta el archivo.
   const tabs = useMemo(() => baseTabs.map((t) => (t.id === "boletas" ? { ...t, label: boletasLabel } : t)), [boletasLabel]);
   const [tab, setTab] = useState("subidos");
+  // Actualización invisible: la pestaña activa (Check/Emitir/Boletas) sobrevive a la recarga.
+  usePiezaEstado<string>("mesa.tab", () => tab, (v) => { if (baseTabs.some((t) => t.id === v)) setTab(v); });
   const barRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);

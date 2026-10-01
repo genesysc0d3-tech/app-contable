@@ -168,6 +168,7 @@ function BusinessEmissionLockBanner() {
   if (!businessMode || !activeLock || activeLock.is_mine) return null;
 
   return (
+    // actualizacion-libre: aviso de candado del equipo, no guarda nada
     <div style={{ position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 96, width: "min(520px, calc(100vw - 28px))", pointerEvents: "none" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(245,158,11,.24)", background: "rgba(24,20,12,.86)", color: "var(--amber)", boxShadow: "0 18px 48px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
         <span style={{ width: 26, height: 26, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(245,158,11,.14)", border: "1px solid rgba(245,158,11,.22)", flexShrink: 0 }}>
@@ -184,6 +185,7 @@ function BusinessEmissionLockBanner() {
 
 function SavedPulse({ label }: { label: string }) {
   return (
+    // actualizacion-libre: pulso "guardado", efímero
     <div style={{ position: "fixed", left: "50%", bottom: 34, zIndex: 95, transform: "translateX(-50%)", animation: "saved-pop 1.45s cubic-bezier(.22,1,.36,1) both", pointerEvents: "none" }}>
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 9, padding: "10px 14px 10px 10px", borderRadius: 999, background: "rgba(22,24,29,.86)", border: "1px solid rgba(34,197,94,.28)", color: "rgba(255,255,255,.92)", boxShadow: "0 18px 50px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", fontSize: 11, fontWeight: 850 }}>
         <span style={{ position: "relative", width: 24, height: 24, borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(34,197,94,.16)", color: "var(--green)", flexShrink: 0 }}>

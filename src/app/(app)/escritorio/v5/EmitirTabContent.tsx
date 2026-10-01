@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
 import { useEmissionLockStatus } from "./useEmissionLockStatus";
+import { useBloqueoActualizacion, usePiezaEstado } from "@/lib/actualizacion/hooks";
 import { useMesaReload } from "./mesa-reload";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import dynamic from "next/dynamic";
@@ -444,6 +445,27 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // esperar a que la mesa recargue. Solo corre si hay alguna sin respuesta.
   const haySinRespuesta = aMedias.some((it) => it.motivo === "sin_respuesta");
   const [ahoraMs, setAhoraMs] = useState(() => Date.now());
+  // ── Actualización invisible ──
+  // Nunca recargar con la emisión de la barra en curso (hasta registrar el resultado),
+  // reanudando un lote, ni con un folio a mano a medio escribir/guardar.
+  useBloqueoActualizacion(
+    emitiendo || resumiendo || guardandoFolio != null || declarando != null || verificando != null || devolviendo != null
+      || Object.values(folioAMedias).some((v) => v.trim() !== ""),
+    "emision_emitir",
+  );
+  // Lo que la clienta está mirando en Emitir vuelve igual tras la recarga.
+  type VistaEmitir = { status: typeof statusFilter; tipo: typeof typeFilter; expandidos: string[]; popup: string | null; seleccion: string[] };
+  usePiezaEstado<VistaEmitir>("emitir.vista",
+    () => ({ status: statusFilter, tipo: typeFilter, expandidos: [...expandedDocs], popup: popupDoc, seleccion: [...selected] }),
+    (v) => {
+      if (!v || typeof v !== "object") return;
+      if (typeof v.status === "string") setStatusFilter(v.status);
+      if (typeof v.tipo === "string") setTypeFilter(v.tipo);
+      if (Array.isArray(v.expandidos)) setExpandedDocs(new Set(v.expandidos));
+      // Solo si esa cartola sigue con algo por revisar (si no, el popup saldría vacío).
+      if (typeof v.popup === "string" && (porRevisarByDoc.get(v.popup)?.length ?? 0) > 0) setPopupDoc(v.popup);
+      if (Array.isArray(v.seleccion)) setSelected(new Set(v.seleccion));
+    });
   useEffect(() => {
     if (!haySinRespuesta) return;
     setAhoraMs(Date.now());
@@ -822,7 +844,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   }
 
   return (
-    <div className="r-scroll" style={{display:"flex",flexDirection:"column"}}>
+    <div className="r-scroll" data-restaurar-scroll="emitir.lista" style={{display:"flex",flexDirection:"column"}}>
       <div className="sec" style={{flex:1}}>
         {/* Recordatorio de la extensión: el carril real (sii_local) emite vía la
             extensión local, así que si falta la avisamos acá antes de intentar emitir. */}
@@ -1154,7 +1176,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
         // (ancestro transformado) y la card de plan / paneles del escritorio se le
         // colaban encima. Mismo patrón que EmitirLoteModal / EditorAmpliado.
         return createPortal(
-          <div onClick={() => setPopupDoc(null)} style={{ position: "fixed", inset: 0, zIndex: 215, display: "grid", placeItems: "center", padding: 20, background: "rgba(6,7,10,.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
+          <div onClick={() => setPopupDoc(null)} data-actualizacion-espera="" style={{ position: "fixed", inset: 0, zIndex: 215, display: "grid", placeItems: "center", padding: 20, background: "rgba(6,7,10,.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: "min(760px,96vw)", maxHeight: "82vh", display: "flex", flexDirection: "column", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
               <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
@@ -1202,7 +1224,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
 
       {/* F1 — confirmar (pre-vuelo) · emitiendo · recibo, en una sola superficie */}
       {confirmOpen && (
-        <div onClick={() => { if (!emitiendo) { setConfirmOpen(false); setLastResult(null); } }}
+        <div onClick={() => { if (!emitiendo) { setConfirmOpen(false); setLastResult(null); } }} data-actualizacion-espera=""
           style={{ position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
             style={{ width: "min(440px, 94vw)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", padding: "20px 22px" }}>
