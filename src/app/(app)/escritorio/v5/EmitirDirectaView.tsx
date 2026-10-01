@@ -17,6 +17,8 @@ import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
+import { cierreBoletaUnicaPorStatus, DETALLE_BOLETA_A_MEDIAS } from "@/lib/emission/boleta-unica-lapida";
+import { declararNoSalio } from "@/lib/emission/recover-latest";
 
 type TipoDte = 33 | 34 | 39 | 41;
 type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro" | "Contado" | "Crédito" | "";
@@ -89,6 +91,8 @@ interface ExtensionPageMessage {
   status?: string;
   message?: string;
   recoverable?: boolean;
+  /** 0.2.8+: falla con el canal muerto tras mandar la emisión (pudo emitir). */
+  emision_incierta?: boolean;
   result?: {
     folio?: number | null;
     folio_confidence?: "none" | "medium" | "high";
@@ -293,6 +297,8 @@ const WORKER_STATUS_LABELS: Record<string, string> = {
   retrying: "Reintentando",
   emitted: "Boleta emitida",
   result_needs_review: "Requiere revisión",
+  // El server dijo LEASE_PERDIDO: el candado de la cuenta ya no es de esta emisión.
+  lease_perdido: "Emisión detenida",
   // Extensión 0.2.9: folio emitido y enviado; massDTE aún no confirma el guardado.
   result_awaiting_ack: "Guardando…",
   learning_observing: "Modo aprendizaje",
@@ -353,6 +359,8 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   useEffect(() => { localWorkerRef.current = localWorker; }, [localWorker]);
   // Jobs ya cerrados desde esta sesión: JOB_CLOSE se manda UNA vez por job.
   const closedJobIdsRef = useRef<Set<string>>(new Set());
+  // Jobs que perdieron el candado (409 LEASE_PERDIDO): se avisa UNA vez por job.
+  const leaseLostJobIdsRef = useRef<Set<string>>(new Set());
   // Último mensaje de estado de la extensión (para la CAJA NEGRA: se adjunta como
   // motivo al cerrar un job fallido → queda en status_message + ops_event).
   const lastStatusMsgRef = useRef<string | null>(null);
@@ -664,6 +672,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           : json.error === "EMISION_PAUSADA"
             ? (json.detalle ?? "Pausamos la emisión por un rato mientras revisamos un cambio en el sitio del SII. Inténtalo de nuevo más tarde.")
             : json.bloqueo?.mensaje ?? json.detalle ?? json.error ?? "No se pudo iniciar la emisión.";
+        // BOLETA ÚNICA A MEDIAS (seguridad 2026-09-30): el server no abre otra boleta
+        // única mientras una anterior pudo haber salido en el SII. Se muestra ESA
+        // lápida (Recuperar / folio a mano / «no salió»), no un toast suelto.
+        if (json.error === "BOLETA_A_MEDIAS" && json.job_id) {
+          setLocalWorker({ jobId: json.job_id, status: "result_needs_review", message: json.detalle ?? DETALLE_BOLETA_A_MEDIAS });
+          toast(json.detalle ?? DETALLE_BOLETA_A_MEDIAS, "error");
+          return null;
+        }
         if (json.error === "EMISION_BLOQUEADA") {
           setEmissionLock({
             ok: true,
@@ -694,10 +710,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     }
   }
 
-  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente" = "cancelled") {
-    if (!jobId) return;
+  async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente" = "cancelled"): Promise<string | null> {
+    if (!jobId) return null;
     try {
-      await fetch("/api/emision/jobs", {
+      const res = await fetch("/api/emision/jobs", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         // CAJA NEGRA: adjunta el último mensaje de estado de la extensión como motivo
@@ -706,19 +722,43 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         body: JSON.stringify({ job_id: jobId, estado, status_message: lastStatusMsgRef.current ?? null }),
       });
       setEmissionLock(null);
+      // El estado REAL con que quedó el job (una lápida no se cancela: vuelve tal cual).
+      const json = (await res.json().catch(() => ({}))) as { estado?: string };
+      return typeof json.estado === "string" ? json.estado : null;
     } catch {
       // Best-effort: si falla, el lock expira por TTL server-side.
+      return null;
     }
   }
 
   async function heartbeatEmissionJob(jobId: string | null | undefined, status: string) {
     if (!jobId) return;
     try {
-      await fetch("/api/emision/jobs", {
+      const res = await fetch("/api/emision/jobs", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: jobId, status }),
       });
+      if (res.status !== 409) return;
+      const json = (await res.json().catch(() => ({}))) as { error?: string; detalle?: string };
+      if (json.error !== "LEASE_PERDIDO") return;
+      // LEASE PERDIDO (seguridad 2026-09-30, puntos 3 y 5): el candado de la cuenta ya
+      // no es de esta emisión (alguien lo liberó desde otro computador, otra emisión lo
+      // tomó o venció). Una sola vez por job y solo si es la emisión en curso de esta
+      // pestaña (un latido tardío de un job que ya cerramos acá no alarma).
+      if (closedJobIdsRef.current.has(jobId) || leaseLostJobIdsRef.current.has(jobId)) return;
+      const current = localWorkerRef.current;
+      if (current?.jobId !== jobId || current.status === "emitted" || current.status === "already_exists") return;
+      leaseLostJobIdsRef.current.add(jobId);
+      // Que la extensión de ESTE computador cierre su ventana: antes del clic no emite;
+      // después del clic la extensión NO cancela (sigue capturando el folio, que el
+      // server registra siempre). El corte total antes del clic necesita el «aviso
+      // antes del clic» de la extensión 0.3.0.
+      window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
+      const detalle = json.detalle ?? "Esta emisión perdió el candado de la cuenta y la detuvimos. Si alcanzó a emitirse, recupera el folio antes de volver a emitir.";
+      setLocalWorker({ jobId, status: "lease_perdido", message: detalle });
+      setLocalWorkerLoading(false);
+      toast(detalle, "error");
     } catch {
       // Best-effort: el lock expira por TTL si el navegador se cae.
     }
@@ -850,6 +890,10 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       if (data.message) lastStatusMsgRef.current = String(data.message).slice(0, 500);
 
       void heartbeatEmissionJobEvent(data.job_id, data.status ?? "running");
+      // Seguridad 2026-09-30 (punto 1): `emision_incierta` (canal muerto tras mandar la
+      // emisión) y `result_needs_review` pudieron dejar una boleta REAL en el SII → se
+      // muestran y se sellan como lápida, nunca como un error re-emitible.
+      const cierre = cierreBoletaUnicaPorStatus(data);
       setLocalWorker((current) => {
         // Un éxito terminal NO se pisa: tras "Boleta emitida y guardada", un
         // "closed"/"result_needs_review" tardío (cierre de la ventana SII) volvía
@@ -863,17 +907,29 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
         }
         return {
           jobId: data.job_id ?? null,
-          status: data.status ?? "error",
-          message: data.message ?? "Estado recibido desde motor local SII",
+          status: data.status ? cierre.estadoUi : "error",
+          message: cierre.mensaje ?? data.message ?? "Estado recibido desde motor local SII",
         };
       });
       setLocalWorkerLoading(false);
-      if ((data.status === "error" || data.status === "cancelled") && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
+      if (cierre.cerrar === "revision_pendiente" && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
+        // LÁPIDA: el job queda `revision_pendiente` (retiene el candado y el server no
+        // abre otra boleta única hasta resolverla). NO se cierra la ventana del SII:
+        // ahí puede estar el folio para capturarlo.
+        closedJobIdsRef.current.add(data.job_id);
+        void closeEmissionJobEvent(data.job_id, cierre.cerrar);
+        if (data.job_id === simpleApiJobId) {
+          setEmitiendo(false);
+          setSimpleApiJobId(null);
+        }
+        return;
+      }
+      if ((cierre.cerrar === "failed" || cierre.cerrar === "cancelled") && data.job_id && !closedJobIdsRef.current.has(data.job_id)) {
         // Una sola vez por job (el Set corta el bucle error→JOB_CLOSE→error que se
         // formaba cuando la extensión quedaba huérfana y el bridge respondía con
         // otro status "error" para el mismo job).
         closedJobIdsRef.current.add(data.job_id);
-        void closeEmissionJobEvent(data.job_id, data.status === "cancelled" ? "cancelled" : "failed");
+        void closeEmissionJobEvent(data.job_id, cierre.cerrar);
         // Cerrar también la ventana worker de ese job: si quedaba viva con su botón
         // "Reintentar" mientras acá se re-habilitaba Emitir, había dos cerebros
         // capaces de emitir dos boletas reales. (Post-emit la extensión la protege.)
@@ -1411,6 +1467,29 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
     setLocalWorkerLoading(false);
   }
 
+  // SALIDA HUMANA de la lápida de boleta única (seguridad 2026-09-30): la persona
+  // revisó el SII y la boleta no está → el server cierra el intento (`failed`), suelta
+  // el candado y se puede volver a emitir. Si el server tiene un folio capturado para
+  // ese intento, lo rechaza (FOLIO_CAPTURADO): salió, hay que recuperarlo.
+  async function declararNoSalioUnica() {
+    const jobId = localWorker?.jobId ?? null;
+    if (!jobId) return;
+    setLocalWorkerLoading(true);
+    try {
+      const r = await declararNoSalio(jobId);
+      if (!r.ok) {
+        toast(r.mensaje, "error");
+        return;
+      }
+      closedJobIdsRef.current.add(jobId);
+      setLocalWorker(null);
+      setEmissionLock(null);
+      toast("Listo: quedó registrado que esa boleta no salió. Ya puedes emitir.", "success");
+    } finally {
+      setLocalWorkerLoading(false);
+    }
+  }
+
   // Cancela TU PROPIO candado pegado de un job anterior (myStaleLock): el job cuyo
   // lock quedó tomado ya no es el actual en vuelo (el modal se remonteó, localWorker
   // es null), así que se cierra por el job_id del propio lock. Libera el lock al toque
@@ -1418,7 +1497,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   async function cancelStaleLock() {
     const jobId = activeEmissionLock?.job_id ?? null;
     if (jobId) {
-      await closeEmissionJob(jobId, "cancelled");
+      const estadoFinal = await closeEmissionJob(jobId, "cancelled");
+      // Una LÁPIDA (boleta que pudo salir en el SII) no se cancela: el server la deja
+      // tal cual. Se muestra su panel (Recuperar / folio a mano / «no salió»).
+      if (estadoFinal === "revision_pendiente") {
+        setLocalWorker({ jobId, status: "result_needs_review", message: DETALLE_BOLETA_A_MEDIAS });
+        setLocalWorkerLoading(false);
+        return;
+      }
       window.postMessage({ source: "app-contable", type: "APP_CONTABLE_SII_JOB_CLOSE", protocol_version: 1, job_id: jobId }, window.location.origin);
     }
     setLocalWorker(null);
@@ -1896,11 +1982,19 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
                 ) : (
                   <div style={{ marginBottom: 7, fontSize: 9, color: "var(--amber)", textAlign: "center", lineHeight: 1.55 }}>
                     Hay una emisión SII sin resolver ({WORKER_STATUS_LABELS[localWorker?.status ?? ""] ?? "en proceso"}). No vuelvas a emitir: usa <strong>Recuperar emisión SII</strong> (a la izquierda) para rescatar el folio.
+                    {/* Lápida (pudo salir en el SII): la única salida además del folio es
+                        declarar, tras revisar el SII, que no salió. El server lo valida. */}
+                    {localWorker?.status === "result_needs_review" && localWorker.jobId && (
+                      <>
+                        {" "}Si revisaste el SII y no aparece,{" "}
+                        <button type="button" onClick={() => { void declararNoSalioUnica(); }} disabled={localWorkerLoading} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>Revisé el SII y no salió</button>.
+                      </>
+                    )}
                     {/* Salida para el estado fantasma: si el servidor YA liberó la
                         emisión (lock inexistente), quedarse aquí era un callejón sin
                         salida en la sesión. Con lock liberado + rescate a mano, cancelar
                         es razonable — con advertencia explícita de revisar el folio. */}
-                    {emissionLock?.ok === true && emissionLock.locked !== true && (
+                    {emissionLock?.ok === true && emissionLock.locked !== true && localWorker?.status !== "result_needs_review" && (
                       <>
                         {" "}Si la ventana del SII no mostró ningún folio, puedes{" "}
                         <button type="button" onClick={resetStuckSiiEmission} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 9, fontWeight: 800, textDecoration: "underline", padding: 0 }}>cancelarla</button>

@@ -21,6 +21,7 @@ import { fechaParaEmitir } from "@/lib/emission/fecha-intento";
 import { verificarJobColgado } from "./verificar-colgado";
 import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
+import { datosParaJob } from "@/lib/emission/datos-job";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
 export interface ItemLoteEmision extends ItemLote {
@@ -171,7 +172,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
     | { frenada: true; motivo: string }
     | { yaAMedias: true }
     | null;
-  const startJob = useCallback(async (propuestaId: string, tipoDte: number): Promise<StartJob> => {
+  const startJob = useCallback(async (full: ItemLoteEmision): Promise<StartJob> => {
     try {
       let res: Response | null = null;
       let json: Record<string, unknown> = {};
@@ -182,10 +183,14 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: "sii_local",
-            tipo_dte: tipoDte,
+            tipo_dte: full.tipoDte,
             origin: "emision_lote",
             expected_emisor_rut: empresaRut ?? null,
-            propuesta_id: propuestaId,
+            propuesta_id: full.propuestaId,
+            // El servidor manda en los datos (seguridad 2026-09-30): lo que la extensión
+            // va a teclear viaja para que el server lo compare con la propuesta guardada
+            // (409 DATOS_CAMBIARON si una pestaña vieja o un evento perdido lo desfasó).
+            datos: datosParaJob(full),
           }),
         });
         json = await res.json().catch(() => ({}));
@@ -253,7 +258,7 @@ export function useEmisionLote(args: { empresaId: string; empresaRut?: string | 
         // Fecha de ESTA boleta = la del momento de emitirla (no la del modal): un lote
         // que cruza las 00:00 no debe verificar con la fecha de ayer (doble folio).
         const fechaIntento = fechaParaEmitir(new Date());
-        const job = await startJob(full.propuestaId, full.tipoDte);
+        const job = await startJob(full);
         if (!job) return { estado: "fallida", motivo: "No se pudo iniciar (autorización, otra emisión en curso, o permiso)." };
         // Server en pausa: sin job, sin ventana, sin folio. El runner conserva este
         // ítem como pendiente y detiene el lote; el modal muestra el detalle.

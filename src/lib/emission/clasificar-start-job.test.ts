@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { clasificarStartJob } from "./clasificar-start-job";
 
+describe("clasificarStartJob — DATOS_CAMBIARON (seguridad 2026-09-30, punto 2)", () => {
+  it("409 DATOS_CAMBIARON → frena el lote (lo que falta queda guardado) con motivo honesto", () => {
+    const r = clasificarStartJob(409, { ok: false, error: "DATOS_CAMBIARON", campos: ["monto"] });
+    expect(r.tipo).toBe("frenada");
+    if (r.tipo === "frenada") expect(r.motivo).toContain("cambió");
+  });
+});
+
 describe("clasificarStartJob — el lote no revienta en cadena", () => {
   it("candado PROPIO (caso LC 23:43) → frenada con motivo honesto, nunca 'Equipo'", () => {
     const r = clasificarStartJob(409, { ok: false, error: "EMISION_BLOQUEADA", bloqueo: { is_mine: true, locked_until: "2026-09-28T02:52:07Z" } });

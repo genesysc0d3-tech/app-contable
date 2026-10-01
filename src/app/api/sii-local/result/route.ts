@@ -11,6 +11,7 @@ import type { Database, Json } from "@/lib/database.types";
 import { isR2Configured, uploadToR2 } from "@/lib/r2";
 import { requireEmisionJob } from "@/lib/emission/jobs";
 import { releaseCuentaEmissionLock } from "@/lib/emission/locks";
+import { declararNoSalioBoletaUnica, levantarLapidaBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { cleanRut } from "@/lib/sii/validation";
@@ -466,8 +467,13 @@ async function refDePropuesta(sb: ServiceDb, empresaId: string, propuestaId: str
   }
 }
 
-async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null) {
-  if (!propuestaId) return;
+async function liftRevisionTombstone(sb: ServiceDb, propuestaId: string | null, jobIdBoletaUnica?: string | null) {
+  // Boleta ÚNICA (sin propuesta, seguridad 2026-09-30): su lápida vive en el job. Si
+  // no se levanta al registrar el folio, el POST de jobs la seguiría viendo a medias.
+  if (!propuestaId) {
+    await levantarLapidaBoletaUnica(sb, jobIdBoletaUnica);
+    return;
+  }
   try {
     const ahoraIso = new Date().toISOString();
     await sb
@@ -594,6 +600,24 @@ function esCalceReportes(result: SiiLocalResultPayload["result"] | null | undefi
   return ev?.source === "reportes_calce_unico";
 }
 
+/**
+ * Boleta única: un folio que YA estaba registrado solo levanta la lápida de este job
+ * si esa boleta se registró PARA este job (track_id / proveedor_respuesta.job_id). Sin
+ * propuesta no hay otra forma de saber que no es el folio de otra boleta (cruce de
+ * /reportes) — y levantar la lápida por un folio ajeno abriría la re-emisión.
+ */
+async function jobSiLaBoletaEsSuya(sb: ServiceDb, boletaId: string, jobId: string | null): Promise<string | null> {
+  if (!jobId) return null;
+  try {
+    const { data } = await sb.from("boletas_emitidas").select("track_id, proveedor_respuesta").eq("id", boletaId).maybeSingle();
+    const pr = (data?.proveedor_respuesta ?? null) as { job_id?: unknown } | null;
+    const suya = (typeof data?.track_id === "string" && data.track_id.includes(jobId)) || pr?.job_id === jobId;
+    return suya ? jobId : null;
+  } catch {
+    return null;
+  }
+}
+
 async function backfillFolioSinJobVivo(
   sb: ServiceDb,
   args: {
@@ -645,7 +669,7 @@ async function backfillFolioSinJobVivo(
     if (existing.propuesta_id && args.propuestaId && existing.propuesta_id !== args.propuestaId) {
       return { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO" };
     }
-    await liftRevisionTombstone(sb, args.propuestaId);
+    await liftRevisionTombstone(sb, args.propuestaId, await jobSiLaBoletaEsSuya(sb, existing.id, args.jobId));
     return { ok: true, boletaId: existing.id, already: true };
   }
 
@@ -716,7 +740,7 @@ async function backfillFolioSinJobVivo(
       if (raced.propuesta_id && args.propuestaId && raced.propuesta_id !== args.propuestaId) {
         return { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO" };
       }
-      await liftRevisionTombstone(sb, args.propuestaId);
+      await liftRevisionTombstone(sb, args.propuestaId, await jobSiLaBoletaEsSuya(sb, raced.id, args.jobId));
       return { ok: true, boletaId: raced.id, already: true };
     }
     // Doble folio para la MISMA propuesta (choque con idx_boletas_propuesta_unica_
@@ -742,7 +766,7 @@ async function backfillFolioSinJobVivo(
     }
     return { ok: false, error: error?.message ?? "INSERT_FAILED" };
   }
-  await liftRevisionTombstone(sb, args.propuestaId);
+  await liftRevisionTombstone(sb, args.propuestaId, args.jobId);
   return { ok: true, boletaId: boleta.id, already: false };
 }
 
@@ -960,6 +984,39 @@ export async function POST(request: Request) {
     if (!jobDecl) return NextResponse.json({ ok: false, error: "JOB_NO_ENCONTRADO" }, { status: 404 });
     const accesoDecl = await accesoDeclaracion(sb, user.id, jobDecl);
     if (accesoDecl) return accesoDecl;
+    // BOLETA ÚNICA a medias (seguridad 2026-09-30, punto 1): sin propuesta, la lápida
+    // vive en el job y retiene el candado. Misma salida humana que el lote, con sus
+    // propios controles (boleta-unica-lapida.ts): lápida real, sin folio capturado,
+    // UPDATE re-filtrado por estado; suelta el candado.
+    if (!jobDecl.propuesta_id) {
+      const decl = await declararNoSalioBoletaUnica(sb, jobDecl);
+      if (!decl.ok) return NextResponse.json({ ok: false, error: decl.error, detalle: decl.detalle }, { status: decl.status });
+      await recordOpsEvent({
+        sb,
+        severity: "warn",
+        source: "sii-local",
+        eventName: "sii_local_no_salio_declarado_a_mano",
+        summary: "La persona declaró que la boleta única no salió en el SII (se puede volver a emitir)",
+        empresaId: jobDecl.empresa_id,
+        cuentaId: jobDecl.cuenta_id,
+        usuarioId: user.id,
+        resourceType: "emision_job",
+        resourceId: jobDecl.job_id,
+        metadata: { jobs_cerrados: 1, origen: "declaracion_humana", boleta_unica: true, lanzado_por_otra_persona: jobDecl.usuario_id !== user.id },
+      });
+      await recordCuentaAudit({
+        sb,
+        cuentaId: jobDecl.cuenta_id,
+        empresaId: jobDecl.empresa_id,
+        usuarioId: user.id,
+        accion: "emision_fallida",
+        recursoTipo: "emision_job",
+        recursoId: jobDecl.job_id,
+        resumen: "Declaró que la boleta única no salió en el SII tras revisarlo",
+        metadata: { origen: "declaracion_no_salio", boleta_unica: true },
+      });
+      return NextResponse.json({ ok: true, jobs_cerrados: 1 });
+    }
     if (!jobDecl.propuesta_id || esLapidaEfectiva(jobDecl) === null) {
       return NextResponse.json({ ok: false, error: "JOB_SIN_LAPIDA", detalle: "Este intento no está a medias." }, { status: 409 });
     }
