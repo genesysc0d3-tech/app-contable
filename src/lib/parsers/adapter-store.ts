@@ -72,6 +72,20 @@ export function estadoDeAdapter(row: { estado?: string | null } | null | undefin
   return row?.estado === "confirmado" ? "confirmado" : "provisorio";
 }
 
+/**
+ * Prod SIN la migración 20260930140000 (la fila no trae la columna `estado`):
+ * se emula su backfill — manual y plantilla massDTE = confirmados, el resto
+ * provisorio. Sin esto el mapa que la clienta confirmó en el popup (source
+ * manual) no contaba y CADA cartola del formato volvía a pedir "Revisa las
+ * columnas" (revisión adversarial 2026-09-30). Con la columna, no se toca.
+ */
+export function conEstadoLegado<T extends { source?: string | null; config?: unknown; estado?: string | null; confirmado_por?: string | null }>(row: T): T {
+  if ("estado" in row) return row;
+  if (row.source === "manual") return { ...row, estado: "confirmado", confirmado_por: "manual" };
+  if ((row.config as { plantilla?: unknown } | null)?.plantilla === true) return { ...row, estado: "confirmado", confirmado_por: "plantilla" };
+  return { ...row, estado: "provisorio", confirmado_por: null };
+}
+
 /** ¿Este sello es una PRUEBA que confirma el mapa? */
 export function selloEsPrueba(tipo: TipoVerificacion | null | undefined): tipo is "saldo" | "total_banco" | "cliente" {
   return tipo === "saldo" || tipo === "total_banco" || tipo === "cliente";
@@ -221,7 +235,7 @@ export async function getAdapterByFingerprint(
       .limit(20);
     if (error || !data?.length) return null;
     const elegido = selectAdapterForEmpresa(
-      data as unknown as (AdapterOwnership & AdapterRow)[],
+      (data as unknown as (AdapterOwnership & AdapterRow)[]).map(conEstadoLegado),
       empresaId,
     );
     return elegido ? (elegido as unknown as AdapterRow) : null;

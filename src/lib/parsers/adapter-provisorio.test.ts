@@ -10,6 +10,7 @@ type Llamada = { tabla: string; op: string; args: unknown[] };
 const llamadas: Llamada[] = [];
 let filaSelect: Record<string, unknown> | null = null;
 let errorInsert: { code: string; message: string } | null = null;
+let filasLista: Record<string, unknown>[] | null = null;
 
 function builder(tabla: string) {
   const b: Record<string, unknown> = {};
@@ -24,7 +25,7 @@ function builder(tabla: string) {
     return q;
   };
   b.maybeSingle = async () => ({ data: filaSelect, error: null });
-  b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(ok);
+  b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: filasLista, error: null }).then(ok);
   return b;
 }
 vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ from: (t: string) => builder(t) }) }));
@@ -33,6 +34,7 @@ beforeEach(() => {
   llamadas.length = 0;
   filaSelect = null;
   errorInsert = null;
+  filasLista = null;
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.test";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "k";
 });
@@ -96,5 +98,30 @@ describe("un provisorio no se comparte entre empresas", () => {
     expect(store.selectAdapterForEmpresa([global], "emp-B")).toBe(global);
     const propio = { ...base, creado_por_empresa_id: "emp-A", estado: "provisorio" };
     expect(store.selectAdapterForEmpresa([global, propio], "emp-A")).toBe(propio);
+  });
+});
+
+describe("prod SIN la migración 20260930140000 (revisión adversarial 2026-09-30)", () => {
+  // Sin la columna `estado` todo era provisorio: el mapa que la clienta confirmó
+  // en el popup (source manual) no contaba y CADA cartola del formato volvía a
+  // pedir "Revisa las columnas" (y escondía Editar/Aprobar). Mientras la columna
+  // falte, se emula el backfill de la migración: manual y plantilla = confirmados.
+  it("sin columna estado: manual → confirmado/manual, plantilla → confirmado/plantilla, el resto provisorio", () => {
+    const manual = store.conEstadoLegado({ source: "manual", config: {} } as never);
+    expect(manual.estado).toBe("confirmado");
+    expect(manual.confirmado_por).toBe("manual");
+    const plantilla = store.conEstadoLegado({ source: "named", config: { plantilla: true } } as never);
+    expect(plantilla.estado).toBe("confirmado");
+    expect(plantilla.confirmado_por).toBe("plantilla");
+    expect(store.conEstadoLegado({ source: "heuristic", config: {} } as never).estado).toBe("provisorio");
+  });
+  it("con la columna (aunque sea null o provisorio) no se toca", () => {
+    expect(store.conEstadoLegado({ source: "manual", config: {}, estado: "provisorio" } as never).estado).toBe("provisorio");
+    expect(store.conEstadoLegado({ source: "manual", config: {}, estado: null } as never).estado).toBeNull();
+  });
+  it("getAdapterByFingerprint lo aplica: el manual propio (fila sin columna estado) llega confirmado", async () => {
+    filasLista = [{ id: "m1", source: "manual", config: {}, confianza: 1, disabled_until: null, creado_por_empresa_id: "e1" }];
+    const r = await store.getAdapterByFingerprint("fp", "e1");
+    expect(r?.estado).toBe("confirmado");
   });
 });
