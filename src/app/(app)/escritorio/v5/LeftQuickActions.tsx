@@ -195,7 +195,7 @@ export function EmisionDirectaAction({ empresaTipo, empresaId, emisionProveedor 
       )}
 
       {open && (
-        <div className="ed-overlay">
+        <div className="ed-overlay" data-actualizacion-espera="">
           <div className="ed-panel">
             <EmitirDirectaView empresaTipo={empresaTipo ?? undefined} empresaId={empresaId} emisionProveedor={emisionProveedor} facturasProveedor={facturasProveedor} devMode={devMode} empresaRut={empresaRut} empresaRazonSocial={empresaRazonSocial} empresaGiro={empresaGiro} empresaDireccion={empresaDireccion} empresaComuna={empresaComuna} mesaFactura={esFacturas} onClose={closeWithSavedPulse} />
           </div>

@@ -184,6 +184,7 @@ export default function EmitirLoteModal({
   return createPortal(
     <div
       onClick={() => { if (puedeCerrar) { onClose(); if (terminal) onDone?.(); } }}
+      data-actualizacion-espera=""
       style={{ position: "fixed", inset: 0, zIndex: 220, display: "grid", placeItems: "center", padding: 20, background: "rgba(6,7,10,.62)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
     >
       <style>{`@keyframes gl-spin{to{transform:rotate(360deg)}}@keyframes gl-pop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}@keyframes gl-rise{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}`}</style>

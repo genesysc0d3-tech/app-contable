@@ -5,6 +5,7 @@ import GlowWrap from "./GlowWrap";
 import ActividadView, { type ActividadItem } from "./ActividadView";
 import SearchHistoryView from "./SearchHistoryView";
 import type { SearchItem } from "@/lib/tree-structure";
+import { usePiezaEstado } from "@/lib/actualizacion/hooks";
 
 export default function RightColumnView({
   defaultContent,
@@ -22,6 +23,8 @@ export default function RightColumnView({
   empresaLogoUrl?: string | null;
 }) {
   const [view, setView] = useState<"dashboard" | "actividad" | "rcv">("dashboard");
+  // Actualización invisible: la vista de la columna (mesa / actividad / RCV) se conserva.
+  usePiezaEstado<string>("derecha.vista", () => view, (v) => { if (v === "actividad" || v === "rcv" || v === "dashboard") setView(v); });
   const cardRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fullscreen, setFullscreen] = useState(false);

@@ -5,6 +5,7 @@ import { useToast } from "@/components/Toast";
 import { classifyFile, esPlantillaMassdte } from "@/lib/file-classifier";
 import type { FileCategory } from "@/lib/file-classifier";
 import { MAX_PROCESAR_UPLOAD_BYTES } from "@/lib/upload/process-upload-validation";
+import { useBloqueoActualizacion } from "@/lib/actualizacion/hooks";
 
 interface QueuedFile {
   id: string; file: File; category: FileCategory;
@@ -57,6 +58,8 @@ export default function DropzoneUpload({ onUploaded, mesa = "boleta" }: { onUplo
   const [ctxTexto, setCtxTexto] = useState("");
   const [ctxRecordar, setCtxRecordar] = useState(false);
   const { toast } = useToast();
+  // Actualización invisible: subiendo, o con archivos elegidos sin subir → no recargar.
+  useBloqueoActualizacion(uploading || queue.length > 0, "subida");
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);

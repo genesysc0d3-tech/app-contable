@@ -27,6 +27,7 @@ import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
 import { useMesaReload, pendingOpenDoc, ultimoDocAbierto } from "./mesa-reload";
 import type { MesaDateDependent } from "./mesa-data";
 import { terminadaDe } from "./cartola-filas";
+import { usePiezaEstado } from "@/lib/actualizacion/hooks";
 
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
 
@@ -57,6 +58,11 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
 }) {
   const reload = useMesaReload() ?? (() => {});
   const [selDocId, setSelDocId] = useState<string | null>(null);
+  // Actualización invisible: el documento abierto en el visor vuelve abierto tras la
+  // recarga (solo si sigue en la mesa; si no, se descarta en silencio).
+  usePiezaEstado<string | null>("check.doc", () => selDocId, (id) => {
+    if (typeof id === "string" && mesa.docsAgregados.some((d) => (d as { id: string }).id === id)) setSelDocId(id);
+  });
   const [viewImgDocId, setViewImgDocId] = useState<string | null>(null);
   const [mappingDocId, setMappingDocId] = useState<string | null>(null);
   const [editarCartolaId, setEditarCartolaId] = useState<string | null>(null);
@@ -342,7 +348,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         </div>
       )}
       {/* ── VISOR (permanente, altura fija) ── */}
-      <div style={{ flexShrink: 0, height: "clamp(172px, 24vh, 224px)", minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "thin", borderBottom: "1px solid var(--bg-muted)" }}>
+      <div data-restaurar-scroll="check.visor" style={{ flexShrink: 0, height: "clamp(172px, 24vh, 224px)", minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "thin", borderBottom: "1px solid var(--bg-muted)" }}>
         {/* Microatribución del team: quién hizo qué con este documento (solo con equipo). */}
         {/* key con prefijo: es HERMANO del visor (VeredictoCartola key={selDoc.id});
             la misma key en los dos daba "two children with the same key". */}
@@ -473,7 +479,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       {/* Popup "Editar" de cartola. Dos PANTALLAS del mismo popup: la grilla de
           edición y el mapeo de columnas (antes un modal aparte que quedaba detrás). */}
       {editarCartolaId && typeof document !== "undefined" && createPortal(
-        <div onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+        <div onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} data-actualizacion-espera="" style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "min(1040px, 96vw)", maxHeight: "86vh", display: "flex", flexDirection: "column", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", overflow: "hidden" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
               {editarScreen === "mapear" ? (

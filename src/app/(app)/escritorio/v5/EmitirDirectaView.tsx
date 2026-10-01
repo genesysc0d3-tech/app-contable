@@ -19,6 +19,7 @@ import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockS
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
 import { cierreBoletaUnicaPorStatus, declaradoParaFolio, DETALLE_BOLETA_A_MEDIAS, describirIntento, leerIntento, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
 import { declararNoSalio, registrarFolioAMano } from "@/lib/emission/recover-latest";
+import { useBloqueoActualizacion } from "@/lib/actualizacion/hooks";
 
 type TipoDte = 33 | 34 | 39 | 41;
 type FormaPago = "Efectivo" | "Pago Electrónico" | "Transferencia Electrónica" | "Cheque" | "Otro" | "Contado" | "Crédito" | "";
@@ -434,6 +435,9 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   // existe. SimpleAPI queda para el modo dev de la mesa boletas.
   const usesSimpleApi = !mesaFactura && facturasProveedor === "simpleapi" && (tipoDte === 33 || tipoDte === 34);
   const currentEmissionJobId = localWorker?.jobId ?? simpleApiJobId;
+  // Actualización invisible: boleta/factura única en vuelo (hasta registrar el
+  // resultado) o una lápida a medias abierta → la pestaña no se recarga sola.
+  useBloqueoActualizacion(emitiendo || currentEmissionJobId != null || facturaLote != null || lapidaBU != null, "emision_directa");
   const {
     status: emissionLock,
     activeLock: activeEmissionLock,
@@ -2240,6 +2244,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           rompe (y hay backdrop-filters anidados). Portal = fixed real al viewport. */}
       {confirmOpen && createPortal((
         <div onClick={() => { if (!emitBusy) setConfirmOpen(false); }}
+          data-actualizacion-espera=""
           style={{ position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
             style={{ width: "min(440px, 94vw)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", padding: "20px 22px" }}>
@@ -2280,6 +2285,7 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
           Portaleado a document.body por la misma razón que el pre-vuelo (backdrop-filter del overlay). */}
       {legalPrompt && createPortal((
         <div onClick={() => resolveLegalPrompt(false)}
+          data-actualizacion-espera=""
           style={{ position: "fixed", inset: 0, zIndex: 210, display: "grid", placeItems: "center", padding: 24, background: "rgba(0,0,0,.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
           <div onClick={(e) => e.stopPropagation()}
             style={{ width: "min(440px, 94vw)", borderRadius: 16, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 30px 90px rgba(0,0,0,.5)", padding: "20px 22px" }}>
