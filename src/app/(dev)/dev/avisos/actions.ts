@@ -16,7 +16,7 @@ const NO_OPERADOR = { error: "Solo operador Genesys" } as const;
 const COLUMNAS_AUDITORIA = "tipo, formato, titulo, cuerpo, desde, hasta, empresa_ids, mesa, version_min, activo";
 
 /**
- * id null = crear; id = editar ese aviso. Un popup urgente para TODAS las empresas
+ * id null = crear; id = editar ese aviso. Un aviso urgente para TODAS las empresas
  * exige `confirmadoParaTodas` (la pantalla lo pide con un confirm explícito).
  */
 export async function guardarAviso(
@@ -29,8 +29,9 @@ export async function guardarAviso(
   if (id !== null && !esUuid(id)) return { error: "Aviso inválido" };
   const v = validarAvisoInput(input);
   if (!v.ok) return { error: v.error };
-  if (v.fila.formato === "popup" && v.fila.empresa_ids === null && opciones.confirmadoParaTodas !== true) {
-    return { error: "Un popup urgente para TODAS las empresas necesita tu confirmación explícita" };
+  // N6: CUALQUIER urgente (popup, tarjeta o toast) para todas las empresas.
+  if (v.fila.tipo === "urgente" && v.fila.empresa_ids === null && opciones.confirmadoParaTodas !== true) {
+    return { error: "Un aviso urgente para TODAS las empresas necesita tu confirmación explícita" };
   }
 
   let avisoId: string;

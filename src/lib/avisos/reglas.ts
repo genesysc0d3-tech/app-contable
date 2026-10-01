@@ -122,13 +122,28 @@ export function esAvisoValido(x: unknown): x is AvisoApp {
 // ── Markdown mínimo: **negrita** y [texto](url). Nada de HTML. ──────────────────
 export type ParteMd = { t: "texto"; v: string } | { t: "negrita"; v: string } | { t: "link"; v: string; href: string };
 
+const BASE_RELATIVA = "https://massdte.invalid";
 /**
- * Solo https:// o rutas internas "/" + letra ("/empresa"). Nada de "//host",
- * "/\\host" (el navegador lo lee como "//host"), http plano ni javascript:.
+ * Por parseo de URL (revisión N5), no por regex sola:
+ *  - ruta interna: "/" + letra, sin "\\" ni "//", y que al resolverla siga en el
+ *    mismo origen;
+ *  - absoluta: SOLO https://, con host y sin credenciales (nada de "user@host").
+ * Fuera: http plano, javascript:, "//host", "/\\host", "https:host".
  */
 export function hrefSeguro(url: string): boolean {
-  if (/^\/[A-Za-z][^\s\\]*$/.test(url)) return true;
-  return /^https:\/\/[A-Za-z0-9][^\s\\]*$/.test(url);
+  if (typeof url !== "string" || /[\s\\]/.test(url)) return false;
+  try {
+    if (url.startsWith("/")) {
+      if (!/^\/[A-Za-z]/.test(url) || url.includes("//")) return false;
+      return new URL(url, BASE_RELATIVA).origin === BASE_RELATIVA;
+    }
+    if (!url.startsWith("https://")) return false;
+    const u = new URL(url);
+    const autoridad = url.slice("https://".length).split(/[/?#]/)[0];
+    return u.protocol === "https:" && !!u.hostname && !u.username && !u.password && !autoridad.includes("@");
+  } catch {
+    return false;
+  }
 }
 
 const TOKEN_RE = /\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\(([^)\s]+)\)/g;

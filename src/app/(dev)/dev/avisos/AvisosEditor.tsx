@@ -125,10 +125,10 @@ export function AvisosEditor({
 
   async function guardar() {
     if (estado === "loading" || !validacion.ok) return;
-    // Un popup urgente a TODAS las empresas tapa la pantalla de todas las clientas:
-    // confirmación explícita (el server también la exige).
-    const paraTodas = validacion.fila.formato === "popup" && validacion.fila.empresa_ids === null;
-    if (paraTodas && !window.confirm(`Vas a mostrar un POPUP URGENTE a TODAS las empresas:\n\n«${validacion.fila.titulo}»\n\n¿Publicar?`)) return;
+    // Un aviso URGENTE a TODAS las empresas (cualquier formato) le llega a todas las
+    // clientas: confirmación explícita (el server también la exige).
+    const paraTodas = validacion.fila.tipo === "urgente" && validacion.fila.empresa_ids === null;
+    if (paraTodas && !window.confirm(`Vas a mostrar un AVISO URGENTE (${validacion.fila.formato}) a TODAS las empresas:\n\n«${validacion.fila.titulo}»\n\n¿Publicar?`)) return;
     setEstado("loading");
     setMensaje(null);
     const r = await guardarAviso(editando, input, { confirmadoParaTodas: paraTodas });
@@ -234,7 +234,7 @@ export function AvisosEditor({
               background: form.formato === "popup" ? "rgba(0,0,0,.5)" : "var(--background, #18181B)",
               display: "flex",
               alignItems: form.formato === "popup" ? "center" : "flex-end",
-              justifyContent: form.formato === "tarjeta" ? "flex-end" : "center",
+              justifyContent: form.formato === "tarjeta" ? "flex-end" : form.formato === "toast" ? "flex-start" : "center",
               padding: 16,
             }}
           >

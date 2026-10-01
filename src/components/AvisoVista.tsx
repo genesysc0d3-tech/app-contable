@@ -5,8 +5,8 @@
 //
 // Diseño NATIVO de massDTE (fundador 2026-10-01: "parece card de IA"), copiando lo
 // que ya existe:
-//  - toast  = el de src/components/Toast.tsx (abajo al centro, rounded-xl, blanco /
-//             #1c1c1e, ícono Phosphor 18 px + texto 14 px medium);
+//  - toast  = el de src/components/Toast.tsx (rounded-xl, blanco / #1c1c1e, ícono
+//             Phosphor 18 px + texto 14 px medium), abajo a la izquierda;
 //  - tarjeta = el panel de la columna izquierda (var(--surface), borde 1 px, radio 16,
 //             cuadrito de ícono con tinte del acento) y "Entendido" como link discreto
 //             (estilo "Eliminar cartola" del visor);
@@ -146,8 +146,10 @@ const CSS = `
 .av-cuerpo strong{color:var(--av-text);font-weight:700}
 .av-cuerpo a{color:var(--av-acento);font-weight:600;text-decoration:underline;text-underline-offset:2px}
 
-/* toast = el de Toast.tsx. z-index 90: BAJO los modales de la app (z-100+) (M3). */
-.av-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:90;display:flex;align-items:flex-start;gap:8px;width:max-content;max-width:min(440px,calc(100vw - 32px));padding:10px 10px 10px 16px;border-radius:12px;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12);animation:avSube .25s ease both}
+/* toast = el de Toast.tsx, pero abajo a la IZQUIERDA (N3): no se superpone a la zona
+   de toasts de la app (abajo al centro) ni a los botones de abajo del visor. z-index
+   90: BAJO los modales de la app (z-100+) (M3). */
+.av-toast{position:fixed;left:20px;bottom:20px;z-index:90;display:flex;align-items:flex-start;gap:8px;width:max-content;max-width:min(440px,calc(100vw - 32px));padding:10px 10px 10px 16px;border-radius:12px;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12);animation:avSube .25s ease both}
 .dark .av-toast{background:#1c1c1e}
 .av-toast-ico{display:flex;padding-top:1px;color:var(--av-acento);flex-shrink:0}
 .av-toast[data-tipo="mantencion"] .av-toast-ico{color:var(--av-ambar)}
@@ -182,10 +184,10 @@ const CSS = `
 .av-cta:focus-visible,.av-link:focus-visible,.av-x:focus-visible{outline:2px solid var(--av-acento);outline-offset:2px}
 
 /* vista previa en /dev: misma pieza, sin posición fija */
-.av-previa .av-toast,.av-previa .av-tarjeta{position:relative;left:auto;right:auto;bottom:auto;transform:none;z-index:auto;animation:none}
+.av-previa .av-toast,.av-previa .av-tarjeta{position:relative;left:auto;right:auto;bottom:auto;z-index:auto;animation:none}
 
 @keyframes avSube{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
 @keyframes avFundido{from{opacity:0}to{opacity:1}}
-@media (max-width:520px){.av-tarjeta{right:12px;left:12px;bottom:12px;width:auto}}
+@media (max-width:520px){.av-tarjeta,.av-toast{right:12px;left:12px;bottom:12px;width:auto;max-width:none}}
 @media (prefers-reduced-motion:reduce){.av-toast,.av-tarjeta,.av-velo{animation:none}}
 `;

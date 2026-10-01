@@ -7,13 +7,19 @@
 // los refrescos de la mesa no la repiten. Un urgente nuevo llega en la siguiente
 // respuesta normal pasado ese minuto.
 //
-// FAIL-SAFE: si la tabla no existe (migración sin aplicar) o la consulta falla,
-// devuelve [] — la app no muestra nada y sigue igual. Una tabla ausente se
-// recuerda 5 min para no pagar una consulta fallida en cada carga.
+// UN SOLO CAMINO (revisión N2): layout y /api/mesa llaman a esto con service role
+// y la audiencia por empresa se decide SIEMPRE acá con avisoParaEmpresa (la empresa
+// activa que ya validó quien llama). El RLS + grant por columnas de la migración
+// quedan como defensa para lecturas directas del navegador por PostgREST.
 //
-// Sin "server-only" a propósito (se testea con un cliente falso); solo lo usan
-// el layout y rutas del server, con el cliente de la SESIÓN (el RLS manda).
-import type { SupabaseClient } from "@supabase/supabase-js";
+// FAIL-SAFE (N1): si la consulta falla o pasa el tope, devuelve `undefined` ("no
+// sé"), NO `[]`: la pantalla deja su cola como está (un [] le sacaría el aviso que
+// está mostrando). Los errores no se cachean, salvo la tabla ausente (migración sin
+// aplicar), que se recuerda 5 min para no pagar una consulta fallida en cada carga.
+//
+// Sin "server-only" a propósito (se testea con un cliente falso); solo lo usan el
+// layout y rutas del server.
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { avisoParaEmpresa, avisoVigente, esAvisoValido, type AvisoApp } from "./reglas";
 
@@ -26,14 +32,11 @@ const MAX_AVISOS = 20;
 // Tabla o relación inexistente (PostgREST / Postgres).
 const CODIGOS_AUSENTE = new Set(["PGRST205", "PGRST200", "42P01"]);
 
-// Columnas MÍNIMAS (B1): lo que la clienta puede leer por RLS + grant de columnas.
-// Con el cliente de la SESIÓN no se pide empresa_ids (no tiene el privilegio; el RLS ya
-// filtra su empresa). Con service role (cargarMesa) se pide para filtrar acá y se
-// QUITA antes de responder: al navegador nunca viajan UUIDs de otras empresas.
-const COLUMNAS_SESION = "id, tipo, titulo, cuerpo, formato, desde, hasta, mesa, version_min, created_at, avisos_vistos(user_id)";
-const COLUMNAS_SERVICIO = "id, tipo, titulo, cuerpo, formato, desde, hasta, mesa, version_min, created_at, empresa_ids, avisos_vistos(user_id)";
+// empresa_ids se pide SOLO para filtrar acá y se QUITA antes de responder: al
+// navegador nunca viajan UUIDs de otras empresas (B1). Nunca creado_por.
+const COLUMNAS = "id, tipo, titulo, cuerpo, formato, desde, hasta, mesa, version_min, created_at, empresa_ids, avisos_vistos(user_id)";
 
-/** Tope de la consulta (M5): si tarda más, la mesa/página sigue sin avisos. */
+/** Tope de la consulta (M5): si tarda más, la mesa/página sigue sin tocar los avisos. */
 export const TOPE_CONSULTA_MS = 1_500;
 const TIMEOUT = Symbol("timeout");
 
@@ -44,35 +47,40 @@ function cache() {
   return G.__massdteAvisosCache;
 }
 
+/** Service client para el layout (cargarMesa ya trae el suyo). null sin config → sin avisos. */
+export function clienteServicioAvisos(): Sb | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createServiceClient<Database>(url, key);
+}
+
 type FilaServer = AvisoApp & { empresa_ids?: string[] | null; avisos_vistos?: unknown[] | null };
 
+/**
+ * Avisos vigentes, de la audiencia de esta empresa, que este usuario no ha cerrado.
+ * `[]` = no hay; `undefined` = no se pudo saber (la pantalla no toca su cola).
+ */
 export async function avisosPendientes(
-  sb: Sb,
-  args: {
-    userId: string;
-    empresaId: string | null;
-    /** "sesion" (RLS, por defecto) o "servicio" (service role: filtra empresa explícito). */
-    cliente?: "sesion" | "servicio";
-    now?: Date;
-    timeoutMs?: number;
-  },
-): Promise<AvisoApp[]> {
+  sb: Sb | null,
+  args: { userId: string; empresaId: string | null; now?: Date; timeoutMs?: number },
+): Promise<AvisoApp[] | undefined> {
   const now = args.now ?? new Date();
   const t = now.getTime();
   if (!args.userId || !args.empresaId) return [];
+  if (!sb) return undefined;
   const c = cache();
-  if (t < c.ausenteHasta) return [];
+  if (t < c.ausenteHasta) return undefined;
   const clave = `${args.userId}|${args.empresaId}`;
   const hit = c.porClave.get(clave);
   if (hit && t - hit.at < CACHE_AVISOS_MS) return hit.avisos.filter((a) => avisoVigente(a, t));
 
-  const servicio = args.cliente === "servicio";
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const nowIso = now.toISOString();
     const consulta = sb
       .from("avisos_app")
-      .select(servicio ? COLUMNAS_SERVICIO : COLUMNAS_SESION)
+      .select(COLUMNAS)
       .eq("activo", true)
       .lte("desde", nowIso)
       .gt("hasta", nowIso)
@@ -81,26 +89,25 @@ export async function avisosPendientes(
       .limit(MAX_AVISOS);
     const tope = new Promise<typeof TIMEOUT>((ok) => { timer = setTimeout(() => ok(TIMEOUT), args.timeoutMs ?? TOPE_CONSULTA_MS); });
     const res = await Promise.race([Promise.resolve(consulta), tope]);
-    // Tardó: [] SIN cachear (la próxima carga reintenta).
-    if (res === TIMEOUT) return [];
+    if (res === TIMEOUT) return undefined;
     const { data, error } = res;
-    const avisos: AvisoApp[] = [];
     if (error) {
       if (CODIGOS_AUSENTE.has(String((error as { code?: string }).code ?? ""))) c.ausenteHasta = t + TABLA_AUSENTE_MS;
-    } else {
-      for (const fila of (data ?? []) as unknown as FilaServer[]) {
-        const { avisos_vistos: vistos, empresa_ids: empresas, ...a } = fila;
-        if (Array.isArray(vistos) && vistos.length > 0) continue; // ya lo cerró
-        if (!esAvisoValido(a)) continue;
-        if (servicio && !avisoParaEmpresa({ empresa_ids: empresas ?? null }, args.empresaId)) continue; // espejo del RLS
-        avisos.push(a);
-      }
+      return undefined;
+    }
+    const avisos: AvisoApp[] = [];
+    for (const fila of (data ?? []) as unknown as FilaServer[]) {
+      const { avisos_vistos: vistos, empresa_ids: empresas, ...a } = fila;
+      if (Array.isArray(vistos) && vistos.length > 0) continue; // ya lo cerró
+      if (!esAvisoValido(a)) continue;
+      if (!avisoParaEmpresa({ empresa_ids: empresas ?? null }, args.empresaId)) continue; // LA regla de audiencia
+      avisos.push(a);
     }
     if (c.porClave.size >= MAX_ENTRADAS) c.porClave.clear();
     c.porClave.set(clave, { at: t, avisos });
     return avisos;
   } catch {
-    return [];
+    return undefined;
   } finally {
     if (timer) clearTimeout(timer);
   }

@@ -3,18 +3,18 @@ import DevSupportBanner, { type BannerIntervencion } from "./escritorio/v5/DevSu
 import ActualizadorInvisible from "@/components/ActualizadorInvisible";
 import { ESTILO_RESTAURANDO, SCRIPT_ANTES_DE_PINTAR } from "@/lib/actualizacion/estado-guardado";
 import { Suspense } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
 import AvisosApp from "@/components/AvisosApp";
-import { avisosPendientes } from "@/lib/avisos/servidor";
+import { avisosPendientes, clienteServicioAvisos } from "@/lib/avisos/servidor";
 
 /**
- * Avisos y novedades: viajan en ESTE render (que la app ya hace), con el cliente de
- * la sesión (RLS: vigentes y de su empresa) y caché corta. En Suspense: la consulta
- * no atrasa la página. Fail-safe: sin tabla, [] y no se pinta nada.
+ * Avisos y novedades: viajan en ESTE render (que la app ya hace), por el MISMO camino
+ * que /api/mesa (service role + la regla de empresa de servidor.ts, con el usuario y
+ * la empresa activa que getAppEmpresaContext ya validó), con caché corta. En
+ * Suspense: la consulta no atrasa la página. Si falla o tarda: undefined → la
+ * pantalla deja su cola como está (N1).
  */
-async function AvisosDeLaSesion({ supabase, userId, empresaId }: { supabase: SupabaseClient<Database>; userId: string; empresaId: string }) {
-  const avisos = await avisosPendientes(supabase, { userId, empresaId }).catch(() => []);
+async function AvisosDeLaSesion({ userId, empresaId }: { userId: string; empresaId: string }) {
+  const avisos = await avisosPendientes(clienteServicioAvisos(), { userId, empresaId });
   return <AvisosApp key={userId} iniciales={avisos} userId={userId} />;
 }
 
@@ -23,7 +23,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { empresa, supportMode, supabase, usuario, empresaId } = await getAppEmpresaContext();
+  const { empresa, supportMode, usuario, empresaId } = await getAppEmpresaContext();
 
   // Estado de la intervención autorizada por el cliente (solo en modo soporte;
   // el CLIENTE ve lo suyo en Empresa → Acceso de soporte, no acá).
@@ -58,7 +58,7 @@ export default async function AppLayout({
       {/* En modo soporte el operador no consume (ni marca) avisos de la clienta. */}
       {supportMode ? null : (
         <Suspense fallback={null}>
-          <AvisosDeLaSesion supabase={supabase} userId={usuario.id} empresaId={empresaId} />
+          <AvisosDeLaSesion userId={usuario.id} empresaId={empresaId} />
         </Suspense>
       )}
     </>

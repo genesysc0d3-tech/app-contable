@@ -40,9 +40,10 @@ async function marcarVistoEnSupabase(avisoId: string, userId: string): Promise<v
   await supabase.from("avisos_vistos").upsert({ aviso_id: avisoId, user_id: userId }, { onConflict: "aviso_id,user_id", ignoreDuplicates: true });
 }
 
-export default function AvisosApp({ iniciales, userId }: { iniciales: AvisoApp[]; userId: string }) {
+/** iniciales undefined = el server no pudo saber (falló o tardó): la cola no se toca. */
+export default function AvisosApp({ iniciales, userId }: { iniciales: AvisoApp[] | undefined; userId: string }) {
   const [actual, setActual] = useState<AvisoApp | null>(null);
-  const recibirRef = useRef<(avisos: AvisoApp[]) => void>(() => {});
+  const recibirRef = useRef<(avisos: AvisoApp[] | undefined) => void>(() => {});
   const cerrarRef = useRef<(id: string) => void>(() => {});
   const inicialesRef = useRef(iniciales);
 

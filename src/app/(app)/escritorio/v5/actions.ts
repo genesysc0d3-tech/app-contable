@@ -951,10 +951,9 @@ export async function cargarMesa(params: MesaParams): Promise<CargarMesaResult> 
         razon_social: empresa.razon_social ?? "",
         tipo_contribuyente: empresa.tipo_contribuyente,
       }, params),
-      // En paralelo y fail-safe (nunca tumba la mesa). En modo soporte el operador
-      // no consume avisos de la clienta. ctx.sb es service role: la consulta filtra
-      // explícito por vigencia, empresa y vistos de ESTE usuario.
-      ctx.supportMode ? Promise.resolve([] as AvisoApp[]) : avisosPendientes(ctx.sb, { userId: ctx.userId, empresaId: ctx.empresaId, cliente: "servicio" }),
+      // En paralelo y fail-safe (nunca tumba la mesa; undefined = no se supo). En modo
+      // soporte el operador no consume avisos de la clienta. Mismo camino que el layout.
+      ctx.supportMode ? Promise.resolve([] as AvisoApp[]) : avisosPendientes(ctx.sb, { userId: ctx.userId, empresaId: ctx.empresaId }),
     ]);
     return { ok: true, mesa, avisos };
   } catch (error) {
