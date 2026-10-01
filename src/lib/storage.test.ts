@@ -42,3 +42,27 @@ describe("defaultStorageProvider", () => {
     }
   });
 });
+
+describe("esPathDeEmpresa (auditoría 2026-10-01: /api/archivo no sirve archivos ajenos)", () => {
+  it("acepta los formatos reales de subida (R2, Supabase, PDFs del SII)", async () => {
+    const { esPathDeEmpresa } = await import("./storage");
+    expect(esPathDeEmpresa(buildStorageKey("emp1", "documento", "cartola.xlsx"), "emp1")).toBe(true);
+    expect(esPathDeEmpresa("emp1/doc-uuid/cartola..final.xlsx", "emp1")).toBe(true);
+    expect(esPathDeEmpresa("emp1/boletas-sii-local/39-123.pdf", "emp1")).toBe(true);
+    expect(esPathDeEmpresa("emp1/simpleapi-dte/33-9.pdf", "emp1")).toBe(true);
+  });
+  it("rechaza el path de otra empresa, escapes y marcadores sin archivo", async () => {
+    const { esPathDeEmpresa } = await import("./storage");
+    expect(esPathDeEmpresa("emp2/documento/2026/x__a.pdf", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("emp1/../emp2/doc/a.pdf", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("emp1/./a.pdf", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("emp1\\..\\emp2/a.pdf", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("emp1", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("emp10/a.pdf", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("memoria", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("boleta-lote://abc", "emp1")).toBe(false);
+    expect(esPathDeEmpresa("sii-local-pdf-pendiente/emp1/39-1", "emp1")).toBe(false);
+    expect(esPathDeEmpresa(null, "emp1")).toBe(false);
+    expect(esPathDeEmpresa("emp1/a.pdf", "")).toBe(false);
+  });
+});

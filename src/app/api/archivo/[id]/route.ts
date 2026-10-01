@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireSesionSegura } from "@/lib/api/sesion-segura";
-import { getFileR2 } from "@/lib/storage";
+import { esPathDeEmpresa, getFileR2 } from "@/lib/storage";
 
 // Ruta única de SERVIDO de archivos (S0c). Resuelve el provider del documento
 // (r2 | supabase) y devuelve los bytes — provider-agnóstica para el cliente.
@@ -19,6 +19,10 @@ function mimeFor(name: string): string {
   const ext = (name.split(".").pop() ?? "").toLowerCase();
   return EXT_MIME[ext] ?? "application/octet-stream";
 }
+// El `mime` del álbum viene de la fila (editable por el usuario): solo se respeta
+// si es uno de los tipos que esta ruta sirve. Un "text/html" ahí convertía un
+// archivo propio en una página ejecutándose en nuestro origen.
+const MIMES_SERVIBLES = new Set(Object.values(EXT_MIME));
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Fuera del matcher del proxy (un 307 a login rompería el <img>): la sesión,
@@ -37,22 +41,32 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (error || !doc) return new NextResponse("No encontrado", { status: 404 });
 
   const row = doc as unknown as {
-    storage_path: string | null; nombre_archivo: string | null; storage_provider?: string;
+    empresa_id: string; storage_path: string | null; nombre_archivo: string | null; storage_provider?: string;
     album_imagenes?: Array<{ path?: string; mime?: string; name?: string }> | null;
   };
 
   // ?i = índice de imagen del álbum (galería del visor/editor). Sin i → archivo principal.
-  // Por ÍNDICE (nunca ruta cruda): resuelve contra el album_imagenes del propio doc ya
-  // autorizado por RLS → sin superficie de path traversal / cross-tenant.
+  // Por ÍNDICE (nunca ruta cruda del query string): resuelve contra el album_imagenes
+  // del propio doc ya autorizado por RLS; el path que sale de ahí igual pasa por el
+  // candado de prefijo de más abajo (la fila es editable por el usuario).
   let storagePath = row.storage_path;
   let contentType = mimeFor(row.nombre_archivo ?? row.storage_path ?? "");
   const iRaw = new URL(_req.url).searchParams.get("i");
   if (iRaw !== null && Array.isArray(row.album_imagenes)) {
     const idx = Number(iRaw);
     const img = Number.isInteger(idx) && idx >= 0 ? row.album_imagenes[idx] : undefined;
-    if (img?.path) { storagePath = img.path; contentType = img.mime ?? mimeFor(img.name ?? img.path); }
+    if (img?.path) {
+      storagePath = img.path;
+      contentType = img.mime && MIMES_SERVIBLES.has(img.mime) ? img.mime : mimeFor(img.name ?? img.path);
+    }
   }
   if (!storagePath) return new NextResponse("No encontrado", { status: 404 });
+  // RLS autoriza la FILA, no el path que la fila dice: storage_path, storage_provider
+  // y album_imagenes los puede escribir el usuario por PostgREST, y acá se bajan con
+  // service role (que ve todo el bucket). Sin este candado bastaba apuntar la fila
+  // propia al path de otra empresa para llevarse su archivo (auditoría 2026-10-01).
+  // Mismo 404 que "no existe": no confirmar qué paths hay.
+  if (!esPathDeEmpresa(storagePath, row.empresa_id)) return new NextResponse("No encontrado", { status: 404 });
   const provider = row.storage_provider === "r2" ? "r2" : "supabase";
 
   let body: Buffer | Blob;

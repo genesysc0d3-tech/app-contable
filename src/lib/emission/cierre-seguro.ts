@@ -8,12 +8,25 @@
 // como lápida `revision_pendiente` (a medias: se verifica antes de re-emitir).
 // El lote nunca pide `cancelled` (usa `failed` para lo pre-emit seguro).
 
+//
+// Boleta ÚNICA (auditoría oct-2026, hallazgo 2): sin propuesta, `cancelled` sigue
+// siendo libre SOLO si el job nunca llegó a apretar EMITIR. Si su último status es
+// post-clic (posibleClicBoletaUnica: "submitting", "capturing_result"…), cancelarlo
+// soltaba el candado y la empresa podía emitir otra → doble boleta. Se sella lápida.
+
 import { esLapidaEfectiva, type JobParaLapida } from "./lapida";
+import { posibleClicBoletaUnica } from "./boleta-unica-lapida";
 
 export type EstadoCierre ="failed" | "cancelled" | "revision_pendiente";
 
-export function estadoCierreSeguro(pedido: EstadoCierre, job: { propuesta_id: string | null }): EstadoCierre {
+export function estadoCierreSeguro(
+  pedido: EstadoCierre,
+  job: { propuesta_id: string | null; estado_visible?: string | null; created_at?: string | null },
+): EstadoCierre {
   if (pedido === "cancelled" && job.propuesta_id) return "revision_pendiente";
+  if (pedido === "cancelled" && job.created_at && posibleClicBoletaUnica({ propuesta_id: job.propuesta_id, created_at: job.created_at, estado_visible: job.estado_visible })) {
+    return "revision_pendiente";
+  }
   return pedido;
 }
 

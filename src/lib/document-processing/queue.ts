@@ -163,7 +163,8 @@ export async function enqueueDocumentProcessingJob(sb: Sb, args: EnqueueArgs) {
   return data;
 }
 
-async function recoverStaleJobs(sb: Sb, now: Date, lockOwner: string) {
+/** Exportada para tests (compare-and-set contra jobs cancelados). */
+export async function recoverStaleJobs(sb: Sb, now: Date, lockOwner: string) {
   const staleBefore = new Date(now.getTime() - STALE_RUNNING_MS).toISOString();
   const { data: staleJobs, error } = await sb
     .from("document_processing_jobs")
@@ -176,6 +177,27 @@ async function recoverStaleJobs(sb: Sb, now: Date, lockOwner: string) {
   for (const job of staleJobs ?? []) {
     const attempts = job.attempts + 1;
     const retryable = attempts < job.max_attempts;
+    // Compare-and-set (auditoría 2026-10-01): solo si SIGUE 'running'. Entre el
+    // SELECT de arriba y este UPDATE el usuario pudo cancelarlo (o el worker
+    // terminarlo): sin la condición, un job 'cancelled' revivía como 'retryable'
+    // y el worker lo volvía a tomar.
+    const { data: recuperado, error: casError } = await sb
+      .from("document_processing_jobs")
+      .update({
+        status: retryable ? "retryable" : "failed",
+        attempts,
+        last_error: "Job running quedo atascado y fue recuperado por watchdog",
+        locked_at: null,
+        locked_by: null,
+        next_run_at: retryable ? nextRetryAt(attempts, now) : now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq("id", job.id)
+      .eq("status", "running")
+      .select("id")
+      .maybeSingle();
+    // Nadie tocado (o error): el job ya no es nuestro → el documento tampoco.
+    if (casError || !recuperado) continue;
     // Incidente 2026-09-23: el vigilante daba el job por fallido pero NO tocaba
     // el documento → la UI mostraba "procesando" para siempre (una cartola de
     // MH Solutions quedó así 16 horas). Ahora el documento queda en error con
@@ -196,18 +218,6 @@ async function recoverStaleJobs(sb: Sb, now: Date, lockOwner: string) {
         })
         .eq("id", job.documento_id);
     }
-    await sb
-      .from("document_processing_jobs")
-      .update({
-        status: retryable ? "retryable" : "failed",
-        attempts,
-        last_error: "Job running quedo atascado y fue recuperado por watchdog",
-        locked_at: null,
-        locked_by: null,
-        next_run_at: retryable ? nextRetryAt(attempts, now) : now.toISOString(),
-        updated_at: now.toISOString(),
-      })
-      .eq("id", job.id);
 
     await recordOpsEvent({
       sb,
@@ -471,7 +481,8 @@ async function markJobYielded(sb: Sb, job: DocumentProcessingJob, yieldInfo: Pro
   if (error) throw new Error(`JOB_YIELD_UPDATE_FAILED:${error.message}`);
 }
 
-async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, error: unknown, now = new Date()) {
+/** Exportada para tests (compare-and-set contra jobs cancelados). */
+export async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, error: unknown, now = new Date()) {
   const attempts = job.attempts + 1;
   const retryable = attempts < job.max_attempts;
   const status: DocumentJobStatus = retryable ? "retryable" : "failed";
@@ -479,6 +490,31 @@ async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, erro
 
   // El checkpoint NO se toca acá: vive en document_processing_jobs.checkpoint,
   // así un error transitorio (red, upstream) no obliga a repartir de cero.
+
+  // PRIMERO el job, con compare-and-set (auditoría 2026-10-01): solo si SIGUE
+  // 'running' (mismo patrón que completarJob). Antes el UPDATE no miraba el estado
+  // y dejaba el documento en "procesando": un job que el usuario CANCELÓ en vuelo
+  // revivía como 'retryable' y el worker lo volvía a procesar.
+  const { data: marcado, error: updateError } = await sb
+    .from("document_processing_jobs")
+    .update({
+      status,
+      attempts,
+      last_error: message,
+      locked_at: null,
+      locked_by: null,
+      next_run_at: retryable ? nextRetryAt(attempts, now) : now.toISOString(),
+      completed_at: retryable ? null : now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq("id", job.id)
+    .eq("status", "running")
+    .select("id")
+    .maybeSingle();
+  if (updateError) throw new Error(`JOB_FAILURE_UPDATE_FAILED:${updateError.message}`);
+  // Ninguna fila: el job ya no estaba 'running' (cancelado/recuperado). El documento
+  // queda como lo dejó quien lo cambió ("Cancelado por el usuario"): no se revive.
+  if (!marcado) return;
 
   await sb
     .from("documentos_subidos")
@@ -493,21 +529,6 @@ async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJob, erro
       }),
     })
     .eq("id", job.documento_id);
-
-  const { error: updateError } = await sb
-    .from("document_processing_jobs")
-    .update({
-      status,
-      attempts,
-      last_error: message,
-      locked_at: null,
-      locked_by: null,
-      next_run_at: retryable ? nextRetryAt(attempts, now) : now.toISOString(),
-      completed_at: retryable ? null : now.toISOString(),
-      updated_at: now.toISOString(),
-    })
-    .eq("id", job.id);
-  if (updateError) throw new Error(`JOB_FAILURE_UPDATE_FAILED:${updateError.message}`);
 
   await recordOpsError({
     sb,

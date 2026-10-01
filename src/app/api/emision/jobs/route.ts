@@ -842,7 +842,9 @@ export async function DELETE(request: Request) {
 
   const { data: job, error } = await service.service
     .from("emision_jobs")
-    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, provider, propuesta_id, created_at, expires_at")
+    // estado_visible: último status de la extensión (latido) → ¿alcanzó a apretar
+    // EMITIR? Decide si un `cancelled` de boleta única se sella lápida (cierre-seguro.ts).
+    .select("job_id, cuenta_id, empresa_id, usuario_id, estado, estado_visible, provider, propuesta_id, created_at, expires_at")
     .eq("job_id", jobId)
     .maybeSingle();
   if (error) {
@@ -921,6 +923,15 @@ export async function DELETE(request: Request) {
     } catch {
       // best-effort: la caja negra no debe romper el cierre del job
     }
+  }
+  // Boleta única sellada a medias por este cierre (un `cancelled` con posible clic):
+  // la vista muestra su lápida con QUÉ boleta buscar en el SII. `*` no rompe sin la migración.
+  if (estado === "revision_pendiente" && !job.propuesta_id) {
+    const { data: full } = await service.service.from("emision_jobs").select("*").eq("job_id", job.job_id).maybeSingle();
+    return NextResponse.json({
+      ok: true, estado,
+      intento: leerIntento((full as { intento?: unknown } | null)?.intento), creada_at: job.created_at,
+    });
   }
   return NextResponse.json({ ok: true, estado });
 }

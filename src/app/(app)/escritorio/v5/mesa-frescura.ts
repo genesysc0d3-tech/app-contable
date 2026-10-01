@@ -53,6 +53,32 @@ export function crearRecargador<P, R>(opts: {
   };
 }
 
+// ── Carga puntual que no pisa una navegación posterior ─────────────────────────
+
+/**
+ * Carga y aplica SOLO si, al volver la respuesta, la clave `vigente()` sigue siendo
+ * la que era al pedir. Bug fundador 2026-10-01 ("me voy a otra fecha y a unos
+ * minutos me manda a hoy"): la carga post-subida y la navegación del calendario
+ * aplicaban su respuesta sin mirar si el usuario se había movido entre medio → una
+ * respuesta lenta/vieja le cambiaba la mesa (y la fecha) por debajo.
+ * `guardar` corre SIEMPRE con una respuesta buena (p. ej. sembrar la caché: el dato
+ * sirve aunque ya no se muestre). Devuelve true si aplicó.
+ */
+export async function cargarSiSigueVigente<R>(args: {
+  vigente: () => string;
+  cargar: () => Promise<R | null>;
+  aplicar: (r: R) => void;
+  guardar?: (r: R) => void;
+}): Promise<boolean> {
+  const clave = args.vigente();
+  const r = await args.cargar();
+  if (r === null) return false;
+  args.guardar?.(r);
+  if (args.vigente() !== clave) return false;
+  args.aplicar(r);
+  return true;
+}
+
 // ── Espaciador: coalesce ráfagas (debounce) y separa recargas (intervalo mínimo) ──
 
 export interface Timers {

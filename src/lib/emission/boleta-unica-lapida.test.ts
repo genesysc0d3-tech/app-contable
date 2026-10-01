@@ -28,7 +28,7 @@ function fakeSb(resp: (l: Llamada) => Resp) {
       q.select = () => q;
       q.update = (v: unknown) => { l.op = "update"; l.valores = v; return q; };
       q.delete = () => { l.op = "delete"; return q; };
-      for (const m of ["eq", "neq", "in", "is", "gte", "gt", "lt", "not", "order", "limit"]) {
+      for (const m of ["eq", "neq", "in", "is", "gte", "gt", "lt", "lte", "not", "order", "limit"]) {
         q[m] = (c: string, v: unknown) => { l.filtros[`${m}:${c}`] = v; return q; };
       }
       q.maybeSingle = () => q;
@@ -85,7 +85,7 @@ describe("buscarLapidaBoletaUnica — el server no abre otra boleta única con u
     expect(q.tabla).toBe("emision_jobs");
     expect(q.filtros["eq:empresa_id"]).toBe("E1");
     expect(q.filtros["is:propuesta_id"]).toBeNull();
-    expect(q.filtros["eq:estado"]).toBe("revision_pendiente");
+    expect(q.filtros["in:estado"]).toEqual(["revision_pendiente", "created", "running"]);
   });
   it("sin lápida → ok", async () => {
     const { sb } = fakeSb(() => ({ data: [], error: null }));
@@ -94,6 +94,41 @@ describe("buscarLapidaBoletaUnica — el server no abre otra boleta única con u
   it("si la consulta falla → fail-closed (500), nunca deja emitir a ciegas", async () => {
     const { sb } = fakeSb(() => ({ data: null, error: { message: "boom" } }));
     expect(await buscarLapidaBoletaUnica(sb, "E1")).toMatchObject({ ok: false, status: 500 });
+  });
+});
+
+describe("buscarLapidaBoletaUnica — boleta única SIN RESPUESTA (auditoría oct-2026 #2)", () => {
+  const ahora = new Date("2026-10-01T12:30:00Z");
+  const colgado = { job_id: "J9", estado: "running", propuesta_id: null, created_at: "2026-10-01T12:00:00Z", expires_at: "2026-10-01T12:15:00Z" };
+  it("running vencido tras apretar EMITIR (pestaña muerta) → se SELLA a medias y bloquea", async () => {
+    const { sb, llamadas } = fakeSb((l) => (l.op === "update"
+      ? { data: [{ job_id: "J9" }], error: null }
+      : { data: [{ ...colgado, estado_visible: "submitting" }], error: null }));
+    const r = await buscarLapidaBoletaUnica(sb, "E1", ahora);
+    expect(r).toMatchObject({ ok: false, status: 409, error: "BOLETA_A_MEDIAS", jobId: "J9" });
+    const upd = llamadas.find((l) => l.op === "update");
+    expect(upd?.valores).toMatchObject({ estado: "revision_pendiente" });
+    expect(upd?.filtros["eq:job_id"]).toBe("J9");
+    expect(upd?.filtros["in:estado"]).toEqual(["created", "running"]);
+    expect(upd?.filtros["lte:expires_at"]).toBe(ahora.toISOString());
+  });
+  it("running vencido que nunca llegó al clic → no bloquea ni se toca", async () => {
+    const { sb, llamadas } = fakeSb(() => ({ data: [{ ...colgado, estado_visible: "sii_page_ready" }], error: null }));
+    expect(await buscarLapidaBoletaUnica(sb, "E1", ahora)).toEqual({ ok: true });
+    expect(llamadas.some((l) => l.op === "update")).toBe(false);
+  });
+  it("running con posible clic pero AÚN vivo (no vencido) → no bloquea (el candado lo cubre)", async () => {
+    const { sb, llamadas } = fakeSb(() => ({ data: [{ ...colgado, estado_visible: "submitting", expires_at: "2026-10-01T12:45:00Z" }], error: null }));
+    expect(await buscarLapidaBoletaUnica(sb, "E1", ahora)).toEqual({ ok: true });
+    expect(llamadas.some((l) => l.op === "update")).toBe(false);
+  });
+  it("el sello no aplica (llegó su folio o un latido lo renovó entre medio) → no bloquea", async () => {
+    const { sb } = fakeSb((l) => (l.op === "update" ? { data: [], error: null } : { data: [{ ...colgado, estado_visible: "submitting" }], error: null }));
+    expect(await buscarLapidaBoletaUnica(sb, "E1", ahora)).toEqual({ ok: true });
+  });
+  it("el sello falla → fail-closed 500", async () => {
+    const { sb } = fakeSb((l) => (l.op === "update" ? { data: null, error: { message: "boom" } } : { data: [{ ...colgado, estado_visible: "submitting" }], error: null }));
+    expect(await buscarLapidaBoletaUnica(sb, "E1", ahora)).toMatchObject({ ok: false, status: 500 });
   });
 });
 
