@@ -120,4 +120,12 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
     const fn = src.indexOf("async function backfillFolioSinJobVivo(");
     expect(src.indexOf("jobId: args.jobId,", fn)).toBeGreaterThan(fn);
   });
+
+  it("tras enlazar/adoptar, el PDF se fusiona sobre la fila RELEÍDA (no borra job_id de la adopción)", () => {
+    const pdf = src.indexOf("const pdfUpload = await uploadResultPdf(sb, { empresaId, tipoDte, folio, result, pdfInfo });");
+    const relee = src.indexOf('if (decisionFolio?.tipo === "enlazado") {', pdf);
+    const merge = src.indexOf("...previousResponse,", pdf);
+    expect(relee).toBeGreaterThan(pdf);
+    expect(merge).toBeGreaterThan(relee);
+  });
 });

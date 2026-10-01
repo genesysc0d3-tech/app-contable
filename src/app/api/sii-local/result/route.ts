@@ -1657,8 +1657,17 @@ export async function POST(request: Request) {
     }
     const pdfUpload = await uploadResultPdf(sb, { empresaId, tipoDte, folio, result, pdfInfo });
     if (pdfUpload.storagePath) {
-      const previousResponse = existing.proveedor_respuesta && typeof existing.proveedor_respuesta === "object"
-        ? existing.proveedor_respuesta as Record<string, unknown>
+      // Si recién se enlazó/adoptó (decisión "enlazado"), la foto de `existing` es
+      // ANTERIOR al UPDATE que escribió job_id: releer, o el PDF borraría la marca de
+      // adopción y otro job podría enlazar la misma boleta (adversarial final, 2026-10-01).
+      let respuestaBase: unknown = existing.proveedor_respuesta;
+      if (decisionFolio?.tipo === "enlazado") {
+        const { data: fresca } = await sb.from("boletas_emitidas").select("proveedor_respuesta").eq("id", existing.id).maybeSingle();
+        respuestaBase = fresca?.proveedor_respuesta ?? null;
+        if (!respuestaBase || typeof respuestaBase !== "object") respuestaBase = { job_id: job.job_id };
+      }
+      const previousResponse = respuestaBase && typeof respuestaBase === "object"
+        ? respuestaBase as Record<string, unknown>
         : {};
       const { error: updateErr } = await sb
         .from("boletas_emitidas")
