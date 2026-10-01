@@ -103,6 +103,26 @@ export function datosFolioBoletaUnica(
   return { ok: false, error: "FALTA_MONTO_INTENTO", detalle: "Escribe también el monto y el tipo de ESA boleta (como aparece en el SII)." };
 }
 
+/**
+ * Monto y tipo que el navegador manda con el folio a mano de una lápida (vuelta 2,
+ * V2-M1). Si el recuadro tiene el intento en memoria (lápida sellada en esta misma
+ * sesión) se manda ESE como declarado: sin la migración del `intento` el server no lo
+ * tiene y respondía "falta el monto" con el campo oculto. El server igual prefiere el
+ * intento guardado si existe. Sin intento: lo que la persona escribió de ESA boleta.
+ */
+export function declaradoParaFolio(
+  intento: IntentoBoletaUnica | null,
+  montoEscrito: string,
+  tipoEscrito: number,
+): { ok: true; declarado: { monto: number; tipoDte: number } } | { ok: false; mensaje: string } {
+  if (intento) return { ok: true, declarado: { monto: intento.monto, tipoDte: intento.tipo_dte } };
+  const monto = Number((montoEscrito ?? "").replace(/[^0-9]/g, ""));
+  if (!Number.isSafeInteger(monto) || monto <= 0) {
+    return { ok: false, mensaje: "Escribe también el monto de ESA boleta, como aparece en el SII." };
+  }
+  return { ok: true, declarado: { monto, tipoDte: tipoEscrito } };
+}
+
 // ── Qué hacer con cada aviso de la extensión ────────────────────────────────
 
 export const MENSAJE_INCIERTA =

@@ -21,7 +21,7 @@ import { fechaParaEmitir } from "@/lib/emission/fecha-intento";
 import { verificarJobColgado } from "./verificar-colgado";
 import { clasificarStartJob } from "@/lib/emission/clasificar-start-job";
 import { buildFacturaJob } from "@/lib/emission/factura-job-payload";
-import { datosParaJob } from "@/lib/emission/datos-job";
+import { datosParaJob } from "@/lib/emission/datos-job-cliente";
 
 /** Ítem del lote con los datos para armar el payload (superset de ItemLote). */
 export interface ItemLoteEmision extends ItemLote {

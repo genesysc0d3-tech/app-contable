@@ -79,14 +79,10 @@ export function tipoBoletaDeMesa(prop: PropuestaDatos, empresa: EmpresaContext):
   return v.tipoDte;
 }
 
-export type DatosJobEnviados = { monto: number; receptor_rut: string | null; glosa: string };
+import type { DatosJobEnviados } from "./datos-job-cliente";
+export { datosParaJob, type DatosJobEnviados } from "./datos-job-cliente";
 
 export type CampoDatos = "monto" | "tipo_dte" | "receptor_rut" | "glosa";
-
-/** Lo que el lote manda en `datos`: los MISMOS campos que van al payload de la extensión. */
-export function datosParaJob(item: { monto: number; receptorRut?: string | null; detalle: string }): DatosJobEnviados {
-  return { monto: item.monto, receptor_rut: item.receptorRut ?? null, glosa: item.detalle };
-}
 
 /** Lee `payload.datos`. null = el navegador no los mandó (JS viejo) o vienen mal. */
 export function leerDatosEnviados(raw: unknown): DatosJobEnviados | null {

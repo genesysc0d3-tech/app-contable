@@ -17,7 +17,7 @@ import { RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
 import { obtenerUmbralReceptorClp } from "./actions";
 import { useEmissionLockStatus, type EmissionLockInfo } from "./useEmissionLockStatus";
 import { buildBoletaJob } from "@/lib/emission/boleta-job-payload";
-import { cierreBoletaUnicaPorStatus, DETALLE_BOLETA_A_MEDIAS, describirIntento, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
+import { cierreBoletaUnicaPorStatus, declaradoParaFolio, DETALLE_BOLETA_A_MEDIAS, describirIntento, leerIntento, type IntentoBoletaUnica } from "@/lib/emission/boleta-unica-lapida";
 import { declararNoSalio, registrarFolioAMano } from "@/lib/emission/recover-latest";
 
 type TipoDte = 33 | 34 | 39 | 41;
@@ -777,7 +777,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   }
 
   async function closeEmissionJob(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente" = "cancelled"): Promise<string | null> {
-    if (!jobId) return null;
+    return (await closeEmissionJobDetalle(jobId, estado)).estado;
+  }
+
+  // Igual que closeEmissionJob, pero devuelve también el intento de una lápida de
+  // boleta única (V2-B1: «liberar» sobre una lápida muestra qué boleta buscar).
+  async function closeEmissionJobDetalle(jobId: string | null | undefined, estado: "failed" | "cancelled" | "revision_pendiente"): Promise<{ estado: string | null; intento: IntentoBoletaUnica | null; creadaAt: string | null }> {
+    const vacio = { estado: null, intento: null, creadaAt: null };
+    if (!jobId) return vacio;
     try {
       const res = await fetch("/api/emision/jobs", {
         method: "DELETE",
@@ -789,11 +796,15 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       });
       setEmissionLock(null);
       // El estado REAL con que quedó el job (una lápida no se cancela: vuelve tal cual).
-      const json = (await res.json().catch(() => ({}))) as { estado?: string };
-      return typeof json.estado === "string" ? json.estado : null;
+      const json = (await res.json().catch(() => ({}))) as { estado?: string; intento?: unknown; creada_at?: string };
+      return {
+        estado: typeof json.estado === "string" ? json.estado : null,
+        intento: leerIntento(json.intento),
+        creadaAt: typeof json.creada_at === "string" ? json.creada_at : null,
+      };
     } catch {
       // Best-effort: si falla, el lock expira por TTL server-side.
-      return null;
+      return vacio;
     }
   }
 
@@ -1444,15 +1455,14 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
       toast("Escribe el folio de esa boleta tal como aparece en el SII.", "error");
       return;
     }
-    let declarado: { monto: number; tipoDte: number } | null = null;
-    if (!lapidaBU.intento) {
-      const m = parseAmount(montoLapida);
-      if (!(m > 0)) {
-        toast("Escribe también el monto de ESA boleta, como aparece en el SII.", "error");
-        return;
-      }
-      declarado = { monto: m, tipoDte: tipoLapida };
+    // Con el intento en memoria se manda como declarado (V2-M1: sin la migración el
+    // server no lo tiene); sin él, el monto y tipo que la persona escribió.
+    const dec = declaradoParaFolio(lapidaBU.intento, montoLapida, tipoLapida);
+    if (!dec.ok) {
+      toast(dec.mensaje, "error");
+      return;
     }
+    const declarado = dec.declarado;
     setLocalWorkerLoading(true);
     try {
       const r = await registrarFolioAMano(lapidaBU.jobId, folio, declarado);
@@ -1637,11 +1647,11 @@ export default function EmitirDirectaView({ empresaTipo, empresaId, emisionProve
   async function cancelStaleLock() {
     const jobId = activeEmissionLock?.job_id ?? null;
     if (jobId) {
-      const estadoFinal = await closeEmissionJob(jobId, "cancelled");
+      const cierre = await closeEmissionJobDetalle(jobId, "cancelled");
       // Una LÁPIDA (boleta que pudo salir en el SII) no se cancela: el server la deja
       // tal cual. Se muestra su panel (Recuperar / folio a mano / «no salió»).
-      if (estadoFinal === "revision_pendiente") {
-        mostrarLapida({ jobId, intento: null, creadaAt: new Date().toISOString(), esMia: true, lanzadaPor: null });
+      if (cierre.estado === "revision_pendiente") {
+        mostrarLapida({ jobId, intento: cierre.intento, creadaAt: cierre.creadaAt ?? new Date().toISOString(), esMia: true, lanzadaPor: null });
         setLocalWorkerLoading(false);
         return;
       }

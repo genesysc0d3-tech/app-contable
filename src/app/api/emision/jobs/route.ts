@@ -879,6 +879,15 @@ export async function DELETE(request: Request) {
   }
   const permisivoTerminal = job.estado === "failed" || job.estado === "cancelled" || job.estado === "expired";
   if (yaProtegido || (permisivoTerminal && estado !== "revision_pendiente")) {
+    // Lápida de boleta única: devolver su intento para que la vista diga qué boleta
+    // buscar en el SII (vuelta 2, V2-B1). `*` no rompe sin la migración.
+    if (job.estado === "revision_pendiente" && !job.propuesta_id) {
+      const { data: full } = await service.service.from("emision_jobs").select("*").eq("job_id", job.job_id).maybeSingle();
+      return NextResponse.json({
+        ok: true, estado: job.estado,
+        intento: leerIntento((full as { intento?: unknown } | null)?.intento), creada_at: job.created_at,
+      });
+    }
     return NextResponse.json({ ok: true, estado: job.estado });
   }
   await releaseCuentaEmissionLock({ sb: service.service, cuentaId: job.cuenta_id, jobId: job.job_id, estado });

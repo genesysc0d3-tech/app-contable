@@ -1431,6 +1431,17 @@ export async function POST(request: Request) {
         error: jobGate.error,
         result: result ?? null,
       });
+      // Folio tardío (aunque sea con evidencia débil) de un intento declarado «no
+      // salió»: puede haber dos boletas por la misma venta (vuelta 2, V2-B2).
+      if (folio && jobGate.job && fueDeclaradoNoSalio(jobGate.job)) {
+        await recordOpsEvent({
+          sb, severity: "critical", source: "sii-local", eventName: "folio_tras_no_salio_declarado",
+          summary: `Llegó un folio (${folio}, sin registrar) de un intento declarado «no salió»: revisar posible doble boleta`,
+          empresaId: jobGate.job.empresa_id, cuentaId: jobGate.job.cuenta_id, usuarioId: user.id,
+          resourceType: "emision_job", resourceId: effectiveJobId,
+          metadata: { folio, tipo_dte: tipoDte, propuesta_id: jobGate.job.propuesta_id ?? null, registrado: false },
+        });
+      }
     }
     await recordOpsEvent({
       sb,
