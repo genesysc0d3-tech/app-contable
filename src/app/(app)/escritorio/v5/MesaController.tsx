@@ -12,7 +12,7 @@ import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
 import { publicarAvisos } from "@/lib/avisos/bus";
-import { cadenciaDocs, cargarSiSigueVigente, crearEspaciador, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
+import { cadenciaDocs, cargandoTras, cargarSiSigueVigente, crearEspaciador, mismaMesa, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
 
 // La MESA es parte de la clave (bug transversal 2026-08-27): sin ella, boletas y
 // facturas del mismo día/rango compartían entrada de caché y una le servía a la
@@ -79,7 +79,9 @@ export default function MesaController({
   leftColumn: ReactNode;
 }) {
   const [mesa, setMesa] = useState(initialMesa);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  // Rango cuya carga ATENÚA la mesa: solo el último pedido (ver cargandoTras).
+  const [cargandoKey, setCargandoKey] = useState<string | null>(null);
   // Cache en memoria sembrada con el estado inicial (evita re-fetch al volver a él).
   // `vieja` (2026-09-28): tras una recarga los OTROS rangos se marcan viejos en vez de
   // borrarse — antes se vaciaba todo y la precarga volvía a pedir las otras dos vistas
@@ -124,8 +126,18 @@ export default function MesaController({
       return res.ok ? res.mesa : null;
     },
     aplicar: (p, fresca) => {
+      const k = keyOf(p.view, p.date, p.month, p.mesa);
+      // Los OTROS rangos se envejecen SIEMPRE: el evento que gatilló la recarga pudo
+      // cambiar un rango que no es el visible (emisión de otro día) aunque el visible
+      // salga idéntico. Frescura antes que ahorrar llamadas (coordinación 2026-10-01).
       for (const v of cacheRef.current.values()) v.vieja = true;
-      cacheRef.current.set(keyOf(p.view, p.date, p.month, p.mesa), { mesa: fresca, vieja: false });
+      // Visible idéntico (típico de la vigilancia post-subida y los sondeos): no se
+      // re-renderiza ni se re-difunde — solo se re-siembra su entrada como fresca.
+      if (keyDeMesa(mesaRef.current) === k && mismaMesa(mesaRef.current, fresca)) {
+        cacheRef.current.set(k, { mesa: mesaRef.current, vieja: false });
+        return;
+      }
+      cacheRef.current.set(k, { mesa: fresca, vieja: false });
       aplicarMesa(fresca);
     },
     });
@@ -158,21 +170,27 @@ export default function MesaController({
     ultimoPedidoRef.current = key;
     const cached = cacheRef.current.get(key);
     if (cached) {
+      setCargandoKey(null); // el último pedido ya está servido: nada que atenuar
       aplicarMesa(cached.mesa);
       // Vieja: se muestra al tiro y se trae la fresca por detrás (el recargador
       // descarta la respuesta si el usuario siguió navegando).
       if (cached.vieja) window.setTimeout(() => recargador().pedir(), 0);
       return;
     }
+    setCargandoKey(key);
     startTransition(async () => {
       // La respuesta siempre siembra la caché, pero solo se APLICA si este sigue
       // siendo el último rango pedido (clic en 5 → clic en 6: la de 5 llega tarde).
-      await cargarSiSigueVigente({
-        vigente: () => ultimoPedidoRef.current ?? "",
-        cargar: async () => { const res = await cargarMesa(params); return res.ok ? res.mesa : null; },
-        guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
-        aplicar: aplicarMesa,
-      });
+      try {
+        await cargarSiSigueVigente({
+          vigente: () => ultimoPedidoRef.current ?? "",
+          cargar: async () => { const res = await cargarMesa(params); return res.ok ? res.mesa : null; },
+          guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
+          aplicar: aplicarMesa,
+        });
+      } finally {
+        setCargandoKey((c) => cargandoTras(c, key));
+      }
     });
   }, [mesa, recargador, aplicarMesa]);
 
@@ -280,7 +298,7 @@ export default function MesaController({
         vigente: () => `${keyDeMesa(mesaRef.current)}#${ultimoPedidoRef.current ?? ""}`,
         cargar: async () => { const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva }); return res.ok ? res.mesa : null; },
         guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
-        aplicar: (fresca) => { ultimoPedidoRef.current = key; aplicarMesa(fresca); },
+        aplicar: (fresca) => { ultimoPedidoRef.current = key; setCargandoKey(null); aplicarMesa(fresca); },
       });
     };
 
@@ -475,7 +493,7 @@ export default function MesaController({
           empresaLogoUrl={empresaLogoUrl}
           defaultContent={
             <MesaReloadContext.Provider value={reloadMesa}>
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, opacity: isPending ? 0.55 : 1, transition: "opacity .18s ease" }}>
+              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0, opacity: cargandoKey !== null ? 0.55 : 1, transition: "opacity .18s ease" }}>
                 <Mesa mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaRazon={empresaRazon} empresaTipo={empresaTipo} emisorFaltan={emisorFaltan} />
               </div>
             </MesaReloadContext.Provider>

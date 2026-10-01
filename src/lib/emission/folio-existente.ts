@@ -29,9 +29,23 @@
 // Cualquier "no" = AJENO: no se cierra el job ni se levanta la lápida. Un error de
 // consulta = "error": tampoco se levanta nada (fail-closed), pero NO es un rechazo
 // permanente (la extensión reintenta su stash).
+//
+// "Arregla todo" (oct-2026), además:
+//   · DEL JOB: una boleta que registró ESTE mismo job (track_id / proveedor_respuesta.
+//     job_id, mismo criterio que jobSiLaBoletaEsSuya) es propia aunque no tenga
+//     propuesta — p. ej. la reentrega del folio B desacoplado con el ack perdido (B2).
+//   · BOLETA ÚNICA (job sin propuesta) con jobId: antes devolvía "sin_propuesta" y el
+//     camino vivo cerraba el job `completed` con un folio de OTRO documento → la boleta
+//     real del intento quedaba sin registrar. Ahora es ajena salvo que sea del job o
+//     una huérfana del RCV que se ADOPTA (proveedor_respuesta.job_id, UPDATE
+//     condicional) con el monto del intento.
+//   · MONTO DESCONOCIDO (RCV con monto 0, solo por declaración humana): además la
+//     fecha de la boleta debe caer a ±1 día de la fecha Chile del intento (M2), y el
+//     enlace deja evento en ops — un folio mal leído no se enlaza en silencio.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { recordOpsEvent } from "@/lib/ops/events";
 
 type Sb = SupabaseClient<Database>;
 
@@ -42,7 +56,28 @@ export type BoletaExistente = {
   estado?: string | null;
   track_id?: string | null;
   proveedor_respuesta?: unknown;
+  fecha_emision?: string | null;
 };
+
+function jobDeLaBoleta(b: Pick<BoletaExistente, "proveedor_respuesta">): string | null {
+  const pr = b.proveedor_respuesta;
+  const j = pr && typeof pr === "object" ? (pr as { job_id?: unknown }).job_id : null;
+  return typeof j === "string" && j ? j : null;
+}
+
+/** ¿La registró este job? (mismo criterio que jobSiLaBoletaEsSuya de result/route.ts). */
+export function boletaEsDelJob(b: Pick<BoletaExistente, "track_id" | "proveedor_respuesta">, jobId: string | null | undefined): boolean {
+  if (!jobId) return false;
+  return (typeof b.track_id === "string" && b.track_id.includes(jobId)) || jobDeLaBoleta(b) === jobId;
+}
+
+/** Diferencia en días entre dos "YYYY-MM-DD" (null si alguna no es fecha). */
+function diasEntre(a: string | null | undefined, b: string | null | undefined): number | null {
+  const fa = typeof a === "string" ? Date.parse(`${a.slice(0, 10)}T00:00:00Z`) : NaN;
+  const fb = typeof b === "string" ? Date.parse(`${b.slice(0, 10)}T00:00:00Z`) : NaN;
+  if (!Number.isFinite(fa) || !Number.isFinite(fb)) return null;
+  return Math.abs(fa - fb) / 86_400_000;
+}
 
 /** Error del stash para un folio que pudo ser propio (huérfana RCV sin monto): bloquea «no salió». */
 export const ERROR_FOLIO_HUERFANO_SIN_MONTO = "FOLIO_HUERFANO_SIN_MONTO";
@@ -58,7 +93,10 @@ export type MotivoFolioAjeno =
   | "OTRA_PROPUESTA"
   | "BOLETA_ANULADA"
   | "HUERFANA_NO_RCV"
+  | "ADOPTADA_POR_OTRO_JOB"
+  | "BOLETA_DE_OTRO_JOB"
   | "MONTO_DESCONOCIDO"
+  | "FECHA_NO_CALZA"
   | "PROPUESTA_NO_ENCONTRADA"
   | "MONTO_NO_CALZA"
   | "TIPO_NO_CALZA"
@@ -68,9 +106,9 @@ export type MotivoFolioAjeno =
 export type DecisionFolioExistente =
   /** La boleta ya era de esta propuesta. */
   | { tipo: "propio" }
-  /** Era huérfana (propuesta_id NULL) y quedó enlazada a esta propuesta. */
+  /** Era huérfana (propuesta_id NULL) y quedó enlazada a esta propuesta (o adoptada por este job). */
   | { tipo: "enlazado" }
-  /** Job sin propuesta (boleta única): lo resuelve el llamador como siempre. */
+  /** Job sin propuesta y SIN jobId: lo resuelve el llamador como siempre. */
   | { tipo: "sin_propuesta" }
   | { tipo: "ajeno"; motivo: MotivoFolioAjeno }
   | { tipo: "error"; detalle: string };
@@ -86,28 +124,66 @@ export async function resolverFolioExistente(
     existing: BoletaExistente;
     propuestaId: string | null;
     tipoDte: number;
-    /** Solo el folio a mano (declaración humana): enlaza una huérfana RCV con monto 0. */
+    /** Job que trae el folio: una boleta registrada por él es propia (B2, boleta única). */
+    jobId?: string | null;
+    /** Boleta única: monto del intento (o capturado) para adoptar una huérfana del RCV. */
+    montoIntento?: number | null;
+    /** Solo el folio a mano (declaración humana): acepta una huérfana RCV con monto 0… */
     aceptarMontoDesconocido?: boolean;
+    /** …si su fecha cae a ±1 día de esta (fecha Chile del intento, "YYYY-MM-DD"). */
+    fechaIntento?: string | null;
+    empresaId?: string | null;
   },
 ): Promise<DecisionFolioExistente> {
   const { existing, propuestaId } = args;
-  if (!propuestaId) return { tipo: "sin_propuesta" };
-  if (existing.propuesta_id === propuestaId) return { tipo: "propio" };
+  if (propuestaId && existing.propuesta_id === propuestaId) return { tipo: "propio" };
+  if (boletaEsDelJob(existing, args.jobId)) return { tipo: "propio" };
+  if (!propuestaId && !args.jobId) return { tipo: "sin_propuesta" };
   if (existing.propuesta_id) return { tipo: "ajeno", motivo: "OTRA_PROPUESTA" };
-  if (!esHuerfanaRcv(existing)) return { tipo: "ajeno", motivo: "HUERFANA_NO_RCV" };
+  if (!esHuerfanaRcv(existing)) return { tipo: "ajeno", motivo: propuestaId ? "HUERFANA_NO_RCV" : "BOLETA_DE_OTRO_JOB" };
+  // Una huérfana del RCV que ya adoptó OTRA boleta única no está libre.
+  if (jobDeLaBoleta(existing)) return { tipo: "ajeno", motivo: "ADOPTADA_POR_OTRO_JOB" };
   if (existing.estado === "anulada") return { tipo: "ajeno", motivo: "BOLETA_ANULADA" };
 
+  // Monto: con monto conocido debe calzar; monto 0 solo por declaración humana y con fecha (M2).
+  const montoBoleta = Math.round(Number(existing.monto_total));
+  const montoDesconocido = !Number.isFinite(montoBoleta) || montoBoleta <= 0;
+  if (montoDesconocido) {
+    if (!args.aceptarMontoDesconocido) return { tipo: "ajeno", motivo: "MONTO_DESCONOCIDO" };
+    const dias = diasEntre(existing.fecha_emision, args.fechaIntento);
+    if (dias === null || dias > 1) return { tipo: "ajeno", motivo: "FECHA_NO_CALZA" };
+  }
+
   try {
+    if (!propuestaId) {
+      // ── BOLETA ÚNICA: adoptar la huérfana del RCV para este job ──
+      if (!montoDesconocido && Math.round(Number(args.montoIntento)) !== montoBoleta) return { tipo: "ajeno", motivo: "MONTO_NO_CALZA" };
+      const previo = existing.proveedor_respuesta && typeof existing.proveedor_respuesta === "object" ? existing.proveedor_respuesta as Record<string, unknown> : {};
+      const { data: adoptadas, error: errAd } = await sb
+        .from("boletas_emitidas")
+        .update({ proveedor_respuesta: { ...previo, job_id: args.jobId, adoptada_por_job_en: new Date().toISOString(), adopcion: montoDesconocido ? "declaracion_humana_monto_desconocido" : "monto_calza" } as never })
+        .eq("id", existing.id)
+        .is("propuesta_id", null)
+        .is("proveedor_respuesta->>job_id", null)
+        .select("id");
+      if (errAd) return { tipo: "error", detalle: errAd.message };
+      if (!adoptadas || adoptadas.length === 0) {
+        const { data: rel, error: errRel } = await sb
+          .from("boletas_emitidas").select("id, track_id, proveedor_respuesta").eq("id", existing.id).maybeSingle();
+        if (errRel) return { tipo: "error", detalle: errRel.message };
+        return rel && boletaEsDelJob(rel as BoletaExistente, args.jobId) ? { tipo: "propio" } : { tipo: "ajeno", motivo: "ENLACE_NO_APLICADO" };
+      }
+      if (montoDesconocido) await avisarEnlaceMontoDesconocido(sb, args);
+      return { tipo: "enlazado" };
+    }
+
     const { data: prop, error: errProp } = await sb
       .from("propuestas_ia").select("total, tipo_dte").eq("id", propuestaId).maybeSingle();
     if (errProp) return { tipo: "error", detalle: errProp.message };
     if (!prop) return { tipo: "ajeno", motivo: "PROPUESTA_NO_ENCONTRADA" };
     const p = prop as { total: number | string | null; tipo_dte: number | null };
     const montoProp = Math.round(Number(p.total));
-    const montoBoleta = Math.round(Number(existing.monto_total));
-    if (!Number.isFinite(montoBoleta) || montoBoleta <= 0) {
-      if (!args.aceptarMontoDesconocido) return { tipo: "ajeno", motivo: "MONTO_DESCONOCIDO" };
-    } else if (!Number.isFinite(montoProp) || montoProp !== montoBoleta) {
+    if (!montoDesconocido && (!Number.isFinite(montoProp) || montoProp !== montoBoleta)) {
       return { tipo: "ajeno", motivo: "MONTO_NO_CALZA" };
     }
     if (p.tipo_dte != null && Number(p.tipo_dte) !== Number(args.tipoDte)) return { tipo: "ajeno", motivo: "TIPO_NO_CALZA" };
@@ -130,7 +206,10 @@ export async function resolverFolioExistente(
       .is("propuesta_id", null)
       .select("id");
     if (errUpd && (errUpd as { code?: string }).code !== "23505") return { tipo: "error", detalle: errUpd.message };
-    if (!errUpd && enlazadas && enlazadas.length > 0) return { tipo: "enlazado" };
+    if (!errUpd && enlazadas && enlazadas.length > 0) {
+      if (montoDesconocido) await avisarEnlaceMontoDesconocido(sb, args);
+      return { tipo: "enlazado" };
+    }
     // 0 filas o 23505 (idx_boletas_propuesta_unica_vigente): alguien ganó entre medio.
     // Se relee: si la ganadora fue otra entrega de ESTA propuesta sobre ESTA boleta, es propia.
     const { data: relectura, error: errRel } = await sb
@@ -141,4 +220,25 @@ export async function resolverFolioExistente(
   } catch (e) {
     return { tipo: "error", detalle: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Enlace de una huérfana RCV SIN monto por declaración humana: queda a la vista (M2). */
+async function avisarEnlaceMontoDesconocido(
+  sb: Sb,
+  args: { existing: BoletaExistente; propuestaId: string | null; jobId?: string | null; fechaIntento?: string | null; empresaId?: string | null; tipoDte: number },
+) {
+  await recordOpsEvent({
+    sb,
+    severity: "warn",
+    source: "sii-local",
+    eventName: "sii_local_enlace_rcv_monto_desconocido",
+    summary: "Folio a mano enlazado a una boleta del RCV sin monto (declaración humana): revisar que sea el correcto",
+    empresaId: args.empresaId ?? null,
+    resourceType: "emision_job",
+    resourceId: args.jobId ?? null,
+    metadata: {
+      boleta_id: args.existing.id, propuesta_id: args.propuestaId, tipo_dte: args.tipoDte,
+      fecha_boleta: args.existing.fecha_emision ?? null, fecha_intento: args.fechaIntento ?? null,
+    },
+  });
 }

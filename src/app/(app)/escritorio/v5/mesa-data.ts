@@ -188,6 +188,9 @@ export async function fetchMesaDateDependent(
   const propuestasTruncadas = propuestasTotal > (propsData.data?.length ?? 0);
   // Ventas del rango (registro de ventas atado al calendario maestro).
   if (ventasRangoRes.error) console.error("[mesa] ventas del rango: lectura incompleta", ventasRangoRes.error);
+  // Tope del paginador (50 páginas = 50.000 boletas en el rango): el total quedaría
+  // corto. Nunca en silencio — que salte en los logs.
+  if (ventasRangoRes.truncado) console.error("[mesa] ventas del rango TRUNCADAS en el tope del paginador — el total está incompleto", { empresaId, desde: fiscalStartDay, hasta: fiscalEndDay, filas: ventasRangoRes.data.length });
   const ventasRows = ventasRangoRes.data;
   const ventasDocs = ventasRows.length;
   const ventasTotal = ventasRows.reduce((s, b) => s + (b.monto_total ?? 0), 0);

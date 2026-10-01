@@ -465,8 +465,28 @@ async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buff
  * TIRO (sin backoff) y SIN gastar intento — el checkpoint en progreso_ia (que
  * acá no se toca) garantiza que la próxima invocación avanza en vez de repetir.
  */
-async function markJobYielded(sb: Sb, job: DocumentProcessingJob, yieldInfo: ProcessorYieldError, now = new Date()) {
-  const { error } = await sb
+/**
+ * Lease del worker (auditoría 2026-10-01): status='running' no basta para saber que
+ * el job sigue siendo NUESTRO. Si este worker se colgó, el vigilante lo recuperó y
+ * OTRO worker lo re-tomó, el job vuelve a estar 'running' — y el worker viejo, al
+ * despertar, lo marcaba fallido/cedido/completado encima del nuevo. claimJobs estampa locked_by +
+ * locked_at (nadie los renueva en vuelo), así que ese par identifica la toma. El
+ * `lockOwner` (`worker:${pid}`) puede repetirse entre instancias serverless; el
+ * locked_at de la toma no. Si el job no trae lease (no salió de claimJobs) se omite.
+ */
+type FiltroLease<Q> = { eq: (col: string, v: string) => Q };
+function conLease<Q extends FiltroLease<Q>>(q: Q, job: Pick<DocumentProcessingJob, "locked_by" | "locked_at">): Q {
+  let r = q;
+  if (job.locked_by) r = r.eq("locked_by", job.locked_by);
+  if (job.locked_at) r = r.eq("locked_at", job.locked_at);
+  return r;
+}
+
+/** Exportada para tests (compare-and-set + lease). */
+export async function markJobYielded(sb: Sb, job: DocumentProcessingJob, yieldInfo: ProcessorYieldError, now = new Date()) {
+  // Con lease: un worker viejo no devuelve a la cola (retryable) un job que otro
+  // worker re-tomó y está procesando — eso lo dejaba tomable por un tercero.
+  const { error } = await conLease(sb
     .from("document_processing_jobs")
     .update({
       status: "retryable",
@@ -477,7 +497,7 @@ async function markJobYielded(sb: Sb, job: DocumentProcessingJob, yieldInfo: Pro
       updated_at: now.toISOString(),
     })
     .eq("id", job.id)
-    .eq("status", "running");
+    .eq("status", "running"), job);
   if (error) throw new Error(`JOB_YIELD_UPDATE_FAILED:${error.message}`);
 }
 
@@ -495,7 +515,7 @@ export async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJo
   // 'running' (mismo patrón que completarJob). Antes el UPDATE no miraba el estado
   // y dejaba el documento en "procesando": un job que el usuario CANCELÓ en vuelo
   // revivía como 'retryable' y el worker lo volvía a procesar.
-  const { data: marcado, error: updateError } = await sb
+  const { data: marcado, error: updateError } = await conLease(sb
     .from("document_processing_jobs")
     .update({
       status,
@@ -508,11 +528,12 @@ export async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJo
       updated_at: now.toISOString(),
     })
     .eq("id", job.id)
-    .eq("status", "running")
+    .eq("status", "running"), job)
     .select("id")
     .maybeSingle();
   if (updateError) throw new Error(`JOB_FAILURE_UPDATE_FAILED:${updateError.message}`);
-  // Ninguna fila: el job ya no estaba 'running' (cancelado/recuperado). El documento
+  // Ninguna fila: el job ya no estaba 'running' (cancelado/recuperado) o lo re-tomó
+  // otro worker (lease distinto). El documento
   // queda como lo dejó quien lo cambió ("Cancelado por el usuario"): no se revive.
   if (!marcado) return;
 
@@ -550,16 +571,13 @@ export async function markJobFailedOrRetryable(sb: Sb, job: DocumentProcessingJo
  * failed de inmediato, sin reintentos, y el documento en "error" con un mensaje
  * humano que la UI muestra tal cual (MesaTab lee progreso_ia.error).
  */
-async function markJobFailedDefinitivo(sb: Sb, job: DocumentProcessingJob, error: Error, now = new Date()) {
+/** Exportada para tests (compare-and-set + lease). */
+export async function markJobFailedDefinitivo(sb: Sb, job: DocumentProcessingJob, error: Error, now = new Date()) {
   const message = error.message;
-  await sb
-    .from("documentos_subidos")
-    .update({
-      estado: "error",
-      progreso_ia: safeJson({ estado: "error", error: message, definitivo: true, attempts: job.attempts + 1, max_attempts: job.max_attempts }),
-    })
-    .eq("id", job.documento_id);
-  const { error: updateError } = await sb
+  // PRIMERO el job, con compare-and-set + lease (auditoría 2026-10-01): antes el
+  // documento se pisaba sin mirar el job → un job CANCELADO perdía su "Cancelado por
+  // el usuario" y uno re-tomado por otro worker quedaba fallido bajo sus pies.
+  const { data: marcado, error: updateError } = await conLease(sb
     .from("document_processing_jobs")
     .update({
       status: "failed",
@@ -571,8 +589,19 @@ async function markJobFailedDefinitivo(sb: Sb, job: DocumentProcessingJob, error
       completed_at: now.toISOString(),
       updated_at: now.toISOString(),
     })
-    .eq("id", job.id);
+    .eq("id", job.id)
+    .eq("status", "running"), job)
+    .select("id")
+    .maybeSingle();
   if (updateError) throw new Error(`JOB_FAILURE_UPDATE_FAILED:${updateError.message}`);
+  if (!marcado) return;
+  await sb
+    .from("documentos_subidos")
+    .update({
+      estado: "error",
+      progreso_ia: safeJson({ estado: "error", error: message, definitivo: true, attempts: job.attempts + 1, max_attempts: job.max_attempts }),
+    })
+    .eq("id", job.documento_id);
   await recordOpsEvent({
     sb,
     severity: "warn",
@@ -588,14 +617,16 @@ async function markJobFailedDefinitivo(sb: Sb, job: DocumentProcessingJob, error
 }
 
 /**
- * Cierre de job con compare-and-set: solo completa si el job SIGUE 'running'.
+ * Cierre de job con compare-and-set: solo completa si el job SIGUE 'running' Y
+ * sigue siendo NUESTRA toma (lease, ver conLease).
  * Si el usuario canceló en vuelo (status → 'cancelled'), el update no toca
  * ninguna fila y el job queda cancelado en vez de revivir como 'completed'.
- * Devuelve false en ese caso (el llamador decide qué hacer con el documento).
+ * Devuelve false en ese caso (el llamador decide qué hacer con el documento,
+ * vía cerrarDocumentoNoCompletado).
  */
-async function completarJob(sb: Sb, job: DocumentProcessingJob): Promise<boolean> {
+export async function completarJob(sb: Sb, job: DocumentProcessingJob): Promise<boolean> {
   const completedAt = new Date().toISOString();
-  const { data: completado, error } = await sb
+  const { data: completado, error } = await conLease(sb
     .from("document_processing_jobs")
     .update({
       status: "completed",
@@ -608,11 +639,30 @@ async function completarJob(sb: Sb, job: DocumentProcessingJob): Promise<boolean
       updated_at: completedAt,
     })
     .eq("id", job.id)
-    .eq("status", "running")
+    .eq("status", "running"), job)
     .select("id")
     .maybeSingle();
   if (error) throw new Error(`JOB_COMPLETE_UPDATE_FAILED:${error.message}`);
   return Boolean(completado);
+}
+
+/**
+ * completarJob no cerró: ¿por qué? Solo si el job quedó CANCELADO el documento pasa
+ * a "Cancelado por el usuario". Si lo re-tomó otro worker (lease perdida) o lo
+ * recuperó el vigilante, el documento es de quien lo tiene ahora: no se toca (antes
+ * se escribía "Cancelado por el usuario" encima de un procesamiento vivo).
+ */
+export async function cerrarDocumentoNoCompletado(sb: Sb, job: DocumentProcessingJob): Promise<void> {
+  const { data: actual } = await sb
+    .from("document_processing_jobs")
+    .select("status")
+    .eq("id", job.id)
+    .maybeSingle();
+  if (actual?.status !== "cancelled") return;
+  await sb
+    .from("documentos_subidos")
+    .update({ estado: "error", progreso_ia: safeJson({ estado: "error", error: "Cancelado por el usuario" }) })
+    .eq("id", job.documento_id);
 }
 
 async function processOneJob(sb: Sb, job: DocumentProcessingJob) {
@@ -656,9 +706,7 @@ async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
       const r = await procesarPlantillaFacturas(sb, { documentoId: job.documento_id, empresaId: job.empresa_id, buffer });
       const cerrado = await completarJob(sb, job);
       if (!cerrado) {
-        await sb.from("documentos_subidos")
-          .update({ estado: "error", progreso_ia: safeJson({ estado: "error", error: "Cancelado por el usuario" }) })
-          .eq("id", job.documento_id);
+        await cerrarDocumentoNoCompletado(sb, job);
         return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, cancelled: true };
       }
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: r.movimientos_total };
@@ -688,12 +736,9 @@ async function processOneJobEnCanal(sb: Sb, job: DocumentProcessingJob) {
 
     const completado = await completarJob(sb, job);
     if (!completado) {
-      // El job dejó de estar 'running' (cancelado mientras procesaba): dejamos el
-      // documento en 'error' para que no aparezca como procesado.
-      await sb
-        .from("documentos_subidos")
-        .update({ estado: "error", progreso_ia: safeJson({ estado: "error", error: "Cancelado por el usuario" }) })
-        .eq("id", job.documento_id);
+      // El job dejó de ser nuestro: si fue cancelado en vuelo, el documento queda en
+      // 'error' para que no aparezca como procesado; si otro worker lo re-tomó, es suyo.
+      await cerrarDocumentoNoCompletado(sb, job);
       return { ok: true as const, jobId: job.id, documentoId: job.documento_id, movimientos: 0, cancelled: true };
     }
 

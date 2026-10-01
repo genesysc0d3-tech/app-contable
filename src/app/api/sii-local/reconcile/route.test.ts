@@ -96,4 +96,12 @@ describe("reconcile con más de 1000 boletas en la app", () => {
     const res = await post({ rows: [], desde: "2026-09-01", hasta: "2026-09-30" });
     expect(res.fantasmas_posibles).toBe(1500);
   });
+  it("fantasmas: una factura 33/34 del rango NO cuenta (el Resumen solo trae 39/41)", async () => {
+    boletas.push({ id: "f00001", empresa_id: "e1", tipo_dte: 33, folio: 77, fecha_emision: "2026-09-01", estado: "aceptado" });
+    boletas.push({ id: "f00002", empresa_id: "e1", tipo_dte: 34, folio: 78, fecha_emision: "2026-09-01", estado: "aceptado" });
+    const delDia = boletas.filter((b) => b.fecha_emision === "2026-09-01" && (b.tipo_dte === 39 || b.tipo_dte === 41));
+    const rows = delDia.map((b) => ({ folio: b.folio, tipo_dte: 39, monto_total: 1000, fecha_emision: b.fecha_emision }));
+    const res = await post({ rows, desde: "2026-09-01", hasta: "2026-09-01" });
+    expect(res.fantasmas_posibles).toBe(0);
+  });
 });

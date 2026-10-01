@@ -57,6 +57,9 @@ export async function POST(request: Request) {
   let body: { rows?: ReconRow[]; desde?: string; hasta?: string } = {};
   try { body = await request.json(); } catch { return NextResponse.json({ ok: false, error: "BODY_INVALIDO" }, { status: 400 }); }
 
+  // Tipos que trae el Resumen de Ventas que reconcilia este endpoint (boletas).
+  const TIPOS_RESUMEN = [39, 41];
+
   // Tope de filas por request: cada fila válida hace un INSERT secuencial en
   // boletas_emitidas; sin cap, un body enorme puede colgar la función. El Resumen de
   // Ventas de un mes cabe de sobra en 500 (emitir-lote usa el mismo orden de tope).
@@ -181,6 +184,10 @@ export async function POST(request: Request) {
       .select("id, tipo_dte, folio, fecha_emision")
       .eq("empresa_id", empresaId)
       .neq("estado", "anulada")
+      // Solo lo que el Resumen puede traer: este endpoint normaliza toda fila a 39|41
+      // (ver el map de arriba). Una factura 33/34 nunca viene → contarla como
+      // "fantasma" era un falso positivo seguro (auditoría 2026-10-01).
+      .in("tipo_dte", TIPOS_RESUMEN)
       .gte("fecha_emision", desde)
       .lte("fecha_emision", hasta)
       .order("id")

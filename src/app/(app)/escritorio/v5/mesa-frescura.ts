@@ -79,6 +79,35 @@ export async function cargarSiSigueVigente<R>(args: {
   return true;
 }
 
+/**
+ * ¿La recarga trajo EXACTAMENTE lo mismo que ya se mostraba? Si sí, MesaController
+ * no re-renderiza ni re-difunde la mesa (menos trabajo en cada paso de la vigilancia
+ * post-subida y en los sondeos). NO decide la frescura de la caché: los otros rangos
+ * se envejecen igual, porque el evento pudo cambiar un rango que no es el visible.
+ * Comparación por contenido serializado (la respuesta es determinista dado el mismo
+ * dato). Ante cualquier duda (no serializable) responde false = aplicar, como antes.
+ */
+export function mismaMesa(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Atenuación de la mesa: solo mientras carga el ÚLTIMO rango pedido. Al terminar la
+ * carga de `terminada`, el "cargando" se apaga solo si era ESE; si el usuario ya
+ * pidió otro (o lo sirvió la caché → null) se respeta. Antes dependía del isPending
+ * global de la transición: clic en 5 (lento) → clic en 6 (caché) dejaba la mesa del
+ * 6 atenuada hasta que llegaba/expiraba la del 5.
+ */
+export function cargandoTras(cargando: string | null, terminada: string): string | null {
+  return cargando === terminada ? null : cargando;
+}
+
 // ── Espaciador: coalesce ráfagas (debounce) y separa recargas (intervalo mínimo) ──
 
 export interface Timers {

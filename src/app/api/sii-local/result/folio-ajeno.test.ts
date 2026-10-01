@@ -9,10 +9,10 @@ const src = readFileSync(join(__dirname, "route.ts"), "utf8");
 
 describe("result/route.ts — folio de otro documento nunca cierra el job", () => {
   it("la rama `existing` lee propuesta_id y el guard va ANTES de sellar 'completed'", () => {
-    const sel = src.indexOf('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id")');
+    const sel = src.indexOf('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id, fecha_emision")');
     expect(sel).toBeGreaterThan(0);
     // Auditoría oct-2026 #1: la decisión (huérfana → enlazar o ajena) va por el helper.
-    const decision = src.indexOf("await resolverFolioExistente(sb, { existing, propuestaId: job.propuesta_id ?? null, tipoDte })", sel);
+    const decision = src.indexOf("await resolverFolioExistente(sb, { existing, propuestaId: job.propuesta_id ?? null, tipoDte, jobId: job.job_id", sel);
     expect(decision).toBeGreaterThan(sel);
     const guard = src.indexOf('const folioAjeno = decisionFolio?.tipo === "ajeno"', decision);
     expect(guard).toBeGreaterThan(decision);
@@ -32,7 +32,7 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
 
   it("el backfill (job cerrado) y su carrera NO levantan la lápida con folio ajeno ni huérfano que no calza", () => {
     const fn = src.indexOf("async function backfillFolioSinJobVivo(");
-    const dedup = src.indexOf('.from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta")', fn);
+    const dedup = src.indexOf('.from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta, fecha_emision")', fn);
     expect(dedup).toBeGreaterThan(fn);
     const guard1 = src.indexOf("if (!folioCierraLaPropuesta(decision)) return { ok: false, error: \"FOLIO_DE_OTRO_DOCUMENTO\"", dedup);
     const lift1 = src.indexOf("await liftRevisionTombstone(sb, args.propuestaId, ", dedup);
@@ -101,7 +101,7 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
   it("las selects que alimentan resolverFolioExistente traen track_id/proveedor_respuesta (sin eso NINGUNA huérfana sería RCV)", () => {
     const n = src.split("track_id, proveedor_respuesta").length - 1;
     expect(n).toBeGreaterThanOrEqual(3); // backfill, su carrera y la carrera del camino vivo
-    expect(src).toContain('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id")');
+    expect(src).toContain('.select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id, fecha_emision")');
   });
 
   it("«no salió» del lote ignora folios rechazados por ajenos (rev. adversarial #7)", () => {
@@ -109,8 +109,15 @@ describe("result/route.ts — folio de otro documento nunca cierra el job", () =
   });
 
   it("solo el folio a mano acepta una huérfana RCV sin monto", () => {
-    expect(src.split("aceptarMontoDesconocido: true").length - 1).toBe(1);
+    // Los dos folios a mano (lote y boleta única), y nada más.
+    expect(src.split("aceptarMontoDesconocido: true").length - 1).toBe(2);
     const manual = src.indexOf("const respaldoManual = await backfillFolioSinJobVivo(");
     expect(src.indexOf("aceptarMontoDesconocido: true", manual)).toBeGreaterThan(manual);
+  });
+
+  it("camino vivo y su carrera pasan el jobId: una boleta única ya no cierra con un folio de otro documento", () => {
+    expect(src).toContain("await resolverFolioExistente(sb, { existing: raceWinner, propuestaId: job.propuesta_id ?? null, tipoDte, jobId: job.job_id");
+    const fn = src.indexOf("async function backfillFolioSinJobVivo(");
+    expect(src.indexOf("jobId: args.jobId,", fn)).toBeGreaterThan(fn);
   });
 });

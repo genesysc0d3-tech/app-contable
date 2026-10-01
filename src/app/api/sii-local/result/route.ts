@@ -672,11 +672,19 @@ async function backfillFolioSinJobVivo(
         .eq("id", args.propuestaId).maybeSingle()
     : { data: null };
 
+  // Mismos datos para las dos consultas del folio (existing y su carrera). Con jobId: una
+  // boleta que registró ESTE job es propia (reentrega del folio B, boleta única), y la
+  // boleta única puede adoptar una huérfana del RCV con su monto ("arregla todo" oct-2026).
+  const argsResolver = {
+    propuestaId: args.propuestaId, tipoDte: args.tipoDte, jobId: args.jobId,
+    montoIntento: args.montoTotal, fechaIntento: args.fechaEmision, empresaId: args.empresaId,
+    aceptarMontoDesconocido: args.aceptarMontoDesconocido,
+  };
   // Dedup por la MISMA clave que el índice UNIQUE(empresa_id, tipo_dte, folio) —
   // sin filtrar estado — para no chocar con la constraint ni "registrar" un folio
   // nuevo apuntando a una boleta anulada (coincide con el camino vivo).
   const { data: existing } = await sb
-    .from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta")
+    .from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta, fecha_emision")
     .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio)
     .maybeSingle();
   if (existing) {
@@ -687,7 +695,7 @@ async function backfillFolioSinJobVivo(
     // registra; la lápida sigue y el humano confirma el folio real.
     // + boleta HUÉRFANA (propuesta_id NULL): solo una del RCV se enlaza si calza; el
     // resto es ajena (folio-existente.ts, auditoría oct-2026 hallazgo 1).
-    const decision = await resolverFolioExistente(sb, { existing, propuestaId: args.propuestaId, tipoDte: args.tipoDte, aceptarMontoDesconocido: args.aceptarMontoDesconocido });
+    const decision = await resolverFolioExistente(sb, { existing, ...argsResolver });
     if (decision.tipo === "error") return { ok: false, error: "FOLIO_CHECK_FAILED" };
     if (!folioCierraLaPropuesta(decision)) return { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO", motivo: decision.tipo === "ajeno" ? decision.motivo : undefined };
     await liftRevisionTombstone(sb, args.propuestaId, await jobSiLaBoletaEsSuya(sb, existing.id, args.jobId));
@@ -759,10 +767,10 @@ async function backfillFolioSinJobVivo(
   if (error || !boleta) {
     // Carrera: otra request insertó el mismo folio entremedio → tratar como already.
     const { data: raced } = await sb
-      .from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta")
+      .from("boletas_emitidas").select("id, propuesta_id, monto_total, estado, track_id, proveedor_respuesta, fecha_emision")
       .eq("empresa_id", args.empresaId).eq("tipo_dte", args.tipoDte).eq("folio", args.folio).maybeSingle();
     if (raced) {
-      const decisionRaced = await resolverFolioExistente(sb, { existing: raced, propuestaId: args.propuestaId, tipoDte: args.tipoDte, aceptarMontoDesconocido: args.aceptarMontoDesconocido });
+      const decisionRaced = await resolverFolioExistente(sb, { existing: raced, ...argsResolver });
       if (decisionRaced.tipo === "error") return { ok: false, error: "FOLIO_CHECK_FAILED" };
       if (!folioCierraLaPropuesta(decisionRaced)) return { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO", motivo: decisionRaced.tipo === "ajeno" ? decisionRaced.motivo : undefined };
       await liftRevisionTombstone(sb, args.propuestaId, await jobSiLaBoletaEsSuya(sb, raced.id, args.jobId));
@@ -920,16 +928,9 @@ export async function POST(request: Request) {
       const decl = payload.monto_declarado != null ? { monto: Number(payload.monto_declarado), tipo_dte: Number(payload.tipo_dte_declarado) } : null;
       const datosU = datosFolioBoletaUnica((jobFull ?? {}) as { intento?: unknown }, decl);
       if (!datosU.ok) return NextResponse.json({ ok: false, error: datosU.error, detalle: datosU.detalle }, { status: 422 });
-      const { data: yaReg } = await sb
-        .from("boletas_emitidas").select("id")
-        .eq("empresa_id", jobManual.empresa_id).eq("tipo_dte", datosU.tipo_dte).eq("folio", folioManual)
-        .maybeSingle();
-      if (yaReg && !(await jobSiLaBoletaEsSuya(sb, yaReg.id, jobManual.job_id))) {
-        return NextResponse.json(
-          { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO", detalle: `El folio ${folioManual} ya está registrado en otra boleta. Revisa el número en el SII; esta boleta sigue a medias.` },
-          { status: 409 },
-        );
-      }
+      // El folio ya registrado se juzga en el backfill (folio-existente.ts): propio si lo
+      // registró ESTE job; una huérfana del RCV se ADOPTA si calza el monto del intento
+      // (o, con monto 0, si su fecha calza: es declaración humana); otro = ajeno → 409.
       const respaldoU = await backfillFolioSinJobVivo(sb, {
         empresaId: jobManual.empresa_id,
         tipoDte: datosU.tipo_dte,
@@ -940,7 +941,14 @@ export async function POST(request: Request) {
         jobId: jobManual.job_id,
         propuestaId: null,
         intento: datosU.intento,
+        aceptarMontoDesconocido: true,
       });
+      if (!respaldoU.ok && respaldoU.error === "FOLIO_DE_OTRO_DOCUMENTO") {
+        return NextResponse.json(
+          { ok: false, error: "FOLIO_DE_OTRO_DOCUMENTO", detalle: `El folio ${folioManual} ya está registrado en otra boleta. Revisa el número en el SII; esta boleta sigue a medias.` },
+          { status: 409 },
+        );
+      }
       if (!respaldoU.ok) return NextResponse.json({ ok: false, error: "REGISTRO_MANUAL_FALLIDO", detalle: respaldoU.error }, { status: 500 });
       await recordOpsEvent({
         sb, severity: "warn", source: "sii-local", eventName: "sii_local_folio_declarado_a_mano",
@@ -1573,7 +1581,7 @@ export async function POST(request: Request) {
 
   const { data: existing } = await sb
     .from("boletas_emitidas")
-    .select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id")
+    .select("id, folio, estado, proveedor_respuesta, propuesta_id, monto_total, track_id, fecha_emision")
     .eq("empresa_id", empresaId)
     .eq("tipo_dte", tipoDte)
     .eq("folio", folio)
@@ -1610,9 +1618,13 @@ export async function POST(request: Request) {
     // solo una huérfana del RCV se enlaza si calza (monto/tipo, propuesta sin boleta,
     // UPDATE condicional); la boleta única y el folio B son ajenos siempre
     // (folio-existente.ts). Con emisor cruzado NO se enlaza nada: va al rechazo.
+    // BOLETA ÚNICA ("arregla todo" oct-2026): antes un folio ya registrado por OTRO
+    // documento cerraba el job `completed` y la boleta real del intento quedaba sin
+    // registrar → re-emisión. Ahora es ajeno salvo que sea de ESTE job (o una huérfana
+    // del RCV con el mismo monto, que el job adopta) → lápida + 409, como el lote.
     const decisionFolio = emisorMismatch
       ? null
-      : await resolverFolioExistente(sb, { existing, propuestaId: job.propuesta_id ?? null, tipoDte });
+      : await resolverFolioExistente(sb, { existing, propuestaId: job.propuesta_id ?? null, tipoDte, jobId: job.job_id, montoIntento: montoTotal, fechaIntento: fechaEmision, empresaId });
     if (decisionFolio?.tipo === "error") {
       // No se pudo decidir de quién es el folio: lápida (no se re-emite a ciegas) y 500
       // reintentable — NO 409, que la extensión trata como rechazo permanente.
@@ -1792,7 +1804,7 @@ export async function POST(request: Request) {
     // la app mostraba como "Boleta no quedó guardada" sobre una boleta guardada.
     const { data: raceWinner } = await sb
       .from("boletas_emitidas")
-      .select("id, estado, propuesta_id, monto_total, track_id, proveedor_respuesta")
+      .select("id, estado, propuesta_id, monto_total, track_id, proveedor_respuesta, fecha_emision")
       .eq("empresa_id", empresaId)
       .eq("tipo_dte", tipoDte)
       .eq("folio", folio)
@@ -1801,7 +1813,7 @@ export async function POST(request: Request) {
       // El ganador puede no ser este job: una boleta huérfana (reconcile RCV) o de otra
       // propuesta insertada entre medio. Mismo criterio que la rama `existing`
       // (auditoría oct-2026, hallazgo 1): solo cierra si es propia o se pudo enlazar.
-      const decisionRace = await resolverFolioExistente(sb, { existing: raceWinner, propuestaId: job.propuesta_id ?? null, tipoDte });
+      const decisionRace = await resolverFolioExistente(sb, { existing: raceWinner, propuestaId: job.propuesta_id ?? null, tipoDte, jobId: job.job_id, montoIntento: montoTotal, fechaIntento: fechaEmision, empresaId });
       if (!folioCierraLaPropuesta(decisionRace)) {
         const errorRace = decisionRace.tipo === "error" ? "FOLIO_CHECK_FAILED" : "FOLIO_DE_OTRO_DOCUMENTO";
         await rememberResult(sb, { user_id: user.id, job_id: effectiveJobId, folio, status: "rejected", error: errorRace === "FOLIO_CHECK_FAILED" ? errorRace : errorRechazoFolio(decisionRace), result });

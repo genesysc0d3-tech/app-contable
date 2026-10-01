@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cargarSiSigueVigente } from "./mesa-frescura";
+import { cargandoTras, cargarSiSigueVigente, mismaMesa } from "./mesa-frescura";
 import { hrefCambioMesa } from "./mesa-url";
 
 // Bug fundador 2026-10-01: "me voy a otra fecha y a unos minutos me manda a hoy".
@@ -87,5 +87,58 @@ describe("cableado en la fuente", () => {
   });
   it("las ventas del rango se leen paginadas (PostgREST corta en 1000)", () => {
     expect(leer("mesa-data.ts")).toMatch(/traerTodasLasFilas<\{ monto_total: number \| null \}>\(\(desde, hasta\) => supabase\.from\("boletas_emitidas"\)[^\n]*\.order\("id"\)\.range\(desde, hasta\)\)/);
+  });
+});
+
+describe("recarga idéntica: no re-renderiza, pero los otros rangos se envejecen igual", () => {
+  const mesa = () => ({ selDate: "2026-10-01", ventasTotal: 1000, docsAgregados: [{ id: "d1", estado: "procesando" }], guardarail: { porRevisar: 0 } });
+  it("misma data → mismaMesa", () => {
+    expect(mismaMesa(mesa(), mesa())).toBe(true);
+  });
+  it("cambió algo (estado de un doc, guardarraíl) → no es la misma", () => {
+    expect(mismaMesa(mesa(), { ...mesa(), docsAgregados: [{ id: "d1", estado: "procesado" }] })).toBe(false);
+    expect(mismaMesa(mesa(), { ...mesa(), guardarail: { porRevisar: 1 } })).toBe(false);
+    expect(mismaMesa(null, mesa())).toBe(false);
+  });
+  it("no serializable → false (se envejece, como antes)", () => {
+    const a: Record<string, unknown> = {}; a.yo = a;
+    expect(mismaMesa(a, { yo: 1 })).toBe(false);
+  });
+  it("el recargador envejece SIEMPRE los otros rangos, y recién después compara el visible", () => {
+    const ctrl = leer("MesaController.tsx");
+    const ini = ctrl.indexOf("aplicar: (p, fresca) => {");
+    const aplicar = ctrl.slice(ini, ctrl.indexOf("return recargadorRef.current;", ini));
+    const envejece = aplicar.indexOf("v.vieja = true");
+    const compara = aplicar.indexOf("mismaMesa(mesaRef.current, fresca)");
+    expect(envejece).toBeGreaterThan(-1);
+    expect(compara).toBeGreaterThan(envejece);
+    // Y el atajo de "idéntica" no aplica (no re-renderiza).
+    const atajo = aplicar.slice(compara, aplicar.indexOf("return;", compara));
+    expect(atajo).not.toMatch(/aplicarMesa/);
+  });
+});
+
+describe("atenuación: solo mientras carga el ÚLTIMO pedido", () => {
+  it("clic en 5 (lento) → clic en 6 (caché): al llegar el 5 la mesa no queda gris", () => {
+    let cargando: string | null = "day|05"; // clic 5
+    cargando = null;                         // clic 6 servido por caché
+    cargando = cargandoTras(cargando, "day|05");
+    expect(cargando).toBeNull();
+  });
+  it("clic en 5 (lento) → clic en 7 (lento): terminar el 5 NO apaga la carga del 7", () => {
+    expect(cargandoTras("day|07", "day|05")).toBe("day|07");
+    expect(cargandoTras("day|07", "day|07")).toBeNull();
+  });
+  it("la opacidad depende de cargandoKey, no del isPending global", () => {
+    const ctrl = leer("MesaController.tsx");
+    expect(ctrl).not.toMatch(/isPending/);
+    expect(ctrl).toMatch(/opacity: cargandoKey !== null \? 0\.55 : 1/);
+    expect(ctrl).toMatch(/setCargandoKey\(\(c\) => cargandoTras\(c, key\)\)/);
+  });
+});
+
+describe("ventas truncadas por el paginador no pasan en silencio", () => {
+  it("mesa-data registra el truncado", () => {
+    expect(leer("mesa-data.ts")).toMatch(/if \(ventasRangoRes\.truncado\) console\.error\(/);
   });
 });
