@@ -66,6 +66,37 @@ describe("ciclo completo: guardar → recargar → restaurar (pestaña Emitir + 
     vi.unstubAllGlobals();
   });
 
+  it("TabsV5 se monta DOS veces tras recargar (SSR fallido → render cliente, StrictMode, Mesa que llega con datos): sigue en Emitir", async () => {
+    const storage = new MemStorage();
+    instalarNavegador(storage);
+    recargarPestana();
+    const vieja = await cargarPagina();
+    vieja.guardarEstado(storage, vieja.capturarEstadoVisible({ raiz: { querySelectorAll: () => [] }, ruta: RUTA, ahora: Date.now(), desde: "dev", foco: null, ventana: { x: 0, y: 0 } }));
+    // (la página vieja no tenía piezas: se arma el estado a mano)
+    const e = JSON.parse(storage.getItem(vieja.CLAVE_ESTADO)!);
+    e.piezas = { "mesa.tab": "emitir" };
+    storage.setItem(vieja.CLAVE_ESTADO, JSON.stringify(e));
+
+    recargarPestana();
+    const nueva = await cargarPagina();
+    // 1.er montaje: restaura y se desmonta (el árbol se descarta).
+    const tab1 = vi.fn();
+    const desmontar1 = nueva.registrarPieza("mesa.tab", { guardar: () => "subidos", restaurar: tab1 });
+    expect(tab1).toHaveBeenCalledWith("emitir");
+    expect(nueva.piezasPorRestaurar()).toBe(0);
+    desmontar1();
+    // 2.º montaje nace con useState("subidos"): debe volver a recibir "emitir".
+    const tab2 = vi.fn();
+    nueva.registrarPieza("mesa.tab", { guardar: () => "subidos", restaurar: tab2 });
+    expect(tab2).toHaveBeenCalledWith("emitir");
+    // Cerrada la ventana (la clienta tocó algo / descarte), un remontaje ya no la mueve.
+    nueva.descartarRestauracion();
+    const tab3 = vi.fn();
+    nueva.registrarPieza("mesa.tab", { guardar: () => "subidos", restaurar: tab3 });
+    expect(tab3).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("dos copias del módulo (chunks del layout y de la página) comparten piezas y bloqueos", async () => {
     vi.stubGlobal("window", { sessionStorage: new MemStorage(), location: { pathname: "/massdte", search: "" } });
     recargarPestana();

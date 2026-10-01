@@ -26,7 +26,7 @@ import { crearActualizador, tocaConsultarVersion } from "@/lib/actualizacion/act
 import { versionDelCliente } from "@/lib/actualizacion/version";
 import { alLiberarBloqueo, bloqueosActivos, MARGEN_TRAS_ESCRITURA_MS, motivoOcupado } from "@/lib/actualizacion/ocupado";
 import { ATRIBUTO_RESTAURANDO, guardarEstado, TOPE_TAPADO_MS } from "@/lib/actualizacion/estado-guardado";
-import { descartarRestauracion, estadoARestaurar, momentoPrimeraRestauracion, momentoUltimaRestauracion, piezasPorRestaurar } from "@/lib/actualizacion/piezas";
+import { descartarRestauracion, estadoARestaurar, momentoPrimeraRestauracion, momentoUltimaRestauracion, piezasPorRestaurar, ventanaRestauracionAbierta } from "@/lib/actualizacion/piezas";
 import { aplicarScroll } from "@/lib/actualizacion/scroll";
 import { capturarEstadoVisible, debeDescartarRestauracion } from "@/lib/actualizacion/capturar";
 
@@ -81,7 +81,9 @@ function terminarRestauracion(): () => void {
   // Lo que monta tarde (la mesa streameada, chunks fríos) se sigue restaurando al
   // montarse; se abandona según debeDescartarRestauracion (no un tope desde la carga).
   const vigilarDescarte = () => {
-    if (cancelado || piezasPorRestaurar() === 0) return;
+    // La ventana sigue abierta aunque todo se haya aplicado una vez: un re-montaje
+    // (SSR fallido, StrictMode) vuelve a recibir su valor hasta el toque o el descarte.
+    if (cancelado || !ventanaRestauracionAbierta()) return;
     const primera = momentoPrimeraRestauracion();
     if (debeDescartarRestauracion({ msDesdeCarga: performance.now() - inicio, msDesdePrimeraRestauracion: primera === null ? null : Date.now() - primera, toco })) { descartarRestauracion(); return; }
     const t = setTimeout(() => { timers.delete(t); vigilarDescarte(); }, 1_000);
