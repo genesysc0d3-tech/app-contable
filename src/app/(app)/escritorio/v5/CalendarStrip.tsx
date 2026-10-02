@@ -173,9 +173,9 @@ export default function CalendarStrip({ cal, navigate, subida = null, onIrSubida
               const señalado = objetivo?.tipo === "dia" && objetivo.dia === day;
               return (
                 <button type="button" key={day} onClick={() => navigate({ date: ds, month: `${y}-${m}`, view: workMode })}
-                  style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: active ? "var(--lime)" : "transparent", boxShadow: señalado ? "0 0 0 1.5px var(--accent)" : undefined, transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
-                  <span style={{ fontSize: 5, textTransform: "uppercase", lineHeight: 1, color: active ? "color-mix(in srgb, var(--bg) 50%, transparent)" : "var(--text3)" }}>{wd[new Date(y, m, day).getDay()]}</span>
-                  <span style={{ fontSize: 8, fontWeight: isToday || isSel ? 700 : 500, lineHeight: 1, marginTop: 1, color: isToday ? "var(--accent)" : active ? "var(--bg)" : "var(--text2)" }}>{day}</span>
+                  style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: señalado ? "var(--accent)" : active ? "var(--lime)" : "transparent", transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
+                  <span style={{ fontSize: 5, textTransform: "uppercase", lineHeight: 1, color: señalado ? "rgba(255,255,255,.7)" : active ? "color-mix(in srgb, var(--bg) 50%, transparent)" : "var(--text3)" }}>{wd[new Date(y, m, day).getDay()]}</span>
+                  <span style={{ fontSize: 8, fontWeight: isToday || isSel ? 700 : 500, lineHeight: 1, marginTop: 1, color: señalado ? "#fff" : isToday ? "var(--accent)" : active ? "var(--bg)" : "var(--text2)" }}>{day}</span>
                   {/* Puntos de trabajo del día (byDay de mesa-data): pendientes / aprobadas.
                       Fila de alto fijo para que todas las celdas midan igual (dock intacto). */}
                   <span style={{ display: "flex", gap: 2, height: 3, marginTop: 1, alignItems: "center", justifyContent: "center" }}>
