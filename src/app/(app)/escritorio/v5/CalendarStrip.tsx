@@ -201,8 +201,8 @@ export default function CalendarStrip({ cal, navigate, subida = null, onIrSubida
           @media (prefers-reduced-motion: reduce){.v5-globito,.v5-globito-punto{animation:none}}
         `}</style>
         <div className="v5-globito" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <span aria-hidden style={{ width: 10, height: 10, background: "var(--surface)", borderLeft: "1px solid var(--border)", borderTop: "1px solid var(--border)", transform: "rotate(45deg)", marginBottom: -6, zIndex: 1 }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 32px var(--shadow)", padding: "6px 8px 6px 10px", whiteSpace: "nowrap" }}>
+          <span aria-hidden style={{ width: 10, height: 10, background: "var(--surface)", borderLeft: "1.5px solid var(--accent)", borderTop: "1.5px solid var(--accent)", transform: "rotate(45deg)", marginBottom: -6, zIndex: 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1.5px solid var(--accent)", borderRadius: 10, boxShadow: "0 8px 32px var(--shadow)", padding: "6px 8px 6px 10px", whiteSpace: "nowrap" }}>
             <button type="button" onClick={onIrSubida} style={{ ...btnReset, background: "transparent", padding: 0, display: "flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 600, color: "var(--text)" }}>
               {subida.estado === "procesando" && <span className="v5-globito-punto" style={{ width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
               {subida.estado === "lista" && <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--green)" }} />}
