@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { MesaDateDependent } from "./mesa-data";
+import { objetivoGlobito, type Subida } from "./subida-globito";
 
 const wd = ["D", "L", "M", "M", "J", "V", "S"];
 const btnReset: CSSProperties = { border: "none", font: "inherit", cursor: "pointer", appearance: "none", WebkitTapHighlightColor: "transparent" };
 
 export type NavParams = { date?: string; month?: string; view?: string };
 
-export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependent["calendar"]; navigate: (p: NavParams) => void }) {
+export default function CalendarStrip({ cal, navigate, subida = null, onIrSubida, onCerrarSubida }: {
+  cal: MesaDateDependent["calendar"];
+  navigate: (p: NavParams) => void;
+  /** Subida a señalar (solo cuando la mesa NO muestra su día; lo decide MesaController). */
+  subida?: Subida | null;
+  onIrSubida?: () => void;
+  onCerrarSubida?: () => void;
+}) {
   const { y, m, monthName, daysInMonth, byDay, today, isThisMonth, selDay, weekRange, prevMonthParam, nextMonthParam, workMode, selDate } = cal;
   const isMonthMode = workMode === "month";
   const isWeekMode = workMode === "week";
@@ -26,6 +34,9 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
   // (con transform-origin center el centro es invariante a la escala) y se re-miden
   // al cambiar de mes o redimensionar. unit = ancho de celda sin escalar.
   const stripRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
   const basesRef = useRef<{ centers: number[]; unit: number }>({ centers: [], unit: 20 });
   const rafRef = useRef<number | null>(null);
   const PEAK = 1.6;   // escala del día bajo el cursor
@@ -77,6 +88,28 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
     }
   }, []);
 
+  // Posición del globito: centro del objetivo (día o flecha) relativo al contenedor
+  // del calendario. Se re-mide al cambiar de mes/subida y al redimensionar.
+  const objetivo = subida ? objetivoGlobito(cal, subida.date) : null;
+  const [pos, setPos] = useState<{ left: number } | null>(null);
+  const objetivoClave = objetivo ? (objetivo.tipo === "dia" ? `d${objetivo.dia}` : objetivo.tipo) : "";
+  useLayoutEffect(() => {
+    if (!objetivoClave) return;
+    const medirGlobito = () => {
+      const padre = wrapRef.current?.parentElement;
+      const el = objetivoClave === "anterior" ? prevRef.current
+        : objetivoClave === "siguiente" ? nextRef.current
+        : (stripRef.current?.children[Number(objetivoClave.slice(1)) - 1] as HTMLElement | undefined);
+      if (!padre || !el) { setPos(null); return; }
+      const rp = padre.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      setPos({ left: r.left + r.width / 2 - rp.left });
+    };
+    medirGlobito();
+    window.addEventListener("resize", medirGlobito);
+    return () => window.removeEventListener("resize", medirGlobito);
+  }, [objetivoClave, y, m, daysInMonth]);
+
   return (
     // Anclado ENTRE el logo (137px reales: imagen 114 + chevron) y los botones
     // (178px) en vez de centrado a
@@ -95,7 +128,8 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
     // contenido a su sitio — visualmente idéntico, pero el zoom tiene aire.
     // pointerEvents none/auto: ese aire extra se superpone a la barra de abajo y
     // no debe robarle los clics.
-    <div className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, boxSizing: "content-box", paddingBlock: 16, marginBlock: -16, display: "flex", alignItems: "center", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 20, pointerEvents: "none" }}>
+    <>
+    <div ref={wrapRef} className="v5-calendar-wrap" style={{ position: "absolute", left: 141, right: 186, top: 0, height: 38, boxSizing: "content-box", paddingBlock: 16, marginBlock: -16, display: "flex", alignItems: "center", justifyContent: "safe center", minWidth: 0, overflow: "hidden", zIndex: 20, pointerEvents: "none" }}>
       {/* Amplificación suave al hover del conmutador día/semana/mes — mismo spring del dock. */}
       <style>{`
         .v5-day-strip::-webkit-scrollbar{display:none;}
@@ -109,9 +143,9 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
       `}</style>
       <div style={{ pointerEvents: "auto", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "inset 0 1px 0 var(--border),0 8px 32px var(--shadow)", minWidth: 0, maxWidth: "100%", height: 38, display: "flex", alignItems: "center", width: "fit-content" }}>
         <div style={{ padding: "0 6px", display: "flex", alignItems: "center", gap: 2 }}>
-          <button type="button" onClick={() => navigate({ month: prevMonthParam, date: firstOfMonthParam(prevMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>‹</button>
+          <button ref={prevRef} type="button" onClick={() => navigate({ month: prevMonthParam, date: firstOfMonthParam(prevMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>‹</button>
           <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", flexShrink: 0, width: 100, textAlign: "center" }}>{monthName} {y}</span>
-          <button type="button" onClick={() => navigate({ month: nextMonthParam, date: firstOfMonthParam(nextMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>›</button>
+          <button ref={nextRef} type="button" onClick={() => navigate({ month: nextMonthParam, date: firstOfMonthParam(nextMonthParam), view: workMode })} style={{ ...btnReset, fontSize: 11, fontWeight: 700, color: "var(--text)", padding: "1px 5px", borderRadius: 4, lineHeight: 1, background: "var(--bg-muted)", display: "flex", alignItems: "center", justifyContent: "center", height: 20, flexShrink: 0 }}>›</button>
           <button type="button" className="cal-mode-btn" title={`Mesa de trabajo ${isMonthMode ? "del mes" : isWeekMode ? "de la semana" : "del día"}`} onClick={() => navigate({ date: selDate, month: `${y}-${m}`, view: nextView })} style={{ ...btnReset, fontSize: 9, fontWeight: 700, color: "var(--lime)", padding: "2px 4px", margin: "0 4px", borderRadius: 4, border: workMode !== "day" ? "1px dashed var(--lime)" : "1px solid transparent", background: "transparent", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", flexShrink: 0, height: 28, width: 98, justifyContent: "center", lineHeight: 1.05 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span className="cal-mesa-txt" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", lineHeight: 1.05, textAlign: "left", fontSize: 9, fontWeight: 700 }}>
@@ -136,9 +170,10 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
               const isInWeek = ds >= weekRange.start && ds < weekRange.end;
               const active = workMode === "month" || (workMode === "week" && isInWeek) || (workMode === "day" && isSel);
               const info = byDay[day];
+              const señalado = objetivo?.tipo === "dia" && objetivo.dia === day;
               return (
                 <button type="button" key={day} onClick={() => navigate({ date: ds, month: `${y}-${m}`, view: workMode })}
-                  style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: active ? "var(--lime)" : "transparent", transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
+                  style={{ ...btnReset, position: "relative", width: 20, padding: "1px 0", display: "flex", flexDirection: "column", alignItems: "center", borderRadius: 3, flexShrink: 0, background: active ? "var(--lime)" : "transparent", boxShadow: señalado ? "0 0 0 1.5px var(--accent)" : undefined, transition: "transform .15s cubic-bezier(.22,1,.36,1), background .15s", willChange: "transform" }}>
                   <span style={{ fontSize: 5, textTransform: "uppercase", lineHeight: 1, color: active ? "color-mix(in srgb, var(--bg) 50%, transparent)" : "var(--text3)" }}>{wd[new Date(y, m, day).getDay()]}</span>
                   <span style={{ fontSize: 8, fontWeight: isToday || isSel ? 700 : 500, lineHeight: 1, marginTop: 1, color: isToday ? "var(--accent)" : active ? "var(--bg)" : "var(--text2)" }}>{day}</span>
                   {/* Puntos de trabajo del día (byDay de mesa-data): pendientes / aprobadas.
@@ -154,5 +189,41 @@ export default function CalendarStrip({ cal, navigate }: { cal: MesaDateDependen
         </div>
       </div>
     </div>
+    {subida && pos && objetivoClave && (
+      // Globito "tu archivo está acá" (subida-globito.ts): flota bajo la tira y apunta
+      // con su piquito al día de la subida (o a ‹ / › si ese mes no está en la tira).
+      <div role="status" style={{ position: "absolute", top: 46, left: pos.left, transform: "translateX(-50%)", zIndex: 40, pointerEvents: "auto" }}>
+        <style>{`
+          @keyframes v5-globito-flota{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+          @keyframes v5-globito-late{0%,100%{opacity:1}50%{opacity:.35}}
+          .v5-globito{animation:v5-globito-flota 2.4s ease-in-out infinite}
+          .v5-globito-punto{animation:v5-globito-late 1.4s ease-in-out infinite}
+          @media (prefers-reduced-motion: reduce){.v5-globito,.v5-globito-punto{animation:none}}
+        `}</style>
+        <div className="v5-globito" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <span aria-hidden style={{ width: 10, height: 10, background: "var(--surface)", borderLeft: "1px solid var(--border)", borderTop: "1px solid var(--border)", transform: "rotate(45deg)", marginBottom: -6, zIndex: 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 32px var(--shadow)", padding: "6px 8px 6px 10px", whiteSpace: "nowrap" }}>
+            <button type="button" onClick={onIrSubida} style={{ ...btnReset, background: "transparent", padding: 0, display: "flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 600, color: "var(--text)" }}>
+              {subida.estado === "procesando" && <span className="v5-globito-punto" style={{ width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
+              {subida.estado === "lista" && <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--green)" }} />}
+              {subida.estado === "error" && <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
+              <span>{textoGlobito(subida, objetivo)}</span>
+              {subida.estado !== "procesando" && <span style={{ color: "var(--accent)" }}>Ver</span>}
+            </button>
+            <button type="button" aria-label="Cerrar aviso" onClick={onCerrarSubida} style={{ ...btnReset, background: "transparent", padding: "0 2px", fontSize: 12, lineHeight: 1, color: "var(--text3)" }}>×</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
+}
+
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function textoGlobito(s: Subida, objetivo: ReturnType<typeof objetivoGlobito> | null): string {
+  const [, mm, dd] = s.date.split("-").map(Number);
+  const cuando = objetivo?.tipo === "dia" ? "acá" : `el ${dd} ${MESES_CORTOS[mm - 1]}`;
+  if (s.estado === "lista") return objetivo?.tipo === "dia" ? "Tu archivo está listo acá" : `Tu archivo está listo ${cuando}`;
+  if (s.estado === "error") return `Tu archivo tuvo un problema ${cuando}`;
+  return objetivo?.tipo === "dia" ? "Tu archivo está acá · procesando" : `Tu archivo está ${cuando} · procesando`;
 }

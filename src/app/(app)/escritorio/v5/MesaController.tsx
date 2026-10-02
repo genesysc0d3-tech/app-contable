@@ -12,6 +12,7 @@ import type { MesaDateDependent } from "./mesa-data";
 import type { SearchItem } from "@/lib/tree-structure";
 import { supabase } from "@/lib/supabase";
 import { publicarAvisos } from "@/lib/avisos/bus";
+import { actualizarConMesa, docsDeLaSubida, estadoConjunto, rangoIncluye, type Subida } from "./subida-globito";
 import { cadenciaDocs, cargandoTras, cargarSiSigueVigente, crearEspaciador, mismaMesa, crearRecargador, INTERVALO_LOTE_MS, INTERVALO_NORMAL_MS, TIMEOUT_CARGA_MS, type Espaciador, type Recargador } from "./mesa-frescura";
 
 // La MESA es parte de la clave (bug transversal 2026-08-27): sin ella, boletas y
@@ -82,6 +83,9 @@ export default function MesaController({
   const [, startTransition] = useTransition();
   // Rango cuya carga ATENÚA la mesa: solo el último pedido (ver cargandoTras).
   const [cargandoKey, setCargandoKey] = useState<string | null>(null);
+  // Globito "tu archivo está acá" (subida-globito.ts): la última subida y su estado.
+  const [subida, setSubida] = useState<Subida | null>(null);
+  const estadosRealtimeRef = useRef<Map<string, string | null>>(new Map());
   // Cache en memoria sembrada con el estado inicial (evita re-fetch al volver a él).
   // `vieja` (2026-09-28): tras una recarga los OTROS rangos se marcan viejos en vez de
   // borrarse — antes se vaciaba todo y la precarga volvía a pedir las otras dos vistas
@@ -297,7 +301,17 @@ export default function MesaController({
         // aún en vuelo cuenta como navegar, aunque la mesa todavía no haya cambiado.
         vigente: () => `${keyDeMesa(mesaRef.current)}#${ultimoPedidoRef.current ?? ""}`,
         cargar: async () => { const res = await cargarMesa({ date, month, view: "day", mesa: mesaActiva }); return res.ok ? res.mesa : null; },
-        guardar: (fresca) => cacheRef.current.set(key, { mesa: fresca, vieja: false }),
+        guardar: (fresca) => {
+          cacheRef.current.set(key, { mesa: fresca, vieja: false });
+          // Globito: identifica los docs de la subida con la mesa de ese día (ya pedida).
+          const docs = fresca.docsAgregados as Array<{ id: string; estado?: string | null }>;
+          setSubida((s) => {
+            if (!s || s.date !== date) return s;
+            if (s.docIds.length > 0) return actualizarConMesa(s, docs);
+            const docIds = docsDeLaSubida(docs);
+            return docIds.length > 0 ? { ...s, docIds } : s;
+          });
+        },
         aplicar: (fresca) => { ultimoPedidoRef.current = key; setCargandoKey(null); aplicarMesa(fresca); },
       });
     };
@@ -327,6 +341,8 @@ export default function MesaController({
       // empresa/mesa) re-armaba la carga al día de la subida y toda la escalera.
       try { sessionStorage.removeItem("massdte:uploaded-at"); } catch { /* sin sessionStorage */ }
       const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? mesaRef.current.selDate;
+      estadosRealtimeRef.current.clear();
+      setSubida({ date, docIds: [], estado: "procesando" });
       recargarDia(date);
       vigilar();
     };
@@ -425,7 +441,17 @@ export default function MesaController({
       .channel(`v5-mesa-${empresaId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "boletas_emitidas", filter: `empresa_id=eq.${empresaId}` }, onBoleta)
       .on("postgres_changes", { event: "*", schema: "public", table: "propuestas_ia", filter: `empresa_id=eq.${empresaId}` }, bump)
-      .on("postgres_changes", { event: "*", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` }, bump)
+      .on("postgres_changes", { event: "*", schema: "public", table: "documentos_subidos", filter: `empresa_id=eq.${empresaId}` }, (payload: { new?: { id?: string; estado?: string | null } }) => {
+        bump();
+        // Globito: el estado del doc viaja en el mismo evento (sin pedir la mesa del día).
+        const n = payload?.new;
+        if (n?.id) setSubida((s) => {
+          if (!s || !s.docIds.includes(n.id as string)) return s;
+          estadosRealtimeRef.current.set(n.id as string, n.estado ?? null);
+          const estado = estadoConjunto(s.docIds.map((id) => estadosRealtimeRef.current.get(id) ?? "procesando"));
+          return estado === s.estado ? s : { ...s, estado };
+        });
+      })
       .subscribe((status) => {
         // Observabilidad (bug 2026-08-31): Realtime falló EN SILENCIO en el
         // navegador con el servidor 100% sano y nadie se enteró. Al menos que
@@ -476,11 +502,35 @@ export default function MesaController({
     return () => { if (h) clearTimeout(h); document.removeEventListener("visibilitychange", onVisible); };
   }, [docsEnProceso, recargador]);
 
+  // ── Globito "tu archivo está acá" ──────────────────────────────────────────────
+  // Se muestra solo si la mesa que se mira NO incluye el día de la subida; se va solo
+  // al llegar a ese día (después de haberse alejado) o con la X.
+  const subidaVisible = subida !== null && !rangoIncluye(mesa.calendar, subida.date);
+  const alejadoRef = useRef(false);
+  useEffect(() => {
+    if (!subida) { alejadoRef.current = false; return; }
+    // Cualquier mesa que traiga los docs de la subida actualiza su estado (cero pedidos).
+    const docs = mesa.docsAgregados as Array<{ id: string; estado?: string | null }>;
+    const nueva = actualizarConMesa(subida, docs);
+    if (nueva !== subida) { setSubida(nueva); return; }
+    if (subidaVisible) alejadoRef.current = true;
+    else if (alejadoRef.current) { alejadoRef.current = false; setSubida(null); }
+  }, [mesa, subida, subidaVisible]);
+  const irASubida = useCallback(() => {
+    if (!subida) return;
+    const [yy, mm] = subida.date.split("-");
+    if (subida.docIds[0]) pendingOpenDoc.id = subida.docIds[0];
+    window.dispatchEvent(new CustomEvent("switch-tab", { detail: "subidos" }));
+    navigate({ view: "day", date: subida.date, month: `${yy}-${Number(mm) - 1}` });
+    window.setTimeout(() => window.dispatchEvent(new Event("massdte:try-open")), 120);
+  }, [subida, navigate]);
+  const cerrarSubida = useCallback(() => setSubida(null), []);
+
   return (
     <>
       <div style={{ position: "relative", height: 38, marginBottom: 12 }}>
         {brandSlot}
-        <CalendarStrip cal={mesa.calendar} navigate={navigate} />
+        <CalendarStrip cal={mesa.calendar} navigate={navigate} subida={subidaVisible ? subida : null} onIrSubida={irASubida} onCerrarSubida={cerrarSubida} />
         {actionsSlot}
       </div>
       <div className="app">
