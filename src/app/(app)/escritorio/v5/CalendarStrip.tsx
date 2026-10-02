@@ -134,7 +134,7 @@ export default function CalendarStrip({ cal, navigate, subida = null, onIrSubida
       <style>{`
         .v5-day-strip::-webkit-scrollbar{display:none;}
         .v5-day-strip button:focus{outline:none;}
-        .v5-day-strip button:focus-visible{outline:1.5px solid var(--accent);outline-offset:1px;}
+        .v5-day-strip button:focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px;}
         .cal-mode-btn{transition:transform .24s cubic-bezier(.34,1.56,.64,1);}
         .cal-mode-btn:hover{transform:scale(1.07);}
         .cal-mode-btn:active{transform:scale(.98);}
