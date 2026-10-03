@@ -29,7 +29,8 @@ async function main() {
     const sello = r?.censo?.verificacion?.tipo ?? "capa4";
     const exacta = filasOk === verdad.filas.length && pe.length === verdad.filas.length;
     total++; if (exacta && (sello === "saldo" || sello === "total_banco")) ok++;
-    console.log(`${id}\tfilas ${filasOk}/${verdad.filas.length}${pe.length !== verdad.filas.length ? ` (leídas ${pe.length})` : ""}\tsello ${sello}\tcuadre banco ${verdad.cuadra ? "sí" : "no"}`);
+    const camino = r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`;
+    console.log(`${id}\t${camino}\tfilas ${filasOk}/${verdad.filas.length}${pe.length !== verdad.filas.length ? ` (leídas ${pe.length})` : ""}\tsello ${sello}\tcuadre banco ${verdad.cuadra ? "sí" : "no"}`);
   }
   console.log(`exactas y selladas: ${ok}/${total}`);
 }

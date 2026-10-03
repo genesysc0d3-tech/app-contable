@@ -37,6 +37,7 @@ import {
 } from "./juez-banco";
 import { decidirDosOpiniones, estructuraIaActiva, mapaPorIA, type EvaluacionMapa } from "./estructura-ia";
 import { cambioDeEncabezado } from "./cambio-formato";
+import { detectarFormatoConocido } from "./formatos-conocidos";
 import {
   getAdapterByFingerprint,
   getAdaptersConfirmadosEmpresa,
@@ -230,6 +231,24 @@ export async function parseExcelWithOrchestrator(
       fallas.push(`cache[${sheetName}]: los títulos de la hoja contradicen la dirección del mapa guardado`);
       if (!cached.creado_por_empresa_id) cached = null;
       else titulosAlReves = true;
+    }
+    // Layer 1: FORMATO CONOCIDO (formatos-conocidos.ts): huella completa →
+    // mapa registrado, sin adivinar. El juez sigue mandando: sin prueba de
+    // saldo/total no hay sello. Si la EMPRESA ya guardó su propio mapa para esta
+    // huella (corrigió columnas en el popup), manda el suyo.
+    const conocido = cached?.creado_por_empresa_id ? null : detectarFormatoConocido(rows);
+    if (conocido) {
+      const lectura = leer(ctx, conocido.cfg, fallas, `conocido:${conocido.formato.id}`);
+      if (lectura) {
+        lectura.warnings.push(`formato_conocido: ${conocido.formato.id}`);
+        return terminar(lectura, 1, null, {
+          adapter_id: null,
+          estado: "confirmado",
+          nuevo: false,
+          confirmado_por: "formato_conocido",
+          formato_conocido: conocido.formato.id,
+        });
+      }
     }
     if (cached) {
       const delCliente = !!cached.creado_por_empresa_id && cached.estado === "confirmado" && cached.confirmado_por === "cliente";
