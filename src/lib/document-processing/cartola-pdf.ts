@@ -48,7 +48,7 @@ export async function leerCartolaPdf(args: {
     ? { summary: "PDF → error del lector, sigue el flujo de texto", metadata: { tipo: "error", error: error ?? "sin_diagnostico", al_lector: false } }
     : {
       summary: `PDF → ${d.tipo}${d.sello ? ` (${d.sello})` : ""}`,
-      metadata: { tipo: d.tipo, motivo: d.motivo, senales: d.senales.slice(0, 12), sello: d.sello ?? null, filas: d.filas ?? null, capa: d.capa ?? null, paginas: d.paginas, ms: d.ms, al_lector: !!r },
+      metadata: { tipo: d.tipo, motivo: d.motivo, marca_banco: d.marca_banco ?? null, senales: d.senales.slice(0, 12), sello: d.sello ?? null, filas: d.filas ?? null, capa: d.capa ?? null, paginas: d.paginas, ms: d.ms, al_lector: !!r },
     };
   await args.registrar(evento).catch(() => {});
   return r;

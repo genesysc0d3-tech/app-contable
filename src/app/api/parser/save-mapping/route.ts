@@ -57,7 +57,9 @@ export async function POST(request: Request) {
   if (archivo.pdfSinMarcaBanco && body.es_banco !== true) {
     return NextResponse.json({ error: "Confirma si este PDF es de tu banco", pregunta_banco: true }, { status: 422 });
   }
-  const esBanco = archivo.pdfSinMarcaBanco && body.es_banco === true;
+  // Ya confirmado antes para el formato: la confirmación viaja al mapa nuevo
+  // (aunque cambien las columnas, la fila nueva gana en la caché).
+  const esBanco = archivo.bancoConfirmado || (archivo.pdfSinMarcaBanco && body.es_banco === true);
   const { resumen, rows } = juzgarArchivo(archivo.buf, config, { pdfSinMarcaBanco: archivo.pdfSinMarcaBanco });
   if (!resumen.valido || !rows) {
     return NextResponse.json({ error: resumen.error ?? "Con estas columnas no se puede leer la cartola" }, { status: 422 });

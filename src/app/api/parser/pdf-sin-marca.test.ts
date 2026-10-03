@@ -156,3 +156,57 @@ describe("la respuesta del cliente vale para los siguientes PDFs de su formato (
     expect(await parsePdfCartola(u, { empresa_id: EMPRESA, documento_id: "doc-nuevo" })).toBeNull();
   });
 });
+
+describe("el popup no vuelve a preguntar lo que el cliente ya respondió", () => {
+  const confirmado = (cfg: AdapterConfig, empresa = EMPRESA) => ({
+    id: "ad-propio", fingerprint: "x", source: "manual", estado: "confirmado", confirmado_por: "cliente", confianza: 1,
+    creado_por_empresa_id: empresa, config: { ...cfg, revision_cliente: { documento_id: "doc-viejo", firma: "", es_banco: true } },
+  });
+  it("/resumen y /preview: formato ya confirmado «es de mi banco» → sin pregunta y comprobada", async () => {
+    const u = await pdf(); usar(u);
+    const cfg = await mapaDe(u);
+    adapterCache = confirmado(cfg);
+    const { POST } = await import("./resumen/route");
+    const j = await (await POST(post("/api/parser/resumen", { documento_id: "doc-1", config: cfg }))).json();
+    expect(j.sinMarcaBanco).toBeUndefined();
+    expect(j.estado).toBe("comprobada");
+    const prev = await import("./preview/route");
+    const p = await (await prev.POST(post("/api/parser/preview", { documento_id: "doc-1" }))).json();
+    expect(p.sinMarcaBanco).toBeUndefined();
+  });
+  it("/preview: sin confirmación → sinMarcaBanco (la pregunta aparece)", async () => {
+    const u = await pdf(); usar(u);
+    const prev = await import("./preview/route");
+    const p = await (await prev.POST(post("/api/parser/preview", { documento_id: "doc-1" }))).json();
+    expect(p.sinMarcaBanco).toBe(true);
+  });
+  it("/save-mapping: ya confirmado → guarda sin preguntar y la confirmación viaja al mapa", async () => {
+    const u = await pdf(); usar(u);
+    const cfg = await mapaDe(u);
+    adapterCache = confirmado(cfg);
+    const { POST } = await import("./save-mapping/route");
+    const res = await POST(post("/api/parser/save-mapping", { documento_id: "doc-1", config: cfg }));
+    expect(res.status).toBe(200);
+    expect(upserts[0]).toMatchObject({ config: { revision_cliente: { documento_id: "doc-1", es_banco: true } } });
+  });
+  it("la confirmación de OTRA empresa no salta la pregunta", async () => {
+    const u = await pdf(); usar(u);
+    const cfg = await mapaDe(u);
+    adapterCache = confirmado(cfg, "otra-empresa");
+    const { POST } = await import("./resumen/route");
+    expect((await (await POST(post("/api/parser/resumen", { documento_id: "doc-1", config: cfg }))).json()).sinMarcaBanco).toBe(true);
+  });
+});
+
+describe("evento pdf_ruta (B1)", () => {
+  it("marca_banco es campo propio del evento", async () => {
+    const { leerCartolaPdf } = await import("@/lib/document-processing/cartola-pdf");
+    const eventos: { metadata: Record<string, unknown> }[] = [];
+    await leerCartolaPdf({
+      pdf: new Uint8Array(), documento_id: "d", empresa_id: EMPRESA,
+      parse: async (_p, o) => { o.diagnostico({ tipo: "cartola", motivo: "senales_cartola", senales: [], marca_banco: null, paginas: 1, ms: 1 }); return null; },
+      registrar: async (e) => { eventos.push(e); },
+    });
+    expect(eventos[0].metadata).toHaveProperty("marca_banco", null);
+  });
+});
