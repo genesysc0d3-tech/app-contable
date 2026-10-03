@@ -164,7 +164,7 @@ export default function CalendarStrip({ cal, navigate, subida = null, onIrSubida
               con scroll — así el 31 nunca desaparece. El dock se re-mide solo
               (medir() usa anchos reales al entrar el mouse y al redimensionar).
               El overflow queda solo como último recurso bajo ~450px de carril. */}
-          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 664px", minWidth: 0, paddingRight: 6, paddingBlock: 14, marginBlock: -14, scrollbarWidth: "none" }}>
+          <div ref={stripRef} onMouseEnter={medir} onMouseMove={onStripMove} onMouseLeave={onStripLeave} className="v5-day-strip" style={{ display: "flex", gap: 1, overflowX: "auto", overflowY: "hidden", flex: "0 1 664px", minWidth: 0, paddingRight: 6, paddingLeft: 6, marginLeft: -6, paddingBlock: 14, marginBlock: -14, scrollbarWidth: "none" }}>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
               const ds = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const isSel = day === selDay;
