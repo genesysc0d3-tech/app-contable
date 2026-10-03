@@ -25,6 +25,13 @@ export interface RutaPdf {
   formato_conocido: string | null;
   /** La grilla armada (vacía si no hay tabla de movimientos). */
   rows: Row[];
+  /**
+   * Marca PROPIA de banco (por qué el PDF es del banco y no de un tercero):
+   * "formato_conocido" · "n_cuenta_banco" · "titulo_cartola" · "nombre_banco".
+   * null = sin marca propia: aunque el router la deje pasar como cartola, el
+   * lector NUNCA la sella (queda provisoria → popup/revisión).
+   */
+  marca_banco: string | null;
 }
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -88,6 +95,23 @@ function esEncabezadoBancario(t: string): boolean {
     && /\b(cargos?|abonos?|debitos?|creditos?|giros?|depositos?|egresos?|ingresos?|monto|valor|importe)\b/.test(t);
 }
 
+/**
+ * Nombre de un banco o fintech chilena, SOLO en el ENCABEZADO (las líneas antes
+ * de la tabla): en el pie sale publicidad ("Paga con Mercado Pago") y en una
+ * glosa, la contraparte ("TRANSF A BANCO DE CHILE"). Los nombres genéricos
+ * ("Security", "Internacional", "Estado", "Falabella") solo con "Banco".
+ */
+const RE_NOMBRE_BANCO = new RegExp([
+  String.raw`\bbanco (de chile|edwards|estado|santander|bci|de credito e inversiones|itau|scotiabank|bice|security|falabella|ripley|consorcio|internacional|btg( pactual)?|do brasil|de la nacion argentina|hsbc|bbva|corpbanca)\b`,
+  String.raw`\bbancoestado\b|\bscotiabank\b|\bitau\b|\bbci\b|\bbice\b|\bcoopeuch\b|\bmercado ?pago\b|\btenpo\b|\bmach\b|\bglobal ?66\b|\bsantander\b`,
+].join("|"));
+/**
+ * Una línea que da los datos para PAGARLE a un tercero ("Depositar en Banco de
+ * Chile Cuenta Corriente N° 123 a nombre de…"): típica de un estado de cuenta
+ * de proveedor. No es marca de que el PDF lo emitió el banco.
+ */
+const RE_INSTRUCCION_PAGO = /\b(deposit|transfer|pag(ar|ue|ues|o a)\b|abon(ar|e)\b|datos (bancarios|para|de pago)|a nombre de|cancelar|remitir)/;
+
 /** Factura/boleta con N° en las GLOSAS de la mayoría de los movimientos: estado de cuenta de un proveedor, no del banco. */
 const RE_GLOSA_DTE = /\b(factura|boleta|nota de (credito|debito))( electronica)?\s*(n[°º.]?\s*)?\d{2,}/;
 
@@ -101,6 +125,9 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
   // aunque traiga fecha y monto ("Fecha facturación 15/09 · Pago mínimo $ x").
   const fueraIdx: number[] = [];
   const titulo: string[] = [];
+  // Encabezado = lo de ANTES de la tabla en cada página (o las 3 primeras
+  // líneas de una página sin tabla). Ahí, y solo ahí, vale el nombre del banco.
+  const encabezadoIdx: number[] = [];
   let encabezado = false;
   let movs = 0;
   const paginas = [...new Set(lineas.map((l) => l.pagina))];
@@ -140,6 +167,7 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
       });
     }
     idx.forEach((i, k) => {
+      if (desde >= 0 ? k < desde : k < 3) encabezadoIdx.push(i);
       if (esMov[k] && (h < 0 || k > h)) movs++;
       if (desde < 0 || k < desde || k > hasta) fueraIdx.push(i);
     });
@@ -154,18 +182,27 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
   // Estado de cuenta de un proveedor: casi TODAS las glosas son facturas con N°
   // y no hay saldo del banco. Una cartola B2B con muchos "PAGO FACTURA 1234"
   // trae saldo anterior/inicial y sigue siendo cartola.
-  // Facturas en las glosas (vueltas 3-4). Marca de banco = N° de cuenta
-  // corriente/vista/RUT o título de cartola; o un "N° de cuenta" sin tipo junto a
-  // "Saldo anterior" y títulos bancarios (cartola Pyme). Sin marca de banco:
-  // estados cortos (≤4 movimientos) con ≥40% de facturas, o ≥60% en los largos
-  // (una cartola B2B trae 35-40% de "PAGO FACTURA N°"; un proveedor, 70%+). Con
+  // MARCA PROPIA DE BANCO (vuelta 6, 2026-10-03): lo que dice que el PDF lo
+  // emitió un banco y no un tercero. Formato conocido; N° de cuenta
+  // corriente/vista/RUT (fuera de una instrucción de pago "deposite en…"); título
+  // de cartola de cuenta; o el nombre de un banco/fintech en el ENCABEZADO. Un
+  // "N° de cuenta" sin tipo, "Saldo anterior" o los títulos Fecha/Cargo/Abono/
+  // Saldo NO son marca propia: un estado de cuenta de proveedor los trae igual.
+  const sinInstruccion = (t: string) => !RE_INSTRUCCION_PAGO.test(t);
+  const reDe = (id: string) => FUERTES.find((f) => f.id === id)!.re;
+  const marcaBanco: string | null = conocido ? "formato_conocido"
+    : fuera.some((t) => sinInstruccion(t) && reDe("n_cuenta_banco").test(t)) ? "n_cuenta_banco"
+    : fuertes.includes("titulo_cartola") ? "titulo_cartola"
+    : encabezadoIdx.some((i) => { const t = texto(lineas[i]); return sinInstruccion(t) && RE_NOMBRE_BANCO.test(t); }) ? "nombre_banco"
+    : null;
+  // Facturas en las glosas (vueltas 3-4-6). SIN marca propia de banco, desde el
+  // 20% de glosas con Factura/Boleta/NC/ND N° ya no se distingue de un estado de
+  // cuenta de proveedor (una cartola B2B trae 35-40% de "PAGO FACTURA N°", un
+  // proveedor ambiguo 40-59%): → "otro" (la IA, como antes del lector). CON
   // marca: solo ≥80% y sin saldo inicial. Si calza un formato conocido, no aplica.
-  const nCuentaGenerico = fuera.some((t) => /\bn(umero|ro\.?|[°º])\s*(de )?cuenta\b(?! (de |del )?(cliente|proveedor))/.test(t));
-  const marcaDeBanco = fuertes.includes("n_cuenta_banco") || fuertes.includes("titulo_cartola")
-    || (nCuentaGenerico && fuertes.includes("saldo_inicial") && encabezado);
   const pct = movs ? glosasDte / movs : 0;
-  const muchasFacturas = !conocido && glosasDte >= 2 && (
-    (!marcaDeBanco && ((movs <= 4 && pct >= 0.4) || (movs > 4 && pct >= 0.6)))
+  const muchasFacturas = !conocido && glosasDte >= 1 && (
+    (!marcaBanco && pct >= 0.2)
     || (glosasDte >= 3 && pct >= 0.8 && !fuertes.includes("saldo_inicial")));
   if (muchasFacturas) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
   // Señales de TÍTULO: no ganan si el PDF calza un formato conocido, ni sobre una
@@ -184,8 +221,9 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
     ...fuertes, ...debiles,
     ...(encabezado ? ["encabezado_bancario"] : []),
     ...(conocido ? [`conocido:${conocido.formato.id}`] : []),
+    ...(marcaBanco ? [`marca:${marcaBanco}`] : ["sin_marca_banco"]),
   ];
-  const base = { senales, formato_conocido: conocido?.formato.id ?? null, rows };
+  const base = { senales, formato_conocido: conocido?.formato.id ?? null, rows, marca_banco: marcaBanco };
 
   // Primero lo que NO es cartola (prioridad pedida): una sola familia → ese tipo;
   // varias → "otro".

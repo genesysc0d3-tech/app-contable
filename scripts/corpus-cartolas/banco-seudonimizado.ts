@@ -20,7 +20,9 @@ async function main() {
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
     const { id, items, verdad } = JSON.parse(readFileSync(join(dir, f), "utf8")) as { id: string; items: ItemPdf[]; verdad: Verdad };
     const rows = grillaDesdeItems(items);
-    const r = rows.length ? await parseExcel(libroDesdeGrilla(rows)) : null;
+    const ruta = clasificarPdf(items);
+    // Mismo trato que la cola: sin marca propia de banco, el lector no sella.
+    const r = rows.length ? await parseExcel(libroDesdeGrilla(rows), { origen: "pdf", pdf_sin_marca_banco: !ruta.marca_banco }) : null;
     const pe = r?.preExtracted ?? [];
     const filasOk = pe.filter((m, i) => {
       const v = verdad.filas[i];
@@ -30,8 +32,7 @@ async function main() {
     const sello = r?.censo?.verificacion?.tipo ?? "capa4";
     const exacta = filasOk === verdad.filas.length && pe.length === verdad.filas.length;
     total++; if (exacta && (sello === "saldo" || sello === "total_banco")) ok++;
-    const ruta = clasificarPdf(items);
-    const camino = `router ${ruta.tipo}(${ruta.motivo}) · ` + (r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`);
+    const camino = `router ${ruta.tipo}(${ruta.motivo}, marca ${ruta.marca_banco ?? "—"}) · ` + (r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`);
     console.log(`${id}\t${camino}\tfilas ${filasOk}/${verdad.filas.length}${pe.length !== verdad.filas.length ? ` (leídas ${pe.length})` : ""}\tsello ${sello}\tcuadre banco ${verdad.cuadra ? "sí" : "no"}`);
   }
   console.log(`exactas y selladas: ${ok}/${total}`);

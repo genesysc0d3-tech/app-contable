@@ -99,6 +99,13 @@ interface ContextoHoja {
   resumenOtraHoja: ResumenImpreso | null;
   /** Filas (0-based en `rows`) ocultas o con una columna oculta, que traen plata. */
   ocultas: { filas: number[]; columnas: number[] };
+  /**
+   * La grilla viene de un PDF SIN marca propia de banco (ni formato conocido, ni
+   * N° de cuenta corriente/vista/RUT, ni título de cartola, ni nombre del banco
+   * en el encabezado): un estado de cuenta de proveedor también cuadra por
+   * saldo. Se lee, pero NUNCA se sella (queda provisoria → popup/revisión).
+   */
+  pdfSinMarcaBanco?: boolean;
   /** Las otras hojas del libro (primeras filas), para formatos con resumen en otra hoja. */
   hojas: { nombre: string; rows: Row[] }[];
   /** Encabezado del período tomado de otra hoja del MISMO export (solo formatos conocidos que lo declaran). */
@@ -124,7 +131,11 @@ export async function parseExcelWithOrchestrator(
    * persiste un formato aprendido ni mueve la confianza de uno guardado, salvo
    * que la lectura quede SELLADA por el banco (saldo/total).
    */
-  opts?: { documento_id?: string; empresa_id?: string; origen?: "pdf" }
+  opts?: {
+    documento_id?: string; empresa_id?: string; origen?: "pdf";
+    /** PDF sin marca PROPIA de banco (pdf-router.ts `marca_banco` null): se lee, NUNCA se sella. */
+    pdf_sin_marca_banco?: boolean;
+  }
 ): Promise<{ content: string; result: OrchestratorResult }> {
   const start = Date.now();
   // Por qué falló cada capa, para el log y la alarma de capa 4. Antes tryApply
@@ -151,7 +162,7 @@ export async function parseExcelWithOrchestrator(
     }
 
     const fingerprint = computeFingerprint(rows);
-    const ctx = contextoDeHoja(workbook, sheetName, rows);
+    const ctx: ContextoHoja = { ...contextoDeHoja(workbook, sheetName, rows), pdfSinMarcaBanco: opts?.origen === "pdf" && !!opts.pdf_sin_marca_banco };
 
     const terminar = async (
       lectura: Lectura,
@@ -159,6 +170,11 @@ export async function parseExcelWithOrchestrator(
       adapterId: string | null,
       mapa: MapaUsado,
     ): Promise<{ content: string; result: OrchestratorResult }> => {
+      // Defensa en profundidad: ninguna rama sella un PDF sin marca de banco.
+      if (ctx.pdfSinMarcaBanco && esSelloDelBanco(lectura.verificacion)) {
+        lectura.verificacion = { ...SIN_MARCA_DE_BANCO, ...(lectura.verificacion.contradice ? { contradice: lectura.verificacion.contradice } : {}) };
+        lectura.censo.verificacion = lectura.verificacion;
+      }
       const { titulos: _t, revision_cliente: _r, cuenta_huella: _c, ...mapaUsado } = lectura.cfg;
       const censo: CensoCartola = {
         ...lectura.censo,
@@ -657,6 +673,14 @@ export function juzgarMapaEnLibro(
   };
 }
 
+const esSelloDelBanco = (v: VerificacionCartola) => v.tipo === "saldo" || v.tipo === "total_banco";
+/** El sello de un PDF sin marca propia de banco (vuelta 6): ninguno. */
+const SIN_MARCA_DE_BANCO: VerificacionCartola = {
+  tipo: "sin_comprobar",
+  alerta: true,
+  detalle: "El PDF no dice de qué banco es (ni banco, ni N° de cuenta corriente/vista, ni título de cartola): podría ser el estado de cuenta de un proveedor. Revisa cómo la leímos",
+};
+
 /** Aplica un mapa, valida y SELLA. null = no pasó el validador (con el porqué en `fallas`). */
 function leer(
   ctx: ContextoHoja,
@@ -753,6 +777,7 @@ function leer(
       };
     }
   }
+  if (ctx.pdfSinMarcaBanco && esSelloDelBanco(verificacion)) verificacion = SIN_MARCA_DE_BANCO;
   if (contradice && !verificacion.contradice) verificacion = { ...verificacion, contradice };
   const saldos = saldosDeLaCartola(lines, ctx.resumen);
   return {

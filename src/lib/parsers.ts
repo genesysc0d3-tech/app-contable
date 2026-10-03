@@ -15,7 +15,7 @@ import type { CensoCartola, PreExtractedMovimiento } from "./parsers/types";
  */
 export async function parseExcel(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string; empresa_id?: string; origen?: "pdf" }
+  opts?: { documento_id?: string; empresa_id?: string; origen?: "pdf"; pdf_sin_marca_banco?: boolean }
 ): Promise<{
   content: string;
   preExtracted: PreExtractedMovimiento[] | null;
@@ -77,7 +77,12 @@ export async function parsePdfCartola(
   }
   let r: Awaited<ReturnType<typeof parseExcel>>;
   try {
-    r = await parseExcel(libroDesdeGrilla(ruta.rows), { documento_id: opts?.documento_id, empresa_id: opts?.empresa_id, origen: "pdf" });
+    // Sin marca PROPIA de banco (formato conocido, N° de cuenta corriente/vista/
+    // RUT, título de cartola, nombre del banco en el encabezado) el lector lee,
+    // pero NUNCA sella: podría ser el estado de cuenta de un proveedor que cuadra.
+    r = await parseExcel(libroDesdeGrilla(ruta.rows), {
+      documento_id: opts?.documento_id, empresa_id: opts?.empresa_id, origen: "pdf", pdf_sin_marca_banco: !ruta.marca_banco,
+    });
   } catch (error) {
     const { PlantillaFacturasEnCartolaError } = await import("./parsers/orchestrator");
     if (!(error instanceof PlantillaFacturasEnCartolaError)) throw error;

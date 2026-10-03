@@ -60,7 +60,7 @@ describe("reglas del router (unidad)", () => {
       .toMatchObject({ tipo: "otro", motivo: "senales_de_varios_tipos" });
   });
   it("una glosa «PAGO FACTURA» o «TRANSFERENCIA A» dentro de la tabla NO es señal de factura/comprobante", () => {
-    const t = [...linea(740, ["Cartola", 40], ["Saldo anterior", 140]), ...tablaBancaria,
+    const t = [...linea(752, ["Cuenta Corriente N° 0001234567", 40]), ...linea(740, ["Cartola", 40], ["Saldo anterior", 140]), ...tablaBancaria,
       ...linea(664, ["03/09/2026", 40], ["Pago factura electrónica 123 monto transferido", 100], ["$ 100", 300], ["$ 9.400", 460])];
     expect(clasificarPdf(t).tipo).toBe("cartola");
   });
@@ -223,13 +223,100 @@ describe("revisión adversarial del router", () => {
     it(`B2B ${n} movs / ${f} «PAGO FACTURA N°» con «Cuenta Corriente N°» → cartola`, () => {
       expect(tipo([...encabezadoSinTipo("Cuenta Corriente N° 0001234567"), ...conFacturas(n, f)])).toBe("cartola");
     });
-    it(`B2B ${n} movs / ${f} facturas con «N° de cuenta» sin tipo + saldo anterior + títulos bancarios → cartola`, () => {
-      expect(tipo([...encabezadoSinTipo("N° de cuenta 0001234567"), ...conFacturas(n, f)])).toBe("cartola");
+    // Vuelta 6: un «N° de cuenta» sin tipo, «Saldo anterior» y los títulos
+    // bancarios NO son marca propia de banco (un proveedor los trae igual): con
+    // ≥20% de facturas en las glosas ya no se distingue → otro (la IA).
+    it(`${n} movs / ${f} facturas con «N° de cuenta» sin tipo + saldo anterior + títulos bancarios → no cartola (sin marca propia)`, () => {
+      expect(tipo([...encabezadoSinTipo("N° de cuenta 0001234567"), ...conFacturas(n, f)])).not.toBe("cartola");
     });
-    it(`${n} movs / ${f} facturas SIN N° de cuenta → ${n <= 4 ? "no cartola (estado corto de proveedor)" : "cartola (B2B)"}`, () => {
-      const r = tipo([...hdr.filter((i) => i.str !== "CARTOLA CUENTA CORRIENTE"), ...L(780, ["Movimientos", 40]), ...conFacturas(n, f)]);
-      if (n <= 4) expect(r).not.toBe("cartola");
-      else expect(r).toBe("cartola");
+    it(`${n} movs / ${f} facturas SIN N° de cuenta → no cartola (sin marca propia)`, () => {
+      expect(tipo([...hdr.filter((i) => i.str !== "CARTOLA CUENTA CORRIENTE"), ...L(780, ["Movimientos", 40]), ...conFacturas(n, f)])).not.toBe("cartola");
     });
   }
+});
+
+// Vuelta 6 (2026-10-03): el sello de una cartola PDF exige que sea BANCARIA de
+// verdad. Riesgo residual de la revisión final: un estado de cuenta de PROVEEDOR
+// ambiguo (40-59% «Factura N°», «Saldo anterior», Fecha/Cargo/Abono/Saldo, sin
+// marca de banco) entraba al lector y salía sellado por saldo.
+describe("vuelta 6: proveedor ambiguo y marca propia de banco", () => {
+  const L = (y: number, ...c: [string, number][]): ItemPdf[] => c.map(([str, x]) => ({ str, x, y, w: str.length * 4, pagina: 1 }));
+  /** Tabla con saldo corrido que CUADRA (Fecha/Detalle/Cargo/Abono/Saldo). */
+  function tabla(n: number, f: number, glosaFactura = (i: number) => `Factura N° ${8000 + i}`) {
+    const out: ItemPdf[] = [...L(700, ["Fecha", 40], ["Detalle", 100], ["Cargo", 300], ["Abono", 380], ["Saldo", 460])];
+    let s = 100000;
+    for (let i = 0; i < n; i++) {
+      const m = 1000 + i * 37; const c = i % 2 === 0; s += c ? -m : m;
+      out.push(...L(688 - 12 * i, [`${String(1 + (i % 28)).padStart(2, "0")}/09/2026`, 40], [i < f ? glosaFactura(i) : `Pago recibido ${i}`, 100], [`$ ${m.toLocaleString("es-CL")}`, c ? 300 : 380], [`$ ${s.toLocaleString("es-CL")}`, 460]));
+    }
+    return out;
+  }
+  const saldoAnterior = L(752, ["Saldo anterior", 40], ["$ 100.000", 140]);
+  const proveedor = (n: number, f: number) => [...L(780, ["Distribuidora Ejemplo Ltda.", 40]), ...L(766, ["Estado de cuenta", 40]), ...saldoAnterior, ...tabla(n, f)];
+  const ruta = (it: ItemPdf[]) => clasificarPdf(it);
+
+  for (const [n, f] of [[10, 5], [20, 9]] as const) {
+    it(`proveedor ambiguo ${n}/${f} «Factura N°» + «Saldo anterior», sin marca de banco → otro`, () => {
+      expect(ruta(proveedor(n, f))).toMatchObject({ tipo: "otro", motivo: "senal_facturas_en_glosas", marca_banco: null });
+    });
+    it(`misma tabla ${n}/${f} CON «Banco X / Cuenta Corriente N°» → cartola`, () => {
+      const r = ruta([...L(780, ["Banco Santander", 40]), ...L(766, ["Cuenta Corriente N° 0001234567", 40]), ...saldoAnterior, ...tabla(n, f)]);
+      expect(r).toMatchObject({ tipo: "cartola", marca_banco: "n_cuenta_banco" });
+    });
+  }
+  it("el nombre del banco SOLO en el encabezado es marca propia (BancoEstado, Mercado Pago, Tenpo, Coopeuch…)", () => {
+    for (const banco of ["BancoEstado", "Banco de Chile", "Mercado Pago", "Tenpo", "Coopeuch", "Banco Security", "Global66", "MACH"]) {
+      expect({ banco, r: ruta([...L(780, [banco, 40]), ...saldoAnterior, ...tabla(10, 5)]).marca_banco }).toEqual({ banco, r: "nombre_banco" });
+    }
+  });
+  it("el nombre de un banco en el PIE (publicidad) o en una GLOSA no es marca → proveedor sigue siendo otro", () => {
+    expect(ruta([...proveedor(10, 5), ...L(40, ["Paga con Mercado Pago o Banco de Chile", 40])]).tipo).toBe("otro");
+    expect(ruta([...proveedor(10, 5).filter((i) => i.y !== 688), ...L(688, ["01/09/2026", 40], ["TRANSF A BANCO DE CHILE", 100], ["$ 1.000", 300], ["$ 99.000", 460])]).tipo).toBe("otro");
+  });
+  it("«Depositar en Banco de Chile, Cuenta Corriente N° …» (datos para pagarle al proveedor) no es marca → otro", () => {
+    const it2 = [...L(790, ["Depositar en Banco de Chile Cuenta Corriente N° 0001234567 a nombre de Distribuidora Ejemplo", 40]), ...proveedor(10, 5)];
+    expect(ruta(it2)).toMatchObject({ tipo: "otro", marca_banco: null });
+  });
+  it("«Banco Internacional» / «Security» genéricos: solo con «Banco»", () => {
+    expect(ruta([...L(780, ["Seguridad Internacional Ltda.", 40]), ...saldoAnterior, ...tabla(10, 5)]).marca_banco).toBeNull();
+  });
+  it("cartola pyme con 40% «PAGO FACTURA» y marca de banco → cartola, y el lector la SELLA", async () => {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ unit: "pt", format: "a4" }); doc.setFontSize(8);
+    doc.text("Banco Ejemplo - CARTOLA CUENTA CORRIENTE", 40, 40);
+    doc.text("Cuenta Corriente N° 0001234567", 40, 54);
+    doc.text("Saldo anterior", 40, 68); doc.text("$ 1.000.000", 140, 68);
+    ["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"].forEach((x, i) => doc.text(x, [40, 110, 330, 400, 470][i], 94));
+    let s = 1_000_000;
+    for (let i = 0; i < 10; i++) {
+      const m = 50_000 + i * 1_370; const c = i % 2 === 0; s += c ? -m : m;
+      [`${String(1 + i).padStart(2, "0")}/09/2026`, i < 4 ? `PAGO FACTURA N° ${2000 + i}` : `Transferencia ${i}`, c ? `$ ${m.toLocaleString("es-CL")}` : "", c ? "" : `$ ${m.toLocaleString("es-CL")}`, `$ ${s.toLocaleString("es-CL")}`]
+        .forEach((t, k) => t && doc.text(t, [40, 110, 330, 400, 470][k], 108 + i * 13));
+    }
+    let d: DiagnosticoPdf | null = null;
+    const r = await parsePdfCartola(new Uint8Array(doc.output("arraybuffer")), { diagnostico: (x) => { d = x; } });
+    expect(d).toMatchObject({ tipo: "cartola" });
+    expect(d!.senales).toContain("marca:n_cuenta_banco");
+    expect(r?.preExtracted?.length).toBe(10);
+    expect(r?.censo?.verificacion?.tipo).toBe("saldo");
+  });
+  it("PDF SIN marca de banco que llega al lector (cuadra por saldo) → se lee, NO se sella", async () => {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ unit: "pt", format: "a4" }); doc.setFontSize(8);
+    doc.text("Movimientos", 40, 40);
+    doc.text("Saldo anterior", 40, 54); doc.text("$ 1.000.000", 140, 54);
+    ["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"].forEach((x, i) => doc.text(x, [40, 110, 330, 400, 470][i], 80));
+    let s = 1_000_000;
+    for (let i = 0; i < 10; i++) {
+      const m = 50_000 + i * 1_370; const c = i % 2 === 0; s += c ? -m : m;
+      [`${String(1 + i).padStart(2, "0")}/09/2026`, `Transferencia ${i}`, c ? `$ ${m.toLocaleString("es-CL")}` : "", c ? "" : `$ ${m.toLocaleString("es-CL")}`, `$ ${s.toLocaleString("es-CL")}`]
+        .forEach((t, k) => t && doc.text(t, [40, 110, 330, 400, 470][k], 94 + i * 13));
+    }
+    let d: DiagnosticoPdf | null = null;
+    const r = await parsePdfCartola(new Uint8Array(doc.output("arraybuffer")), { diagnostico: (x) => { d = x; } });
+    expect(d).toMatchObject({ tipo: "cartola" });
+    expect(d!.senales).toContain("sin_marca_banco");
+    expect(r?.preExtracted?.length).toBe(10);
+    expect(r?.censo?.verificacion).toMatchObject({ tipo: "sin_comprobar", alerta: true });
+  });
 });

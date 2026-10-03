@@ -237,17 +237,18 @@ export async function cartolaPdfSintetica(opts: OpcionesPdf): Promise<CartolaPdf
 export type TipoNegativo =
   | "factura_sii" | "comprobante_transferencia" | "comprobante_facturas_pagadas" | "nomina_transferencias"
   | "tarjeta_credito" | "rcv_libro_compras" | "liquidacion_sueldo" | "estado_cuenta_cliente" | "cartola_linea_credito"
-  | "estado_cuenta_proveedor" | "estado_cuenta_proveedor_senores";
+  | "estado_cuenta_proveedor" | "estado_cuenta_proveedor_senores" | "estado_cuenta_proveedor_ambiguo";
 export const TIPOS_NEGATIVOS: TipoNegativo[] = [
   "factura_sii", "comprobante_transferencia", "comprobante_facturas_pagadas", "nomina_transferencias",
   "tarjeta_credito", "rcv_libro_compras", "liquidacion_sueldo", "estado_cuenta_cliente", "cartola_linea_credito",
-  "estado_cuenta_proveedor", "estado_cuenta_proveedor_senores",
+  "estado_cuenta_proveedor", "estado_cuenta_proveedor_senores", "estado_cuenta_proveedor_ambiguo",
 ];
 /** Tipo que el router debería decir (o "otro" si no es uno de los 4 tipos con flujo propio). */
 export const ESPERADO_NEGATIVO: Record<TipoNegativo, string> = {
   factura_sii: "factura", comprobante_transferencia: "comprobante", comprobante_facturas_pagadas: "comprobante",
   nomina_transferencias: "comprobante", tarjeta_credito: "tarjeta", rcv_libro_compras: "otro", liquidacion_sueldo: "otro",
   estado_cuenta_cliente: "otro", cartola_linea_credito: "otro", estado_cuenta_proveedor: "otro", estado_cuenta_proveedor_senores: "otro",
+  estado_cuenta_proveedor_ambiguo: "otro",
 };
 
 export async function negativoPdfSintetico(tipo: TipoNegativo, seed = 1, filas = 8): Promise<Uint8Array> {
@@ -301,14 +302,15 @@ export async function negativoPdfSintetico(tipo: TipoNegativo, seed = 1, filas =
     t("Registro de Compras y Ventas", 40, 50, 12); t("Detalle de Compras - Periodo 2026-09", 40, 66); t("RUT contribuyente: 76.222.222-2", 40, 80);
     tabla(110, [["Fecha Docto", 40], ["Tipo Doc", 110], ["Folio", 170], ["RUT Proveedor", 220], ["Neto", 380], ["IVA", 450], ["Total", 520]],
       (i) => [[fecha(i), 40], ["33", 120], [String(5000 + i), 170], [`7${i}.333.333-3`, 220], [`$ ${monto().toLocaleString("es-CL")}`, 420, true], [`$ ${monto().toLocaleString("es-CL")}`, 490, true], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
-  } else if (tipo === "estado_cuenta_proveedor" || tipo === "estado_cuenta_proveedor_senores") {
-    // Sin ninguna marca propia de banco: proveedor con saldo anterior y 70% facturas N°.
+  } else if (tipo === "estado_cuenta_proveedor" || tipo === "estado_cuenta_proveedor_senores" || tipo === "estado_cuenta_proveedor_ambiguo") {
+    // Sin ninguna marca propia de banco: proveedor con saldo anterior y 70% facturas N°
+    // (ambiguo, vuelta 6: 50%, la franja 40-59% que antes entraba al lector y se sellaba).
     t("DISTRIBUIDORA FICTICIA LTDA.", 40, 50, 12);
     if (tipo === "estado_cuenta_proveedor_senores") { t("Señores: Comercial Ejemplo SpA", 40, 66); t("RUT: 76.123.456-0", 300, 66); }
     t("Saldo anterior", 40, 82); t("$ 1.000.000", 140, 82);
     let saldo = 1_000_000;
     tabla(110, [["Fecha", 40], ["Detalle", 110], ["Cargos", 330], ["Abonos", 400], ["Saldo", 470]], (i) => {
-      const m = monto(); const c = i % 10 < 7; saldo += c ? m : -m;
+      const m = monto(); const c = tipo === "estado_cuenta_proveedor_ambiguo" ? i % 2 === 0 : i % 10 < 7; saldo += c ? m : -m;
       return [[fecha(i), 40], [c ? `Factura N° ${6000 + i}` : `Pago recibido ${i}`, 110], [c ? `$ ${m.toLocaleString("es-CL")}` : "", 370, true], [c ? "" : `$ ${m.toLocaleString("es-CL")}`, 440, true], [`$ ${saldo.toLocaleString("es-CL")}`, 520, true]];
     });
   } else if (tipo === "estado_cuenta_cliente" || tipo === "cartola_linea_credito") {
