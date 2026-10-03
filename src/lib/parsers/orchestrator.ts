@@ -111,7 +111,12 @@ interface Lectura {
 
 export async function parseExcelWithOrchestrator(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string; empresa_id?: string }
+  /**
+   * origen "pdf": la grilla viene de un PDF (pdf-grilla.ts). Un PDF NUNCA
+   * persiste un formato aprendido ni mueve la confianza de uno guardado, salvo
+   * que la lectura quede SELLADA por el banco (saldo/total).
+   */
+  opts?: { documento_id?: string; empresa_id?: string; origen?: "pdf" }
 ): Promise<{ content: string; result: OrchestratorResult }> {
   const start = Date.now();
   // Por qué falló cada capa, para el log y la alarma de capa 4. Antes tryApply
@@ -296,8 +301,8 @@ export async function parseExcelWithOrchestrator(
         // El reuso cuenta; la confianza sube y el mapa se confirma SOLO con prueba
         // (sello estricto). Confirma el mapa de ESTA empresa; volverlo global
         // exige consenso de 2+ empresas (promoverMapaGlobalSiHayConsenso).
-        await incrementAdapterSuccess(cached.id, { prueba: lectura.verificacion.tipo });
         const conPrueba = ["saldo", "total_banco"].includes(lectura.verificacion.tipo);
+        if (opts?.origen !== "pdf" || conPrueba) await incrementAdapterSuccess(cached.id, { prueba: lectura.verificacion.tipo });
         if (conPrueba && cached.creado_por_empresa_id) await promoverMapaGlobalSiHayConsenso(fingerprint, cached.config);
         const estado = cached.estado === "confirmado" || conPrueba ? "confirmado" : "provisorio";
         // Un GLOBAL aplicado sin prueba en esta lectura es nuevo PARA ESTA
@@ -305,7 +310,7 @@ export async function parseExcelWithOrchestrator(
         const nuevoParaEmpresa = !cached.creado_por_empresa_id && !conPrueba;
         const confirmadoPor = cached.estado === "confirmado" ? (cached.confirmado_por ?? null) : conPrueba ? lectura.verificacion.tipo : null;
         return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: nuevoParaEmpresa, confirmado_por: confirmadoPor });
-      } else {
+      } else if (opts?.origen !== "pdf") {
         await decrementAdapterConfianza(
           cached.id,
           "Layer 0 validation failed — config may be stale"
@@ -733,10 +738,13 @@ function leer(
 async function guardarFormatoDerivado(
   args: { fingerprint: string; source: AdapterRow["source"]; nombre: string; config: AdapterConfig },
   verificacion: VerificacionCartola,
-  opts: { documento_id?: string; empresa_id?: string } | undefined,
+  opts: { documento_id?: string; empresa_id?: string; origen?: "pdf" } | undefined,
 ): Promise<string | null> {
   const prueba = verificacion.tipo === "saldo" || verificacion.tipo === "total_banco" ? verificacion.tipo : null;
   if (!opts?.empresa_id) return null; // sin dueño no se guarda nada
+  // Un PDF sin sello no enseña formatos: la grilla por posiciones es nuestra
+  // reconstrucción, no el archivo del banco.
+  if (opts.origen === "pdf" && !prueba) return null;
   const id = await saveAdapter({
     ...args,
     empresaId: opts.empresa_id,

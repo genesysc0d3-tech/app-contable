@@ -19,7 +19,8 @@ soloOpenCode();
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { parsePdfCartola } from "../../src/lib/parsers";
-import { cartolaPdfSintetica, type OpcionesPdf } from "../../src/lib/parsers/testing/cartola-pdf-sintetica";
+import { cartolaPdfSintetica, negativoPdfSintetico, TIPOS_NEGATIVOS, type OpcionesPdf } from "../../src/lib/parsers/testing/cartola-pdf-sintetica";
+import type { DiagnosticoPdf } from "../../src/lib/parsers";
 import { wilson } from "./corpus";
 
 delete process.env.LECTOR_ESTRUCTURA_IA;
@@ -42,6 +43,13 @@ const VARIANTES: Variante[] = [
   { id: "SAB_titulos_cruzados", sabotaje: true, o: (s) => ({ seed: s, filas: 4 + (s % 80), titulosCruzados: true }) },
 ];
 
+const MATRIZ = new Map<string, Map<string, number>>();
+function matriz(real: string, router: string) {
+  const f = MATRIZ.get(real) ?? new Map<string, number>();
+  f.set(router, (f.get(router) ?? 0) + 1);
+  MATRIZ.set(real, f);
+}
+
 interface Res { formato: string; variante: string; seed: number; filas: number; clase: string; sello: string; det: string; ms: number }
 
 async function main() {
@@ -55,7 +63,8 @@ async function main() {
         const c = await cartolaPdfSintetica(o);
         const t0 = Date.now();
         let r;
-        try { r = await parsePdfCartola(c.pdf); } catch (e) {
+        let diag: DiagnosticoPdf | null = null;
+        try { r = await parsePdfCartola(c.pdf, { diagnostico: (d) => { diag = d; } }); matriz(`cartola${v.sabotaje ? " (sabotaje)" : ""}`, (diag as DiagnosticoPdf | null)?.tipo ?? "?"); } catch (e) {
           res.push({ formato, variante: v.id, seed, filas: c.verdad.length, clase: "ERROR", sello: "-", det: String((e as Error).message).slice(0, 80), ms: Date.now() - t0 });
           continue;
         }
@@ -81,6 +90,14 @@ async function main() {
       }
     }
   }
+  // Negativos: PDFs con tablas de fecha+monto que NO son cartola. Ninguno debe llegar al lector.
+  let negAlLector = 0;
+  for (const tipo of TIPOS_NEGATIVOS) for (let seed = 1; seed <= N; seed++) {
+    let diag: DiagnosticoPdf | null = null;
+    const r = await parsePdfCartola(await negativoPdfSintetico(tipo, seed, 2 + (seed % 25)), { diagnostico: (d) => { diag = d; } });
+    matriz(tipo, (diag as DiagnosticoPdf | null)?.tipo ?? "?");
+    if (r || (diag as DiagnosticoPdf | null)?.tipo === "cartola") negAlLector++;
+  }
   writeFileSync(join(SALIDA, "resultados.json"), JSON.stringify(res, null, 1));
   const L: string[] = [`# Corpus PDF sintético — ${res.length} cartolas (${N} por variante)`, ""];
   const pct = (k: number, n: number) => { const [a, b] = wilson(k, n); return `${n ? ((100 * k) / n).toFixed(1) : "—"}% (${k}/${n}; IC95 ${(100 * a).toFixed(1)}–${(100 * b).toFixed(1)})`; };
@@ -96,6 +113,10 @@ async function main() {
   const raras = res.filter((r) => ["SELLO_MIENTE", "MAL_SIN_AVISO", "MAL_CON_AVISO", "ERROR"].includes(r.clase) || (r.clase === "NO_CARTOLA" && r.filas > 1));
   L.push("", `Casos a mirar (${raras.length}):`, "");
   for (const r of raras.slice(0, 60)) L.push(`- ${r.formato}/${r.variante}/seed ${r.seed} (${r.filas} filas): ${r.clase} · ${r.sello} · ${r.det}`);
+  const cols = ["cartola", "comprobante", "factura", "tarjeta", "otro"];
+  L.push("", "## Matriz de confusión del router (filas = lo que es; columnas = lo que dijo el router)", "", `| Real \\ Router | ${cols.join(" | ")} |`, `|---|${cols.map(() => "---").join("|")}|`);
+  for (const [real, f] of MATRIZ) L.push(`| ${real} | ${cols.map((c) => f.get(c) ?? 0).join(" | ")} |`);
+  L.push("", `Negativos que llegaron al lector: **${negAlLector}**`);
   const ms = res.map((r) => r.ms).sort((a, b) => a - b);
   L.push("", `Tiempo por cartola: p50 ${ms[Math.floor(ms.length / 2)]} ms · p95 ${ms[Math.floor(ms.length * 0.95)]} ms`);
   L.push("", reporteSoloOpenCode());

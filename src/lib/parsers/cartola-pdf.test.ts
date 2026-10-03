@@ -133,7 +133,7 @@ describe("sabotajes: nunca un sello sobre una lectura que no calza", () => {
   }
 });
 
-describe("PDF que no es cartola", () => {
+describe("PDF que no es cartola (ver también pdf-router.test.ts)", () => {
   it("un comprobante de transferencia (1 fecha, 1 monto) → null: sigue el flujo de comprobante", async () => {
     const { jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "pt", format: "a4" });

@@ -219,3 +219,81 @@ export async function cartolaPdfSintetica(opts: OpcionesPdf): Promise<CartolaPdf
   const pdf = new Uint8Array(doc.output("arraybuffer"));
   return { pdf, verdad: movs.map(({ fecha, monto, tipo, glosa }) => ({ fecha, monto, tipo, glosa })), saldoInicial: o.saldoInicial, saldoFinal };
 }
+
+// ---------------------------------------------------------------------------
+// NEGATIVOS: PDFs que NO son cartola pero traen tablas con fecha y monto (la
+// regla vieja "≥2 filas con fecha+monto = cartola" los mandaba al lector).
+// Todo inventado.
+
+export type TipoNegativo =
+  | "factura_sii" | "comprobante_transferencia" | "comprobante_facturas_pagadas" | "nomina_transferencias"
+  | "tarjeta_credito" | "rcv_libro_compras" | "liquidacion_sueldo";
+export const TIPOS_NEGATIVOS: TipoNegativo[] = [
+  "factura_sii", "comprobante_transferencia", "comprobante_facturas_pagadas", "nomina_transferencias",
+  "tarjeta_credito", "rcv_libro_compras", "liquidacion_sueldo",
+];
+/** Tipo que el router debería decir (o "otro" si no es uno de los 4 tipos con flujo propio). */
+export const ESPERADO_NEGATIVO: Record<TipoNegativo, string> = {
+  factura_sii: "factura", comprobante_transferencia: "comprobante", comprobante_facturas_pagadas: "comprobante",
+  nomina_transferencias: "comprobante", tarjeta_credito: "tarjeta", rcv_libro_compras: "otro", liquidacion_sueldo: "otro",
+};
+
+export async function negativoPdfSintetico(tipo: TipoNegativo, seed = 1, filas = 8): Promise<Uint8Array> {
+  const r = rng(seed);
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  doc.setFont("helvetica", "normal");
+  const t = (s: string, x: number, y: number, size = 8) => { doc.setFontSize(size); doc.text(s, x, y); };
+  const tr = (s: string, x: number, y: number, size = 8) => { doc.setFontSize(size); doc.text(s, x, y, { align: "right" }); };
+  const monto = () => Math.round((5_000 + r() * 900_000) / 10) * 10;
+  const fecha = (i: number) => `${dd(1 + (i % 27))}/${dd(1 + (seed % 12))}/2026`;
+  const tabla = (y0: number, titulos: [string, number][], fila: (i: number) => [string, number, boolean?][]) => {
+    titulos.forEach(([s, x]) => t(s, x, y0));
+    for (let i = 0; i < filas; i++) {
+      const y = y0 + 16 + i * 13;
+      if (y > 800) { doc.addPage(); }
+      fila(i).forEach(([s, x, der]) => (der ? tr(s, x, y) : t(s, x, y)));
+    }
+    return y0 + 16 + filas * 13;
+  };
+  if (tipo === "factura_sii") {
+    t("COMERCIAL EJEMPLO SPA", 40, 50, 11); t("Giro: Venta de artículos ficticios", 40, 64);
+    t("R.U.T.: 76.111.111-6", 400, 50, 10); t("FACTURA ELECTRONICA", 400, 64, 10); t(`N° ${1000 + seed}`, 430, 78, 10);
+    t("S.I.I. - SANTIAGO CENTRO", 400, 92);
+    t(`Fecha Emision: ${fecha(0)}`, 40, 110); t("Señor(es): CLIENTE FICTICIO LTDA", 40, 124);
+    const y = tabla(150, [["Fecha", 40], ["Código", 110], ["Descripción", 170], ["Cantidad", 360], ["Precio", 430], ["Total", 520]],
+      (i) => [[fecha(i), 40], [`P-${100 + i}`, 110], [`Producto ficticio ${i + 1}`, 170], [String(1 + (i % 4)), 380], [`$ ${monto().toLocaleString("es-CL")}`, 470, true], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
+    t("MONTO NETO", 400, y + 20); tr("$ 1.000.000", 555, y + 20); t("IVA 19%", 400, y + 34); tr("$ 190.000", 555, y + 34); t("TOTAL", 400, y + 48); tr("$ 1.190.000", 555, y + 48);
+    t("Timbre Electrónico SII", 40, y + 70); t("Res. 80 de 2014 - Verifique documento: www.sii.cl", 40, y + 84);
+  } else if (tipo === "comprobante_transferencia" || tipo === "comprobante_facturas_pagadas") {
+    t("Banco Ejemplo", 40, 50, 12); t("Comprobante de Transferencia", 40, 70, 11);
+    t("Transferencia realizada con éxito", 40, 88);
+    t(`Fecha: ${fecha(0)} 10:22`, 40, 110); t(`Monto transferido: $ ${monto().toLocaleString("es-CL")}`, 40, 124);
+    t("Datos del destinatario", 40, 146); t("Nombre: Proveedor Ficticio SpA", 40, 160); t("Cuenta: 000123456", 40, 174);
+    if (tipo === "comprobante_facturas_pagadas") {
+      t("Facturas pagadas", 40, 200, 10);
+      tabla(216, [["Fecha", 40], ["N° Factura", 130], ["Detalle", 220], ["Monto", 520]],
+        (i) => [[fecha(i), 40], [String(2000 + i), 130], ["Pago factura proveedor", 220], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
+    }
+  } else if (tipo === "nomina_transferencias") {
+    t("Banco Ejemplo Empresas", 40, 50, 12); t("Nómina de Transferencias", 40, 70, 11); t("Estado: Procesada", 40, 86);
+    tabla(110, [["Fecha", 40], ["Nombre beneficiario", 110], ["RUT", 300], ["Banco", 380], ["Monto", 520]],
+      (i) => [[fecha(i), 40], [`Beneficiario Ficticio ${i + 1}`, 110], [`1${i}.111.111-1`, 300], ["Banco Inventado", 380], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
+  } else if (tipo === "tarjeta_credito") {
+    t("Estado de Cuenta Tarjeta de Crédito", 40, 50, 12); t("Titular: PERSONA FICTICIA", 40, 66);
+    t("Cupo total $ 3.000.000", 40, 84); t("Cupo utilizado $ 1.200.000", 220, 84); t("Cupo disponible $ 1.800.000", 400, 84);
+    t(`Fecha de facturación: ${fecha(2)}`, 40, 100); t("Pago mínimo $ 85.000", 300, 100); t("Monto total facturado $ 640.000", 40, 114);
+    tabla(140, [["Fecha", 40], ["Descripción", 110], ["Cuotas", 330], ["Cargos", 400], ["Abonos", 460], ["Saldo", 520]],
+      (i) => [[fecha(i), 40], [`Compra comercio ficticio ${i + 1}`, 110], [`${1 + (i % 3)}/3`, 330], [`$ ${monto().toLocaleString("es-CL")}`, 440, true], ["$ 0", 495, true], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
+  } else if (tipo === "rcv_libro_compras") {
+    t("Registro de Compras y Ventas", 40, 50, 12); t("Detalle de Compras - Periodo 2026-09", 40, 66); t("RUT contribuyente: 76.222.222-2", 40, 80);
+    tabla(110, [["Fecha Docto", 40], ["Tipo Doc", 110], ["Folio", 170], ["RUT Proveedor", 220], ["Neto", 380], ["IVA", 450], ["Total", 520]],
+      (i) => [[fecha(i), 40], ["33", 120], [String(5000 + i), 170], [`7${i}.333.333-3`, 220], [`$ ${monto().toLocaleString("es-CL")}`, 420, true], [`$ ${monto().toLocaleString("es-CL")}`, 490, true], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
+  } else {
+    t("LIQUIDACION DE SUELDO", 40, 50, 12); t("Trabajador: PERSONA FICTICIA", 40, 66); t("Periodo: septiembre 2026", 40, 80);
+    const y = tabla(110, [["Fecha", 40], ["Concepto", 110], ["Haberes", 400], ["Descuentos", 470], ["Saldo", 530]],
+      (i) => [[fecha(i), 40], [i % 2 ? "Descuento AFP" : "Sueldo base", 110], [`$ ${monto().toLocaleString("es-CL")}`, 450, true], [`$ ${monto().toLocaleString("es-CL")}`, 515, true], [`$ ${monto().toLocaleString("es-CL")}`, 560, true]]);
+    t("Total Haberes $ 1.500.000", 40, y + 20); t("Total Descuentos $ 300.000", 220, y + 20); t("Líquido a Pagar $ 1.200.000", 400, y + 20);
+  }
+  return new Uint8Array(doc.output("arraybuffer"));
+}

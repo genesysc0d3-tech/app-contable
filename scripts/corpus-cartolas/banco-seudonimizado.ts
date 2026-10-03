@@ -10,6 +10,7 @@ import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { parseExcel } from "../../src/lib/parsers";
 import { grillaDesdeItems, libroDesdeGrilla, type ItemPdf } from "../../src/lib/parsers/pdf-grilla";
+import { clasificarPdf } from "../../src/lib/parsers/pdf-router";
 
 type Verdad = { saldoInicial: number | null; filas: { fecha: string; monto: number; saldo: number }[]; cuadra: boolean };
 
@@ -29,7 +30,8 @@ async function main() {
     const sello = r?.censo?.verificacion?.tipo ?? "capa4";
     const exacta = filasOk === verdad.filas.length && pe.length === verdad.filas.length;
     total++; if (exacta && (sello === "saldo" || sello === "total_banco")) ok++;
-    const camino = r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`;
+    const ruta = clasificarPdf(items);
+    const camino = `router ${ruta.tipo}(${ruta.motivo}) · ` + (r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`);
     console.log(`${id}\t${camino}\tfilas ${filasOk}/${verdad.filas.length}${pe.length !== verdad.filas.length ? ` (leídas ${pe.length})` : ""}\tsello ${sello}\tcuadre banco ${verdad.cuadra ? "sí" : "no"}`);
   }
   console.log(`exactas y selladas: ${ok}/${total}`);

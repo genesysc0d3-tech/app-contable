@@ -47,12 +47,13 @@ export interface ItemPdf {
   pagina: number;
 }
 
-interface Celda { texto: string; x0: number; x1: number }
-interface Linea { pagina: number; y: number; celdas: Celda[] }
+export interface Celda { texto: string; x0: number; x1: number }
+export interface Linea { pagina: number; y: number; celdas: Celda[] }
 
 const TOL_Y = 4;
 const HUECO_MISMA_CELDA = 3;
-const MAX_PAGINAS = 80;
+/** Sobre este número de páginas el PDF NO se lee (no se sella una cartola con páginas sin leer). */
+export const MAX_PAGINAS = 80;
 
 /**
  * Lee los trozos de texto con su posición. Solo server. Va por el MISMO pdf.js
@@ -61,14 +62,21 @@ const MAX_PAGINAS = 80;
  * ("API version 6.x does not match the Worker version 5.x").
  */
 export async function itemsDePdf(data: Uint8Array, clave?: string): Promise<ItemPdf[]> {
+  return (await leerItemsPdf(data, clave)).items;
+}
+
+/** Items + páginas del PDF. `truncado` = trae más de MAX_PAGINAS (solo se leyeron las primeras). */
+export async function leerItemsPdf(data: Uint8Array, clave?: string): Promise<{ items: ItemPdf[]; paginas: number; truncado: boolean }> {
   const { PDFParse } = await import("pdf-parse");
   // COPIA: pdf.js se apropia del buffer y lo deja desprendido.
   const copia = new Uint8Array(data);
   const parser = new PDFParse(clave ? { data: copia, password: clave } : { data: copia });
   const out: ItemPdf[] = [];
+  let paginas = 0;
   try {
     // load() es interno de pdf-parse (el doc de pdf.js ya abierto, con clave).
     const doc = await (parser as unknown as { load(): Promise<DocPdf> }).load();
+    paginas = doc.numPages;
     const n = Math.min(doc.numPages, MAX_PAGINAS);
     for (let p = 1; p <= n; p++) {
       const page = await doc.getPage(p);
@@ -81,7 +89,7 @@ export async function itemsDePdf(data: Uint8Array, clave?: string): Promise<Item
   } finally {
     await parser.destroy().catch(() => {});
   }
-  return out;
+  return { items: out, paginas, truncado: paginas > MAX_PAGINAS };
 }
 
 interface DocPdf {
@@ -89,7 +97,7 @@ interface DocPdf {
   getPage(n: number): Promise<{ getTextContent(): Promise<{ items: { str?: string; transform?: number[]; width?: number }[] }> }>;
 }
 
-function agruparLineas(items: ItemPdf[]): Linea[] {
+export function agruparLineas(items: ItemPdf[]): Linea[] {
   const porPagina = new Map<number, ItemPdf[]>();
   for (const it of items) {
     if (!Number.isFinite(it.x) || !Number.isFinite(it.y)) continue;
@@ -132,7 +140,7 @@ function agruparLineas(items: ItemPdf[]): Linea[] {
 }
 
 /** ¿La línea es un movimiento? Fecha en una de las 2 primeras celdas + algún monto en otra. */
-function esMovimiento(l: Linea): boolean {
+export function esMovimiento(l: Linea): boolean {
   const iFecha = l.celdas.slice(0, 2).findIndex((c) => cellEsFecha(c.texto));
   if (iFecha < 0) return false;
   return l.celdas.some((c, i) => i !== iFecha && /\d/.test(c.texto) && leerCeldaMonto(c.texto) != null);

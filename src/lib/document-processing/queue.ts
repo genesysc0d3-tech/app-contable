@@ -3,7 +3,7 @@ import "server-only";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { empresasOcupadas, msHastaProximoJobTomable } from "./proximo-job";
 import type { Database, Json } from "@/lib/database.types";
-import { parseExcel, parsePdfCartola } from "@/lib/parsers";
+import { parseExcel, parsePdfCartola, type DiagnosticoPdf } from "@/lib/parsers";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { conCanalIA } from "@/lib/ai/canal";
@@ -362,11 +362,12 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
   } else if (job.tipo === "pdf") {
     const pdf = await leerTextoPdf(sb, job, fileBuffer);
     contenido = pdf.texto;
-    // Cartola en PDF (2026-10-02): primero el MISMO lector determinístico que el
-    // Excel, con la grilla armada por las posiciones del texto (juez + sello). Antes
+    // Cartola en PDF (2026-10-02): el ROUTER (parsers/pdf-router.ts) decide por
+    // evidencia positiva; SOLO una cartola entra al MISMO lector determinístico
+    // que el Excel (grilla por posiciones, juez + sello). Lo demás, como antes. Antes
     // iba a la IA como texto plano (sin columnas ni sello) y una cartola corta
     // (≤3000 caracteres, p. ej. Itaú de 1-2 páginas) se probaba como comprobante.
-    const cartola = await leerCartolaPdf(job, fileBuffer, pdf.clave);
+    const cartola = await leerCartolaPdf(sb, job, fileBuffer, pdf.clave);
     if (cartola) {
       contenido = cartola.content;
       preExtracted = cartola.preExtracted;
@@ -399,14 +400,35 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
  * no la pudo leer → el flujo de antes (comprobante si es corto, IA si es largo).
  * Una plantilla de facturas sigue siendo error definitivo, igual que en Excel.
  */
-async function leerCartolaPdf(job: DocumentProcessingJob, fileBuffer: Buffer, clave: string | undefined) {
+async function leerCartolaPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer, clave: string | undefined) {
+  let diag: DiagnosticoPdf | null = null;
+  let r: Awaited<ReturnType<typeof parsePdfCartola>> = null;
   try {
-    return await parsePdfCartola(new Uint8Array(fileBuffer), { documento_id: job.documento_id, empresa_id: job.empresa_id, clave });
+    r = await parsePdfCartola(new Uint8Array(fileBuffer), {
+      documento_id: job.documento_id, empresa_id: job.empresa_id, clave, diagnostico: (d) => { diag = d; },
+    });
   } catch (error) {
-    if (error instanceof PlantillaFacturasEnCartolaError) throw error;
+    // Un PDF nunca corta la subida por el lector: sigue el flujo de texto.
     console.warn("[queue] cartola PDF: el lector determinístico falló, sigue el flujo de texto", (error as Error)?.message);
-    return null;
+    r = null;
   }
+  // Camino elegido para cada PDF (sin datos del documento): tipo, motivo, sello, filas, ms.
+  const d = diag as DiagnosticoPdf | null;
+  await recordOpsEvent({
+    sb,
+    severity: "info",
+    source: "upload",
+    eventName: "pdf_ruta",
+    summary: d ? `PDF → ${d.tipo}${d.sello ? ` (${d.sello})` : ""}` : "PDF → error del lector, sigue el flujo de texto",
+    empresaId: job.empresa_id,
+    usuarioId: job.usuario_id,
+    resourceType: "document_processing_job",
+    resourceId: job.id,
+    metadata: d
+      ? { tipo: d.tipo, motivo: d.motivo, senales: d.senales.slice(0, 12), sello: d.sello ?? null, filas: d.filas ?? null, capa: d.capa ?? null, paginas: d.paginas, ms: d.ms, al_lector: !!r }
+      : { tipo: "error", al_lector: false },
+  }).catch(() => {});
+  return r;
 }
 
 /** Sobre este largo, el texto de un PDF que NO es cartola va a la IA, no al lector de comprobantes. */
