@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Json } from "@/lib/database.types";
 import { adapterDelDocumento, confirmarAdapter } from "@/lib/parsers/adapter-store";
+import { adapterSigueSiendoElDelDocumento } from "@/lib/parsers/mapa-clave";
 import { leerCuadre } from "./cuadre-mesa";
 import { checkConfirmaMapa } from "./verificacion";
 
@@ -68,6 +69,10 @@ export async function confirmarMapaPorCheck(
 
   const adapter = await adapterDelDocumento(sb as never, documentoId, empresaId);
   if (!adapter || adapter.estado === "confirmado") return false;
+  // El adaptador tiene que tener TODAVÍA el mapa con que se leyó este documento
+  // (vuelta 3): si la fila se reescribió con otro, Check no confirma un mapa que
+  // el cliente nunca revisó. Documentos viejos sin clave: como antes.
+  if (!adapterSigueSiendoElDelDocumento(cuadre.mapa?.clave, adapter.config)) return false;
   const confirmado = await confirmarAdapter(adapter.id, "check");
   if (!confirmado) return false; // columna sin migrar: queda provisorio (fail-safe)
 

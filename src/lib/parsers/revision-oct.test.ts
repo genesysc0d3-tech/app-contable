@@ -7,7 +7,7 @@ const guardados: unknown[] = [];
 /** Tabla parser_adapters EN MEMORIA (vuelta 2: N lecturas → 1 fila). Solo cuando `tabla` está activa. */
 let tabla: Record<string, unknown>[] | null = null;
 vi.mock("./adapter-store", () => ({
-  getAdapterByFingerprint: async (fp: string, emp?: string) => (tabla ? tabla.find((r) => r.fingerprint === fp && r.creado_por_empresa_id === emp) ?? null : cache),
+  getAdapterByFingerprint: async (fp: string, emp?: string) => (tabla ? tabla.find((r) => r.fingerprint === fp && r.creado_por_empresa_id === emp && !r.oculto) ?? null : cache),
   getAdaptersConfirmadosEmpresa: async () => [],
   confirmarAdapter: async () => true,
   saveAdapter: async (a: Record<string, unknown>) => {
@@ -17,9 +17,13 @@ vi.mock("./adapter-store", () => ({
     tabla.push({ id, fingerprint: a.fingerprint, creado_por_empresa_id: a.empresaId, source: a.source, config: a.config, estado: a.confirmadoPor ? "confirmado" : "provisorio", confirmado_por: a.confirmadoPor ?? null });
     return id;
   },
-  reusarAdapterPropio: async (id: string, config: unknown, o: { prueba?: string | null }) => {
+  adapterPropioMismoMapa: async (fp: string, emp: string, config: AdapterConfig) => {
+    const { claveDeMapa } = await import("./mapa-clave");
+    return tabla?.find((r) => r.fingerprint === fp && r.creado_por_empresa_id === emp && claveDeMapa(r.config as AdapterConfig) === claveDeMapa(config))?.id as string ?? null;
+  },
+  reusarAdapterPropio: async (id: string, o: { prueba?: string | null }) => {
     const f = tabla?.find((r) => r.id === id);
-    if (f) { f.config = config; if (o.prueba === "saldo" || o.prueba === "total_banco") { f.estado = "confirmado"; f.confirmado_por = o.prueba; } }
+    if (f) { f.reusos = Number(f.reusos ?? 0) + 1; f.oculto = false; if (o.prueba === "saldo" || o.prueba === "total_banco") { f.estado = "confirmado"; f.confirmado_por = o.prueba; } }
     return id;
   },
   promoverMapaGlobalSiHayConsenso: async () => false,
@@ -175,5 +179,88 @@ describe("vuelta 2 · 4. BancoEstado chequera: el año y el resumen salen de su 
       const leido = (result.preExtracted ?? []).map((m) => `${m.fecha}|${m.monto}`).sort();
       expect(leido).toEqual(c.verdad.map((v) => `${v.fecha}|${v.monto}`).sort());
     }
+  });
+});
+
+describe("vuelta 3 · 1. reusar SOLO la fila con el mismo mapa", () => {
+  const dia = (d: number) => `${String(d).padStart(2, "0")}/03/2026`;
+  function bci(n: number) {
+    let saldo = 1_000_000;
+    const asc = Array.from({ length: n }, (_, i) => {
+      const egreso = i % 6 === 2; const m = 10_000 + i * 700; saldo += egreso ? -m : m;
+      return [dia(1 + (i % 25)), `HASH|${9010716960000 + i}`, `Transferencia recibida de Cliente ${i}`, egreso ? null : m, egreso ? m : null, saldo];
+    });
+    return [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse(), ["", "", "Saldo inicial", null, null, 1_000_000]];
+  }
+  async function huella() {
+    const { computeFingerprint } = await import("./fingerprint");
+    return computeFingerprint(bci(5) as Row[]);
+  }
+  it("fila propia con OTRO mapa (M1): la lectura con el conocido (M2) inserta aparte y NO reescribe M1", async () => {
+    const m1 = { header_row: 0, skip_rows_before_data: 1, date_format: "dd/mm/yyyy", number_format: "chilean", layout: "two_cols", columns: { fecha: 0, descripcion: 2, n_documento: -1, cargo: 3, abono: 4, saldo: 5 } };
+    tabla = [{ id: "m1", fingerprint: await huella(), creado_por_empresa_id: "emp", source: "heuristic", config: m1, estado: "provisorio" }];
+    const { result } = await parseExcelWithOrchestrator(libro(bci(5)), { empresa_id: "emp" });
+    expect(result.capa_usada).toBe(1);
+    expect(tabla).toHaveLength(2);
+    expect(tabla[0].config).toBe(m1);
+    expect(result.adapter_id).toBe("fila-2");
+    const { claveDeMapa } = await import("./mapa-clave");
+    expect(result.censo?.mapa?.clave).toBe(claveDeMapa(tabla[1].config as AdapterConfig));
+  });
+  it("fila propia con el MISMO mapa pero invisible (confianza baja/deshabilitada) → se reusa y vuelve a verse, sin duplicar", async () => {
+    tabla = [];
+    await parseExcelWithOrchestrator(libro(bci(5)), { empresa_id: "emp" });
+    tabla[0].oculto = true;
+    await parseExcelWithOrchestrator(libro(bci(5)), { empresa_id: "emp" });
+    expect(tabla).toHaveLength(1);
+    expect(tabla[0]).toMatchObject({ reusos: 1, oculto: false });
+  });
+  it("Check confirma solo si el adaptador sigue teniendo el mapa con que se leyó el documento", async () => {
+    const { adapterSigueSiendoElDelDocumento, claveDeMapa } = await import("./mapa-clave");
+    const m1 = { header_row: 0, skip_rows_before_data: 1, date_format: "dd/mm/yyyy", number_format: "chilean", layout: "two_cols", columns: { fecha: 0, descripcion: 1, n_documento: -1, cargo: 2, abono: 3, saldo: 4 } } as AdapterConfig;
+    const m2 = { ...m1, columns: { ...m1.columns, cargo: 3, abono: 2 } } as AdapterConfig;
+    expect(adapterSigueSiendoElDelDocumento(claveDeMapa(m1), m1)).toBe(true);
+    expect(adapterSigueSiendoElDelDocumento(claveDeMapa(m1), m2)).toBe(false);
+    expect(adapterSigueSiendoElDelDocumento(undefined, m2)).toBe(true);
+    const src = (await import("fs")).readFileSync("src/lib/cartola/confirmacion-mapa.ts", "utf8");
+    expect(src).toContain("adapterSigueSiendoElDelDocumento(cuadre.mapa?.clave, adapter.config)");
+    const prev = (await import("fs")).readFileSync("src/app/api/parser/preview/route.ts", "utf8");
+    expect(prev).toContain("mapa?.config");
+  });
+});
+
+describe("vuelta 3 · 4-5. BancoEstado: el período del Resumen se cruza con las fechas; el popup juzga igual", () => {
+  async function chequera(mesResumen?: number) {
+    const { leerSpecs, rendir } = await import("../../../scripts/corpus-cartolas/generador");
+    const c = rendir(leerSpecs().find((s) => s.id === "bancoestado-chequera-completa")!, 11, { mes: 3 });
+    const wb = XLSX.read(c.buf, { type: "array" });
+    if (mesResumen) {
+      const ws = wb.Sheets["Resumen"];
+      const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
+      for (const r of aoa) {
+        const t = String(r[0] ?? "").toLowerCase();
+        if (/fecha (inicio|final)/.test(t)) {
+          const j = r.findIndex((v, k) => k > 0 && /\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/.test(String(v)));
+          if (j > 0) r[j] = String(r[j]).replace(/^(\d{1,2})([\/-])(\d{1,2})/, (_m, d, sep) => `${d}${sep}${String(mesResumen).padStart(2, "0")}`);
+        }
+      }
+      wb.Sheets["Resumen"] = XLSX.utils.aoa_to_sheet(aoa);
+    }
+    return { c, buf: XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer, wb };
+  }
+  it("Resumen de OTRO mes → nunca sellada (el banco contradice)", async () => {
+    const { buf } = await chequera(7);
+    const { result } = await parseExcelWithOrchestrator(buf, {});
+    expect(["saldo", "total_banco"]).not.toContain(result.verificacion?.tipo);
+  });
+  it("el popup (juzgarMapaEnLibro) usa el período del Resumen: no pide confirmar el año", async () => {
+    const { buf, wb } = await chequera();
+    const { result } = await parseExcelWithOrchestrator(buf, {});
+    const { juzgarMapaEnLibro } = await import("./orchestrator");
+    const cfg = { ...(result.censo!.mapa!.config as AdapterConfig) };
+    const j = juzgarMapaEnLibro(XLSX.read(buf, { type: "array", cellDates: true }), cfg);
+    expect(j.ok).toBe(true);
+    if (j.ok) expect(j.verificacion.detalle ?? "").not.toMatch(/año/);
+    void wb;
   });
 });

@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { AdapterConfig, AdapterRow, TipoVerificacion } from "./types";
+import { claveDeMapa } from "./mapa-clave";
+
+export { claveDeMapa };
 
 type LooseClient = SupabaseClient<Database>;
 
@@ -128,15 +131,6 @@ export function selectAdapterForEmpresa<T extends AdapterOwnership>(
   return global ?? null;
 }
 
-/** Lo que define un mapa (sin títulos ni filas de encabezado, que varían por empresa). */
-function claveDeMapa(cfg: AdapterConfig | null | undefined): string {
-  if (!cfg) return "";
-  const c = cfg.columns ?? ({} as AdapterConfig["columns"]);
-  return JSON.stringify([
-    cfg.layout ?? "two_cols", cfg.date_format, cfg.number_format, cfg.default_tipo_flujo ?? null,
-    c.fecha, c.descripcion, c.n_documento, c.cargo, c.abono, c.saldo, c.monto ?? -1, c.tipo_flujo_col ?? -1,
-  ]);
-}
 
 /**
  * ¿Hay CONSENSO para compartir este mapa con todas las empresas? (vuelta 2 de
@@ -387,22 +381,41 @@ export async function saveAdapter(args: {
 }
 
 /**
- * La empresa YA tiene un mapa propio para esta huella: se REUSA esa fila (nunca
- * otra inserción por lectura). El mapa se reemplaza por el nuevo (p. ej. el de un
- * formato conocido sobre una adivinanza vieja) y se cuenta el uso; con prueba,
- * el provisorio pasa a confirmado (incrementAdapterSuccess).
+ * La fila PROPIA de la empresa para esta huella con EL MISMO mapa (claveDeMapa),
+ * aunque esté deshabilitada o con confianza baja (invisible para la caché). null
+ * si no hay: entonces se inserta como siempre. Vuelta 3 (2026-10-03): reusar una
+ * fila con OTRO mapa reescribía el mapa con que se leyeron documentos anteriores
+ * (Check confirmaba un mapa nunca revisado).
+ */
+export async function adapterPropioMismoMapa(fingerprint: string, empresaId: string, config: AdapterConfig): Promise<string | null> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return null;
+    const { data } = await sb.from("parser_adapters").select("id, config").eq("fingerprint", fingerprint).eq("creado_por_empresa_id", empresaId);
+    const clave = claveDeMapa(config);
+    const fila = ((data ?? []) as unknown as { id: string; config: AdapterConfig }[]).find((r) => claveDeMapa(r.config) === clave);
+    return fila?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reusa la fila propia con el MISMO mapa (adapterPropioMismoMapa): nunca otra
+ * inserción por lectura. Repone la confianza a la de un provisorio vivo y quita
+ * el disabled_until (si no, la fila seguía invisible y volvían los duplicados);
+ * cuenta el uso y, con prueba, la confirma (incrementAdapterSuccess).
  */
 export async function reusarAdapterPropio(
   adapterId: string,
-  config: AdapterConfig,
-  opts: { nombre?: string; source?: AdapterRow["source"]; prueba?: TipoVerificacion | null } = {},
+  opts: { prueba?: TipoVerificacion | null } = {},
 ): Promise<string> {
   try {
     const sb = getServiceClient();
     if (sb) {
-      await sb.from("parser_adapters")
-        .update({ config: toJson(config), ...(opts.nombre ? { nombre: opts.nombre } : {}), ...(opts.source ? { source: opts.source } : {}) } as never)
-        .eq("id", adapterId);
+      const { data } = await sb.from("parser_adapters").select("confianza").eq("id", adapterId).maybeSingle();
+      const confianza = Math.max(Number((data as { confianza?: number } | null)?.confianza ?? 0), CONFIANZA_PROVISORIO);
+      await sb.from("parser_adapters").update({ confianza, disabled_until: null } as never).eq("id", adapterId);
     }
   } catch {
     /* non-blocking */

@@ -69,7 +69,7 @@ const FUERTES: { id: string; re: RegExp }[] = [
   // N° de cuenta CORRIENTE/VISTA/RUT ("Cuenta Corriente N° 123", "CuentaRUT N°",
   // "Cuenta Vista: 123"). Un "N° cuenta cliente" genérico no.
   { id: "n_cuenta_banco", re: /\bn(umero|ro\.?|[°º])?\s*(de )?cuenta ?(corriente|vista|rut)\b|\bcuenta ?(corriente|vista|rut)\s*(n[°º]|nro\.?|numero|:)\s*\d/ },
-  { id: "titulo_cartola", re: /\bcartola (de )?(cuenta ?)?(corriente|vista|rut|historica)\b|\bestado de cuenta (corriente|vista)\b|\bcartola cuenta\b/ },
+  { id: "titulo_cartola", re: /\bcartola (de )?(cuenta ?)?(corriente|vista|rut|historica)\b|\bestado de cuenta (corriente|vista)\b(?! (de |del )?(cliente|proveedor))|\bcartola cuenta\b/ },
 ];
 /** Marcas débiles: solas no bastan ("Período" sale en un crédito de consumo). */
 const DEBILES: { id: string; re: RegExp }[] = [
@@ -154,8 +154,25 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
   // Estado de cuenta de un proveedor: casi TODAS las glosas son facturas con N°
   // y no hay saldo del banco. Una cartola B2B con muchos "PAGO FACTURA 1234"
   // trae saldo anterior/inicial y sigue siendo cartola.
-  if (movs >= 3 && glosasDte >= 3 && glosasDte * 5 >= movs * 4 && !fuertes.includes("saldo_inicial")) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
-  noCartola.push(...NO_CARTOLA_TITULO.filter((s) => titulo.some((t) => s.re.test(t))));
+  // Vuelta 3: "Saldo anterior" lo trae también el estado de cuenta de un
+  // proveedor; solo una marca PROPIA de banco (N° de cuenta corriente/vista/RUT o
+  // título de cartola) lo exime. Sin ella, ≥40% de glosas con factura N° → no es
+  // del banco.
+  const marcaDeBanco = fuertes.includes("n_cuenta_banco") || fuertes.includes("titulo_cartola");
+  // Sin marca de banco basta con 2 facturas (un estado de cuenta corto de 2-4 filas).
+  const muchasFacturas = (!marcaDeBanco && movs >= 2 && glosasDte >= 2 && glosasDte * 5 >= movs * 2)
+    || (movs >= 3 && glosasDte >= 3 && glosasDte * 5 >= movs * 4 && !fuertes.includes("saldo_inicial"));
+  if (muchasFacturas) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
+  // Señales de TÍTULO: no ganan si el PDF calza un formato conocido, ni sobre una
+  // línea que además anuncia la cuenta ("CARTOLA CUENTA CORRIENTE · LÍNEA DE
+  // CRÉDITO", "Cuenta Corriente Pyme con Línea de Crédito").
+  const RE_CUENTA_EN_TITULO = /\bcuenta ?(corriente|vista|rut)\b/;
+  const titulosNoCuenta = titulo.filter((t) => !RE_CUENTA_EN_TITULO.test(t) && !FUERTES.find((f) => f.id === "titulo_cartola")!.re.test(t));
+  // "Estado de cuenta corriente del CLIENTE/PROVEEDOR" es de un proveedor aunque
+  // diga "cuenta corriente": esa señal no se exime.
+  if (!conocido) {
+    noCartola.push(...NO_CARTOLA_TITULO.filter((s) => (s.id === "cliente_proveedor_titulo" ? titulo : titulosNoCuenta).some((t) => s.re.test(t))));
+  }
   const debiles = DEBILES.filter((s) => fuera.some((t) => s.re.test(t))).map((s) => s.id);
   const senales = [
     ...noCartola.map((s) => s.id),

@@ -205,6 +205,13 @@ export interface MapaUsado {
   confirmado_por?: string | null;
   /** Id del FORMATO CONOCIDO (formatos-conocidos.ts) con que se leyó, si aplica. */
   formato_conocido?: string | null;
+  /**
+   * Clave del mapa con que se leyó ESTE documento (claveDeMapa) y el mapa mismo
+   * (solo estructura: columnas y formatos). Check confirma el adaptador solo si
+   * su mapa sigue siendo este, y el popup muestra este (vuelta 3, 2026-10-03).
+   */
+  clave?: string;
+  config?: AdapterConfig;
 }
 
 /** Censo de la hoja leída: toda fila con plata queda contada. */

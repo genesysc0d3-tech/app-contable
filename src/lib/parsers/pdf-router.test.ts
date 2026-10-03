@@ -197,4 +197,22 @@ describe("revisión adversarial del router", () => {
   it("«N° cuenta» genérico solo (sin corriente/vista/RUT) no es marca fuerte", () => {
     expect(tipo([...L(780, ["Movimientos", 40]), ...L(766, ["N° cuenta 4455", 40]), ...tabla(700, 8)])).not.toBe("cartola");
   });
+
+  // Vuelta 3 (2026-10-03).
+  it("proveedor: «Saldo anterior» + Fecha/Detalle/Cargos/Abonos/Saldo + 70% «Factura N°» → no cartola", () => {
+    const t = [...L(780, ["Distribuidora Ejemplo Ltda.", 40]), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140]),
+      ...tabla(700, 10, (i) => (i % 10 < 7 ? `Factura N° ${5000 + i}` : `Pago recibido ${i}`), [["Fecha", 40], ["Detalle", 100], ["Cargos", 300], ["Abonos", 380], ["Saldo", 460]])];
+    expect(tipo(t)).not.toBe("cartola");
+  });
+  it("proveedor con «Señores: … RUT» → no cartola", () => {
+    const t = [...L(780, ["Señores: Comercial Ficticia SpA", 40], ["RUT: 76.123.456-0", 300]), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140]),
+      ...tabla(700, 10, (i) => (i % 10 < 7 ? `Factura N° ${5000 + i}` : `Abono ${i}`), [["Fecha", 40], ["Detalle", 100], ["Cargos", 300], ["Abonos", 380], ["Saldo", 460]])];
+    expect(tipo(t)).not.toBe("cartola");
+  });
+  it("«CARTOLA CUENTA CORRIENTE · LÍNEA DE CRÉDITO» en la misma línea del título → cartola", () => {
+    expect(tipo([...L(780, ["CARTOLA CUENTA CORRIENTE", 40], ["LÍNEA DE CRÉDITO", 300]), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 6)])).toBe("cartola");
+  });
+  it("«Cuenta Corriente Pyme con Línea de Crédito» como título → cartola", () => {
+    expect(tipo([...L(780, ["Cuenta Corriente Pyme con Línea de Crédito", 40]), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 6)])).toBe("cartola");
+  });
 });

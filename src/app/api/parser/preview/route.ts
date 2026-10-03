@@ -13,6 +13,7 @@ import { recordOpsEvent } from "@/lib/ops/events";
 import { applyAdapter } from "@/lib/parsers/apply";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { adapterDelDocumento } from "@/lib/parsers/adapter-store";
+import { leerCuadre } from "@/lib/cartola/cuadre-mesa";
 import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
 
 const PREVIEW_ROWS = 30;
@@ -84,9 +85,14 @@ export async function POST(request: Request) {
   // Popup "Revisa las columnas": PRE-LLENADO con el mapa con que el lector leyó
   // ESTA cartola (el propio de la empresa), para que si está bien sea un clic en
   // "Listo". Sin él (global, capa 4), la sugerencia de los detectores.
+  // Vuelta 3 (2026-10-03): el mapa con que se leyó ESTE documento queda en su
+  // cuadre (mapa.config). La fila del adaptador puede haber cambiado después con
+  // otra cartola; el popup muestra el de este documento. Sin él (docs viejos), el
+  // adaptador del documento como antes.
+  const mapaDelDoc = leerCuadre(((documento as { progreso_ia?: unknown }).progreso_ia ?? {}) as Record<string, unknown>)?.mapa?.config ?? null;
   const sbServicio = clienteServicio();
-  const delLector = sbServicio ? await adapterDelDocumento(sbServicio, documento.id, empresaIdEfectiva) : null;
-  const lector = delLector?.config ? configDelCliente(delLector.config) : null;
+  const delLector = mapaDelDoc ? null : sbServicio ? await adapterDelDocumento(sbServicio, documento.id, empresaIdEfectiva) : null;
+  const lector = mapaDelDoc ? configDelCliente(mapaDelDoc) : delLector?.config ? configDelCliente(delLector.config) : null;
 
   type SheetData = {
     name: string;
