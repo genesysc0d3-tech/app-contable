@@ -318,24 +318,35 @@ export async function upsertManualAdapter(args: {
     // caché por orden (ordenarFilasPropias).
     const { data: propias } = await sb
       .from("parser_adapters")
-      .select("id, config")
+      .select("id, config, estado, confirmado_por")
       .eq("fingerprint", args.fingerprint)
       .eq("creado_por_empresa_id", args.empresaId);
-    const igual = filaPropiaMismoMapa((propias ?? []) as unknown as { id: string; config: AdapterConfig }[], args.config);
+    const igual = filaPropiaMismoMapa((propias ?? []) as unknown as { id: string; config: AdapterConfig; estado?: string | null; confirmado_por?: string | null }[], args.config);
     const existing = { data: igual ? { id: igual.id } : null };
+    const ahora = new Date().toISOString();
 
-    // Las columnas que eligió el cliente SON su confirmación.
-    const confirmado = { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: new Date().toISOString() };
+    // Las columnas que eligió el cliente SON su confirmación. Vuelta 5 (M1): si
+    // la fila con este MISMO mapa ya estaba confirmada por el banco (saldo /
+    // total), esa prueba objetiva se conserva (y la huella de la cuenta, que
+    // cuenta para el consenso global): el "Listo" solo agrega su revisión.
+    const pruebaDelBanco = igual && estadoDeAdapter(igual) === "confirmado" && (igual.confirmado_por === "saldo" || igual.confirmado_por === "total_banco");
+    const confirmado = pruebaDelBanco ? {} : { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: ahora };
+    const config: AdapterConfig = igual?.config?.cuenta_huella && !args.config.cuenta_huella
+      ? { ...args.config, cuenta_huella: igual.config.cuenta_huella }
+      : args.config;
 
     if (existing.data?.id) {
       const base = {
         source: "manual",
-        config: toJson(args.config),
+        config: toJson(config),
         nombre: args.nombre ?? null,
         tipo_doc: args.tipo_doc ?? "cartola_bancaria",
         confianza: 1.0,
         disabled_until: null,
         last_failure_reason: null,
+        // Vuelta 5 (A1): el "Listo" es el uso más reciente. Sin esto, con dos filas
+        // del cliente ganaba la otra (más reciente) y el popup volvía (loop).
+        last_used_at: ahora,
       };
       const r = await sb.from("parser_adapters").update({ ...base, ...confirmado } as never).eq("id", existing.data.id);
       if (r?.error && esColumnaFaltante(r.error)) {
@@ -353,7 +364,7 @@ export async function upsertManualAdapter(args: {
       confianza: 1.0,
       usage_count: 0,
       success_count: 0,
-      last_used_at: new Date().toISOString(),
+      last_used_at: ahora,
       creado_por_empresa_id: args.empresaId,
     };
     let res = await sb.from("parser_adapters").insert({ ...base, ...confirmado } as never).select("id").single();
@@ -424,9 +435,7 @@ export async function adapterPropioMismoMapa(fingerprint: string, empresaId: str
     const sb = getServiceClient();
     if (!sb) return null;
     const { data } = await sb.from("parser_adapters").select("id, config").eq("fingerprint", fingerprint).eq("creado_por_empresa_id", empresaId);
-    const clave = claveDeMapa(config);
-    const fila = ((data ?? []) as unknown as { id: string; config: AdapterConfig }[]).find((r) => claveDeMapa(r.config) === clave);
-    return fila?.id ?? null;
+    return filaPropiaMismoMapa((data ?? []) as unknown as { id: string; config: AdapterConfig }[], config)?.id ?? null;
   } catch {
     return null;
   }
