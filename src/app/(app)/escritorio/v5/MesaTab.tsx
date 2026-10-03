@@ -32,7 +32,7 @@ import { usePiezaEstado } from "@/lib/actualizacion/hooks";
 type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
 
 /**
- * ¿Es una cartola bancaria? (varios movimientos venidos de un Excel/CSV del
+ * ¿Es una cartola bancaria? (varios movimientos venidos de un Excel/CSV/PDF del
  * banco). Solo se usa para SUGERIR el método de pago: en una cartola la plata
  * entró por el banco, así que "Efectivo" es incorrecto por definición. La
  * decisión final siempre es del usuario — la app no la cambia sola.
@@ -40,7 +40,7 @@ type DocRow = ComponentProps<typeof DocCardList>["docs"][number];
 function esCartolaBancaria(doc: DocRow): boolean {
   const tipo = (doc.tipo ?? "").toLowerCase();
   const movs = doc.movimientos_detectados ?? 0;
-  return movs > 1 && (tipo === "excel" || tipo === "csv");
+  return movs > 1 && (tipo === "excel" || tipo === "csv" || tipo === "pdf");
 }
 
 // Pestaña fusionada "Check de agregados": el árbol Finder es la navegación; el

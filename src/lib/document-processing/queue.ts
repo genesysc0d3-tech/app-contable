@@ -3,7 +3,7 @@ import "server-only";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { empresasOcupadas, msHastaProximoJobTomable } from "./proximo-job";
 import type { Database, Json } from "@/lib/database.types";
-import { parseExcel } from "@/lib/parsers";
+import { parseExcel, parsePdfCartola } from "@/lib/parsers";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { conCanalIA } from "@/lib/ai/canal";
@@ -360,10 +360,21 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     plantilla = parsed.plantilla;
     censo = parsed.censo;
   } else if (job.tipo === "pdf") {
-    contenido = await leerTextoPdf(sb, job, fileBuffer);
-    // Un PDF corto es un comprobante: primero el determinístico. Una cartola en
-    // PDF (larga) sigue a la IA.
-    if (contenido.length <= PDF_COMPROBANTE_MAX_CHARS) {
+    const pdf = await leerTextoPdf(sb, job, fileBuffer);
+    contenido = pdf.texto;
+    // Cartola en PDF (2026-10-02): primero el MISMO lector determinístico que el
+    // Excel, con la grilla armada por las posiciones del texto (juez + sello). Antes
+    // iba a la IA como texto plano (sin columnas ni sello) y una cartola corta
+    // (≤3000 caracteres, p. ej. Itaú de 1-2 páginas) se probaba como comprobante.
+    const cartola = await leerCartolaPdf(job, fileBuffer, pdf.clave);
+    if (cartola) {
+      contenido = cartola.content;
+      preExtracted = cartola.preExtracted;
+      plantilla = cartola.plantilla;
+      censo = cartola.censo;
+    } else if (contenido.length <= PDF_COMPROBANTE_MAX_CHARS) {
+      // Un PDF corto que no es cartola es un comprobante: primero el determinístico.
+      // Lo demás sigue a la IA.
       preExtracted = await comprobanteDeterministico(sb, job, contenido);
     }
   } else if (job.tipo === "imagen") {
@@ -383,7 +394,22 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
   return { contenido, preExtracted, plantilla, censo, textosPorImagen: undefined as string[] | undefined };
 }
 
-/** Sobre este largo, el texto de un PDF es una cartola (va a la IA), no un comprobante. */
+/**
+ * Cartola PDF por el lector determinístico. null = no parece cartola o el lector
+ * no la pudo leer → el flujo de antes (comprobante si es corto, IA si es largo).
+ * Una plantilla de facturas sigue siendo error definitivo, igual que en Excel.
+ */
+async function leerCartolaPdf(job: DocumentProcessingJob, fileBuffer: Buffer, clave: string | undefined) {
+  try {
+    return await parsePdfCartola(new Uint8Array(fileBuffer), { documento_id: job.documento_id, empresa_id: job.empresa_id, clave });
+  } catch (error) {
+    if (error instanceof PlantillaFacturasEnCartolaError) throw error;
+    console.warn("[queue] cartola PDF: el lector determinístico falló, sigue el flujo de texto", (error as Error)?.message);
+    return null;
+  }
+}
+
+/** Sobre este largo, el texto de un PDF que NO es cartola va a la IA, no al lector de comprobantes. */
 const PDF_COMPROBANTE_MAX_CHARS = 3_000;
 
 /**
@@ -421,7 +447,7 @@ async function comprobanteDeterministico(
  * abre el PDF, lanza PdfProtegidoError (definitivo, sin reintentos, mensaje
  * humano). La clave solo vive en memoria durante la lectura.
  */
-async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer): Promise<string> {
+async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer): Promise<{ texto: string; clave?: string }> {
   const { PDFParse } = await import("pdf-parse");
   // pdf.js TRANSFIERE el buffer al worker (queda desprendido tras el 1er intento):
   // cada intento necesita una copia fresca, si no el 2º tira DataCloneError.
@@ -431,7 +457,7 @@ async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buff
     try { return (await parser.getText()).text; } finally { await parser.destroy().catch(() => {}); }
   };
   try {
-    return await intentar();
+    return { texto: await intentar() };
   } catch (error) {
     if (!esErrorDeClavePdf(error)) throw error;
   }
@@ -452,7 +478,7 @@ async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buff
         resourceId: job.id,
         metadata: { documento_id: job.documento_id },
       });
-      return texto;
+      return { texto, clave };
     } catch (error) {
       if (!esErrorDeClavePdf(error)) throw error;
     }

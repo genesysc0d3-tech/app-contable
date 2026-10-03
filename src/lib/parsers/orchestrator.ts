@@ -305,6 +305,19 @@ export async function parseExcelWithOrchestrator(
         const l = leer(ctx, namedCfg, fallas, "nombres");
         if (l) lector = { lectura: l, capa: 3, source: "named" };
       }
+    } else if (!conPrueba(lector.lectura)) {
+      // La heurística leyó SIN prueba. Con pocas filas confunde columnas (corpus
+      // PDF 2026-10-02: con 3 movimientos tomó "Saldo" como abono y perdió 2
+      // filas "con cargo y abono a la vez"). Si los TÍTULOS leen la misma hoja
+      // con prueba del banco (el mismo juez, la misma unicidad), o sin perder
+      // filas donde la heurística pierde, ganan los títulos. Nunca al revés: una
+      // lectura con prueba no se cambia.
+      const namedCfg = detectByNames(rows);
+      const l = namedCfg ? leer(ctx, namedCfg, [], "nombres") : null;
+      const perdidas = (x: Lectura) => x.descartes.filter((d) => !d.legitimo).length;
+      if (l && (conPrueba(l) || (perdidas(lector.lectura) > 0 && perdidas(l) === 0 && !l.verificacion.contradice))) {
+        lector = { lectura: l, capa: 3, source: "named" };
+      }
     }
 
     // SEGUNDA OPINIÓN de estructura (DeepSeek por OpenCode Go), solo con el flag
@@ -757,4 +770,9 @@ function legacyFallback(workbook: XLSX.WorkBook): string {
     }
   }
   return out.join("\n");
+}
+
+/** ¿La lectura trae prueba del banco (saldo corrido o totales impresos)? */
+function conPrueba(l: Lectura): boolean {
+  return l.verificacion.tipo === "saldo" || l.verificacion.tipo === "total_banco";
 }

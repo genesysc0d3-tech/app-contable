@@ -63,6 +63,23 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
   const explicitas: string[] = [];
   const reEnCelda = /\b(?:desde|hasta)\s*:?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/gi;
   const reEtiqueta = /\b(?:desde|hasta)\s*:?\s*$/i;
+  // "Período: 01/03/2025 - 31/03/2025" (Itaú, PDF 2026-10-02): sin esto las
+  // fechas "dd/mm" sin año tomaban el año ACTUAL y una cartola de 2025 subida en
+  // 2026 salía con todas las fechas un año corridas (y el saldo igual cuadraba).
+  // La etiqueta puede venir en la misma celda o en la vecina (la grilla del PDF
+  // separa "Período" de ": 01/03/2025 - 31/03/2025").
+  const rePeriodo = /\bper[ií]odo\b[^\d]{0,6}(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*(?:-|–|al|a|hasta)\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/i;
+  rows.forEach((r) => {
+    (r ?? []).forEach((cell, j) => {
+      if (typeof cell !== "string") return;
+      const vecina = r[j + 1];
+      const m = cell.match(rePeriodo) ?? (typeof vecina === "string" ? `${cell} ${vecina}`.match(rePeriodo) : null);
+      if (!m) return;
+      const a = fechaCompletaDeCelda(`${m[1]}/${m[2]}/${m[3]}`);
+      const b = fechaCompletaDeCelda(`${m[4]}/${m[5]}/${m[6]}`);
+      if (a && b) explicitas.push(a, b);
+    });
+  });
   rows.forEach((r, i) => {
     (r ?? []).forEach((cell, j) => {
       if (typeof cell !== "string") return;

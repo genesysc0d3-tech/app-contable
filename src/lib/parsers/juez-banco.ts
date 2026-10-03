@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import type * as XLSX from "xlsx";
 import type { AdapterConfig, DescarteFila, ParsedLine, Row, VerificacionCartola } from "./types";
 import { leerCeldaMonto, valorCeldaSuelta } from "./numeros";
-import { normalizarTitulo, RE_ENTRADA, RE_SALIDA } from "./encabezados";
+import { normalizarTitulo, RE_ENTRADA, RE_SALDO, RE_SALIDA } from "./encabezados";
 import { cuadreDeLectura, TOLERANCIA_SELLO_PESOS, toleranciaDelSello } from "./saldo-cuadre";
 import { cellEsFecha } from "./celdas";
 
@@ -36,11 +36,20 @@ export interface ResumenImpreso {
 
 // La etiqueta EMPIEZA con "saldo"/"total": una glosa "PAGO TOTAL TARJETA
 // CREDITO" no es el total de abonos del banco.
-const ETIQUETAS: { campo: keyof ResumenImpreso; re: RegExp }[] = [
+// `soloDerecha`: etiquetas que también podrían ser el TÍTULO de una columna
+// ("Cargos / Giros"): valen solo con el monto a su derecha en la misma fila (el
+// encabezado de un estado de cuenta), nunca con la celda de abajo (que en una
+// columna sería el primer movimiento).
+const ETIQUETAS: { campo: keyof ResumenImpreso; re: RegExp; soloDerecha?: boolean }[] = [
   { campo: "saldoInicial", re: /^saldo\s+(inicial|anterior)\b/ },
   { campo: "saldoFinal", re: /^saldo\b.*\bfinal\b|^saldo\s+contable\s+al\b/ },
   { campo: "totalCargos", re: /^total(es)?\b.*\b(cargos?|debitos?|egresos?|giros?|cheques?)\b/ },
   { campo: "totalAbonos", re: /^total(es)?\b.*\b(abonos?|creditos?|depositos?|ingresos?)\b/ },
+  // Estado de cuenta en PDF (2026-10-02): "Saldo Actual $ x", "Cargos / Giros $ x",
+  // "Depositos / Abonos $ x" en el encabezado, sin la palabra "total".
+  { campo: "saldoFinal", re: /^saldo\s+actual$/, soloDerecha: true },
+  { campo: "totalCargos", re: /^(cargos?|giros?)\s*\/\s*(cargos?|giros?)$/, soloDerecha: true },
+  { campo: "totalAbonos", re: /^(depositos?|abonos?)\s*\/\s*(depositos?|abonos?)$/, soloDerecha: true },
 ];
 
 function montoDeCelda(v: unknown): number | null {
@@ -69,6 +78,7 @@ export function detectarResumenImpreso(rows: Row[]): ResumenImpreso | null {
       const campos = ETIQUETAS.filter((e) => e.re.test(t));
       if (campos.length !== 1) continue;
       const campo = campos[0].campo;
+      const soloDerecha = campos[0].soloDerecha === true;
       if (out[campo] != null) continue;
       let valor: number | null = null;
       const enCelda = v.split(/:/).slice(1).join(":");
@@ -77,7 +87,7 @@ export function detectarResumenImpreso(rows: Row[]): ResumenImpreso | null {
         if (typeof r[k] === "string" && /[a-z]/i.test(String(r[k]).replace(/\$|clp/gi, ""))) break;
         valor = montoDeCelda(r[k]);
       }
-      if (valor == null) valor = montoDeCelda(rows[i + 1]?.[j]);
+      if (valor == null && !soloDerecha) valor = montoDeCelda(rows[i + 1]?.[j]);
       if (valor != null) out[campo] = valor;
     }
   }
@@ -421,6 +431,24 @@ const MOTIVO_TXT: Partial<Record<DescarteFila["motivo"], string>> = {
   fila_de_saldo: "que parecen de saldo y no se leyeron como movimiento",
 };
 
+/**
+ * Columna titulada "Saldo" (no "saldo disponible"/"promedio", que no son saldo
+ * corrido) que el mapa NO usa, con número en ≥80% de las filas leídas. -1 si no hay.
+ */
+function saldoSinMapear(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): number {
+  if (cfg.columns.saldo >= 0 || lines.length < 2 || cfg.header_row < 0) return -1;
+  const usadas = new Set(Object.values(cfg.columns).filter((n): n is number => typeof n === "number" && n >= 0));
+  const titulos = rows[cfg.header_row] ?? [];
+  for (let j = 0; j < titulos.length; j++) {
+    if (usadas.has(j)) continue;
+    const t = normalizarTitulo(titulos[j]);
+    if (!RE_SALDO.test(t) || /disponible|promedio|retenid|contable/.test(t)) continue;
+    const con = lines.filter((l) => montoDeCelda(rows[(l.excel_row ?? 0) - 1]?.[j]) != null).length;
+    if (con >= Math.max(2, Math.ceil(lines.length * 0.8))) return j;
+  }
+  return -1;
+}
+
 export function sellarCartola(args: {
   rows: Row[];
   cfg: AdapterConfig;
@@ -448,6 +476,24 @@ export function sellarCartola(args: {
       ...(saldoNoCierra ? { contradice: "saldo" as const } : {}),
       detalle: "Los títulos de la hoja dicen lo contrario de cómo la leímos (cargo↔abono): corrige las columnas",
     };
+  }
+  // TESTIGO SIN MIRAR (corpus PDF 2026-10-02): con pocas filas la heurística
+  // puede leer la cartola SIN la columna "Saldo" (no le alcanzan filas para
+  // reconocerla) y sellar por los totales del banco. Pero esa columna sigue ahí:
+  // si su saldo corrido NO calza con lo leído, el banco contradice la lectura
+  // (un monto mal impreso/leído que los totales no ven). Sin sello.
+  const colTestigo = saldoSinMapear(rows, cfg, lines);
+  if (colTestigo >= 0) {
+    const conSaldo = lines.map((l) => ({ ...l, saldo: montoDeCelda(rows[(l.excel_row ?? 0) - 1]?.[colTestigo]) ?? undefined }));
+    const q = cuadreDeLectura(conSaldo, rows, { ...cfg, columns: { ...cfg.columns, saldo: colTestigo } }, args.resumen?.saldoInicial ?? null, tolerancia);
+    if (q.fallidas > 0) {
+      return {
+        tipo: "sin_comprobar",
+        alerta: true,
+        contradice: "saldo",
+        detalle: `La columna de saldo de la cartola no calza con la lectura (${q.fallidas} de ${q.revisadas} filas): revisa las columnas`,
+      };
+    }
   }
   const perdidas = descartes.filter((d) => !d.legitimo);
   if (perdidas.length) {

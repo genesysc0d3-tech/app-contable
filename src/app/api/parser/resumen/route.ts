@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const { data: documento } = await sb
     .from("documentos_subidos")
-    .select("id, tipo, storage_provider, storage_path")
+    .select("id, tipo, storage_provider, storage_path, empresa_id")
     .eq("id", body.documento_id)
     .eq("empresa_id", empresaId)
     .single();
