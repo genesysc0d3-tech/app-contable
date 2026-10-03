@@ -130,6 +130,9 @@ describe("guardas de la revisión adversarial (2026-09-26)", () => {
   });
 });
 
+// Con formatos CONOCIDOS (formatos-conocidos.ts: "Mis Movimientos", BCI
+// Detallado) el mapa también queda como el de la empresa: provisorio sin prueba,
+// confirmado con ella (revisión adversarial 2026-10-02: Check necesita el adapter_id).
 describe("formato nuevo = provisorio", () => {
   it("sin saldo que lo confirme, el formato queda PRIVADO de la empresa y deja aviso", async () => {
     const filas: Celda[][] = Array.from({ length: 15 }, (_, i) => [dia(1 + i), dia(1 + i), `Transferencia recibida de Cliente ${i}`, null, 12_000 + i]);

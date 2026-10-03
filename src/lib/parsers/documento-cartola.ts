@@ -16,7 +16,11 @@ import type { AdapterConfig } from "./types";
  * siempre y sin Editar/Aprobar (revisión adversarial 2026-09-30).
  */
 export function esPlanillaMapeable(tipo: string | null | undefined): boolean {
-  return tipo === "excel" || tipo === "csv";
+  // PDF (2026-10-02): la cola lo lee con el mismo lector que el Excel, sobre la
+  // grilla armada por posiciones (pdf-grilla.ts). Sin sello pide "Revisa las
+  // columnas" igual que una planilla, y el popup ve ESA misma grilla. Un PDF que
+  // el router no clasifica como cartola no arma grilla (bajarArchivoCartola falla).
+  return tipo === "excel" || tipo === "csv" || tipo === "pdf";
 }
 
 /** ¿El mapa que llega del navegador tiene la forma mínima? (el server no confía en la UI) */
@@ -37,7 +41,7 @@ export function configDelCliente(cfg: AdapterConfig): AdapterConfig {
   return resto;
 }
 
-type DocArchivo = { id: string; storage_provider: string | null; storage_path: string };
+type DocArchivo = { id: string; storage_provider: string | null; storage_path: string; tipo?: string | null; empresa_id?: string | null };
 
 // El resumen en vivo se pide varias veces seguidas mientras el cliente acomoda
 // las columnas: el archivo se guarda unos minutos en memoria de la instancia
@@ -57,12 +61,42 @@ export async function bajarArchivoCartola(sb: SupabaseClient, doc: DocArchivo, o
     return Buffer.from(await data.arrayBuffer());
   };
   const fileBuf = await descargarDocumento(provider, doc.storage_path, bajar);
-  const buf = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer;
+  const buf = doc.tipo === "pdf"
+    ? await libroDeCartolaPdf(sb, doc, new Uint8Array(fileBuf))
+    : (fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength) as ArrayBuffer);
   if (opts.cache) {
     cache.set(key, { en: Date.now(), buf });
     while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   }
   return buf;
+}
+
+/**
+ * Cartola PDF → la MISMA grilla (.xlsx de texto) que leyó la cola, para que el
+ * popup muestre y mapee exactamente lo que el lector vio. Con clave: las mismas
+ * variantes del RUT de la empresa que prueba la cola (nunca se persisten).
+ */
+async function libroDeCartolaPdf(sb: SupabaseClient, doc: DocArchivo, pdf: Uint8Array): Promise<ArrayBuffer> {
+  const { leerItemsPdf, libroDesdeGrilla } = await import("./pdf-grilla");
+  const { clasificarPdf } = await import("./pdf-router");
+  const { esErrorDeClavePdf, variantesClaveDesdeRut } = await import("@/lib/document-processing/pdf-protegido");
+  let leido: Awaited<ReturnType<typeof leerItemsPdf>> | undefined;
+  try {
+    leido = await leerItemsPdf(pdf);
+  } catch (error) {
+    if (!esErrorDeClavePdf(error) || !doc.empresa_id) throw error;
+    const { data: empresa } = await sb.from("empresas").select("rut").eq("id", doc.empresa_id).maybeSingle();
+    for (const clave of variantesClaveDesdeRut((empresa as { rut?: string } | null)?.rut)) {
+      try { leido = await leerItemsPdf(pdf, clave); break; } catch (e) { if (!esErrorDeClavePdf(e)) throw e; }
+    }
+    if (!leido) throw error;
+  }
+  // Mismo criterio que la cola: el popup es solo para un PDF que el ROUTER
+  // clasificó como cartola, y bajo el tope de páginas.
+  if (leido.truncado) throw new Error("PDF con demasiadas páginas");
+  const ruta = clasificarPdf(leido.items);
+  if (ruta.tipo !== "cartola" || !ruta.rows.length) throw new Error("El PDF no es una cartola");
+  return libroDesdeGrilla(ruta.rows);
 }
 
 /** Cliente service-role (lecturas de parser_logs/parser_adapters filtradas por empresa, auditoría). */

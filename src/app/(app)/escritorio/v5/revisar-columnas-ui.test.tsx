@@ -92,7 +92,7 @@ describe("resumen en vivo del popup", () => {
     expect(html).toContain("Con estas columnas quedan");
     expect(html).toMatch(/30.*entradas.*1\.234\.000/);
     expect(html).toMatch(/10.*salidas.*56\.700/);
-    expect(html).toContain("del 01/09 al 28/09");
+    expect(html).toMatch(/del 01\/09\/\d{4} al 28\/09\/\d{4}/);
     expect(html).not.toMatch(/adapter|mapeo|sello/i);
   });
 

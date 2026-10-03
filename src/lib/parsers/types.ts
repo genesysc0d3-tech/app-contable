@@ -203,6 +203,15 @@ export interface MapaUsado {
   disputa?: string | null;
   /** Con qué se confirmó el mapa (saldo, total_banco, cliente, manual…), si se sabe. */
   confirmado_por?: string | null;
+  /** Id del FORMATO CONOCIDO (formatos-conocidos.ts) con que se leyó, si aplica. */
+  formato_conocido?: string | null;
+  /**
+   * Clave del mapa con que se leyó ESTE documento (claveDeMapa) y el mapa mismo
+   * (solo estructura: columnas y formatos). Check confirma el adaptador solo si
+   * su mapa sigue siendo este, y el popup muestra este (vuelta 3, 2026-10-03).
+   */
+  clave?: string;
+  config?: AdapterConfig;
 }
 
 /** Censo de la hoja leída: toda fila con plata queda contada. */
@@ -231,7 +240,7 @@ export interface CensoCartola {
 
 export interface OrchestratorResult {
   content: string;              // Newline-joined lines, ready for processor
-  capa_usada: number;           // Which layer succeeded (0, 2, 3, 4)
+  capa_usada: number;           // Which layer succeeded (0 caché, 1 formato conocido, 2, 3, 4)
   fingerprint: string;
   adapter_id: string | null;    // Non-null if we used or created an adapter
   rows_extracted: number;

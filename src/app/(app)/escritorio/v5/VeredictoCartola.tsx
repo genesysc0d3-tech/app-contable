@@ -308,8 +308,9 @@ export default function VeredictoCartola({
           único gesto es IR a Emitir, donde vive la última mirada y el Devolver. */}
       {revisionPendiente ? (
         <div data-testid="cta-columnas" style={{ width: "clamp(180px, 34%, 320px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.75em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
-          <div title={columnas?.motivo ?? undefined} style={{ fontSize: "0.92em", color: "var(--text2)", lineHeight: 1.4, textAlign: "center", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {columnas?.otraVez ? columnas.motivo : "No pudimos comprobar esta cartola solos: dinos qué es cada columna y listo."}
+          <div title={columnas?.motivo ?? undefined} style={{ fontSize: "0.92em", color: "var(--text2)", lineHeight: 1.4, textAlign: "center", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {/* El aviso del AÑO (fechas sin año) va visible: es lo único que el cliente tiene que mirar. */}
+            {columnas?.otraVez || /\baño\b/.test(columnas?.motivo ?? "") ? columnas?.motivo : "No pudimos comprobar esta cartola solos: dinos qué es cada columna y listo."}
           </div>
           <button className="vcart-cb" onClick={onRevisarColumnas} disabled={!onRevisarColumnas || busy}
             style={{ background: "var(--accent)", color: "#fff", fontSize: "1.15em", padding: "1.2em 1em" }}>

@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
   const { data: documento } = await supabase
     .from("documentos_subidos")
-    .select("id, tipo, storage_provider, storage_path")
+    .select("id, tipo, storage_provider, storage_path, empresa_id")
     .eq("id", documentoId)
     .eq("empresa_id", empresaId)
     .single();
