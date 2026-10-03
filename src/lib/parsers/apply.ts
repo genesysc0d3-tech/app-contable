@@ -69,7 +69,11 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
   // La etiqueta puede venir en la misma celda o en la vecina (la grilla del PDF
   // separa "Período" de ": 01/03/2025 - 31/03/2025").
   const rePeriodo = /\bper[ií]odo\b[^\d]{0,6}(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*(?:-|–|al|a|hasta)\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/i;
-  rows.forEach((r) => {
+  // Solo el ENCABEZADO (hasta la fila de títulos): una glosa "PERIODO 01/03/2024
+  // AL 31/03/2024" o "Desde 01/01/2020" entre los movimientos no fija el año
+  // (revisión adversarial 2026-10-02).
+  const encabezado = rows.slice(0, Math.max(0, cfg.skip_rows_before_data));
+  encabezado.forEach((r) => {
     (r ?? []).forEach((cell, j) => {
       if (typeof cell !== "string") return;
       const vecina = r[j + 1];
@@ -80,7 +84,7 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
       if (a && b) explicitas.push(a, b);
     });
   });
-  rows.forEach((r, i) => {
+  encabezado.forEach((r, i) => {
     (r ?? []).forEach((cell, j) => {
       if (typeof cell !== "string") return;
       let hit = false;
@@ -89,7 +93,7 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
         if (iso) { explicitas.push(iso); hit = true; }
       }
       if (hit || !reEtiqueta.test(cell.trim())) return;
-      for (const vecina of [r[j + 1], rows[i + 1]?.[j]]) {
+      for (const vecina of [r[j + 1], encabezado[i + 1]?.[j]]) {
         const iso = fechaCompletaDeCelda(vecina);
         if (iso) { explicitas.push(iso); break; }
       }

@@ -130,13 +130,13 @@ describe("guardas de la revisión adversarial (2026-09-26)", () => {
   });
 });
 
-// Los formatos REGISTRADOS (formatos-conocidos.ts: "Mis Movimientos", BCI
-// Detallado…) ya no son "nuevos": entran por capa 1 sin guardar adaptador. Estos
-// tests usan títulos que NO están registrados para seguir probando el formato nuevo.
+// Con formatos CONOCIDOS (formatos-conocidos.ts: "Mis Movimientos", BCI
+// Detallado) el mapa también queda como el de la empresa: provisorio sin prueba,
+// confirmado con ella (revisión adversarial 2026-10-02: Check necesita el adapter_id).
 describe("formato nuevo = provisorio", () => {
   it("sin saldo que lo confirme, el formato queda PRIVADO de la empresa y deja aviso", async () => {
     const filas: Celda[][] = Array.from({ length: 15 }, (_, i) => [dia(1 + i), dia(1 + i), `Transferencia recibida de Cliente ${i}`, null, 12_000 + i]);
-    await parsear({ "Hoja 1": [["Movimientos de la cuenta"], ["Fecha Transacción", "Fecha Contable", "Descripción", "Egreso (-)", "Ingreso (+)"], ...filas] });
+    await parsear({ "Hoja 1": [["Mis Movimientos"], ["Fecha Transacción", "Fecha Contable", "Descripción", "Egreso (-)", "Ingreso (+)"], ...filas] });
     expect(guardados).toHaveLength(1);
     expect(guardados[0].empresaId).toBe("emp-test");
     expect(ops.some((o) => o.eventName === "parser_formato_nuevo")).toBe(true);
@@ -151,7 +151,7 @@ describe("formato nuevo = provisorio", () => {
       saldo += egreso ? -m : m;
       return [dia(1 + (i % 25)), `D5D76EB61DB98F697D346006F73B22F26229444E|${9010716960000 + i}`, `Transferencia recibida de Cliente ${i}`, egreso ? null : m, egreso ? m : null, saldo];
     });
-    await parsear({ "Hoja 1": [["Fecha de transacción", "Código", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse(), ["", "", "Saldo inicial", null, null, 1_000_000]] });
+    await parsear({ "Hoja 1": [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse(), ["", "", "Saldo inicial", null, null, 1_000_000]] });
     expect(guardados).toHaveLength(1);
     expect(guardados[0].empresaId).toBe("emp-test");
     expect(guardados[0].confirmadoPor).toBe("saldo");

@@ -54,66 +54,6 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
     "flag": null
   },
   {
-    "id": "bancoestado-chequera-completa",
-    "banco": "BancoEstado",
-    "familia": "BancoEstado Chequera Electrónica completa (Cheques / Cargos | Depósitos / Abonos | Saldo)",
-    "titulos": [
-      "fecha",
-      "sucursal",
-      "n° cuenta",
-      "alias",
-      "n° cartola",
-      "n° operacion",
-      "descripcion",
-      "cheques / cargos",
-      "depositos / abonos",
-      "saldo"
-    ],
-    "roles": [
-      "fecha",
-      "ignorar",
-      "ignorar",
-      "ignorar",
-      "ignorar",
-      "n_documento",
-      "descripcion",
-      "cargo",
-      "abono",
-      "saldo"
-    ],
-    "marcas": [],
-    "fecha_sin_anio": true,
-    "flag": null
-  },
-  {
-    "id": "bancoestado-chequera-solo-abonos",
-    "banco": "BancoEstado",
-    "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
-    "titulos": [
-      "fecha",
-      "sucursal",
-      "n° cuenta",
-      "alias",
-      "n° cartola",
-      "n° operacion",
-      "descripcion",
-      "depositos / abonos"
-    ],
-    "roles": [
-      "fecha",
-      "ignorar",
-      "ignorar",
-      "ignorar",
-      "ignorar",
-      "n_documento",
-      "descripcion",
-      "monto"
-    ],
-    "marcas": [],
-    "fecha_sin_anio": true,
-    "flag": null
-  },
-  {
     "id": "bancoestado-fechas-compactas",
     "banco": "BancoEstado",
     "familia": "BancoEstado CuentaRUT con fechas '20260923' y '02/09' sin año",
@@ -160,38 +100,6 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "saldo"
     ],
     "marcas": [],
-    "fecha_sin_anio": false,
-    "flag": null
-  },
-  {
-    "id": "bci-mes-actual-xls",
-    "banco": "BCI",
-    "familia": "BCI 'Cartola de Cuenta Corriente' Movimientos_Mes_Actual (.xls, editada: solo 'Abono EXENTAS')",
-    "titulos": [
-      "",
-      "fecha",
-      "oficina",
-      "movimiento",
-      "n° documento",
-      "abono exentas"
-    ],
-    "roles": [
-      "ignorar",
-      "fecha",
-      "ignorar",
-      "descripcion",
-      "n_documento",
-      "monto"
-    ],
-    "marcas": [
-      "banco de credito e inversiones",
-      "nombre",
-      "rut",
-      "usuario",
-      "fecha",
-      "cartola de cuenta corriente n° :",
-      "movimientos_mes_actual"
-    ],
     "fecha_sin_anio": false,
     "flag": null
   },
@@ -460,6 +368,9 @@ export const SPECS_EXCLUIDAS: Record<string, string> = {
   "me-planilla-fecha-monto-comision": "planilla casera (Fecha|Monto|Comisión), sin banco",
   "plantilla-massdte-boletas": "plantilla massDTE: ya tiene su propia capa (firma exacta)",
   "santander-3-columnas-editada": "export editado por la clienta: MONTO sin columna de dirección",
+  "bancoestado-chequera-completa": "fechas sin año (dd/mm) y el export no trae el período: el año no se puede saber con certeza",
+  "bancoestado-chequera-solo-abonos": "fechas sin año (dd/mm) y el export no trae el período: el año no se puede saber con certeza",
+  "bci-mes-actual-xls": "export editado por la clienta (solo 'Abono EXENTAS'): sin evidencia del export original del banco",
   "mis-movimientos-solo-ingresos-con-saldo": "mismo formato que mis-movimientos-completa",
   "santander-movimientos-ctacte-completa": "mismo formato que santander-movimientos-ctacte"
 };

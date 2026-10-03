@@ -241,10 +241,12 @@ export async function parseExcelWithOrchestrator(
     // mapa registrado, sin adivinar. El juez sigue mandando: sin prueba de
     // saldo/total no hay sello. Si la EMPRESA ya guardó su propio mapa para esta
     // huella (corrigió columnas en el popup), manda el suyo.
-    // Solo un mapa que la empresa CORRIGIÓ (popup / manual) le gana al conocido;
-    // un adaptador propio provisorio (una adivinanza vieja) no.
+    // Un mapa PROPIO ya confirmado (por el cliente, a mano, por Check, por saldo o
+    // total del banco, por consenso) le gana al conocido: la empresa ya lo
+    // validó y sigue por la caché (adapter_id para Check). Un propio provisorio
+    // (una adivinanza vieja) no.
     const mapaDeLaEmpresa = !!cached?.creado_por_empresa_id
-      && (cached.source === "manual" || cached.confirmado_por === "cliente" || cached.confirmado_por === "manual");
+      && (cached.estado === "confirmado" || cached.source === "manual" || cached.confirmado_por === "cliente" || cached.confirmado_por === "manual");
     const conocido = mapaDeLaEmpresa ? null : detectarFormatoConocido(rows);
     if (conocido) {
       const lectura = leer(ctx, conocido.cfg, fallas, `conocido:${conocido.formato.id}`);
@@ -255,8 +257,18 @@ export async function parseExcelWithOrchestrator(
         // no, una lectura mala sin alerta (p. ej. subtotales del día leídos como
         // movimientos en un export sin saldo) pasaría callada (corpus 2026-10-02).
         const probada = lectura.verificacion.tipo === "saldo" || lectura.verificacion.tipo === "total_banco";
-        return terminar(lectura, 1, null, {
-          adapter_id: null,
+        // Se guarda como el mapa de la empresa (provisorio sin prueba, confirmado
+        // con ella), igual que un formato derivado: así Check y el popup tienen
+        // un adapter_id que confirmar y la próxima vez manda la caché confirmada.
+        const titulos = encabezadoNormalizado(rows) ?? undefined;
+        const adapterId = await guardarFormatoDerivado({
+          fingerprint,
+          source: "named",
+          nombre: `Formato conocido: ${conocido.formato.nombre} (${sheetName})`,
+          config: { ...conocido.cfg, ...(titulos ? { titulos } : {}), ...(lectura.censo.cuenta?.huella ? { cuenta_huella: lectura.censo.cuenta.huella } : {}) },
+        }, lectura.verificacion, opts);
+        return terminar(lectura, 1, adapterId, {
+          adapter_id: adapterId,
           estado: probada ? "confirmado" : "provisorio",
           nuevo: !probada,
           confirmado_por: probada ? lectura.verificacion.tipo : null,
@@ -410,6 +422,12 @@ export async function parseExcelWithOrchestrator(
   // Layer 4: legacy fallback — generic sheet_to_csv across all sheets
   const content = legacyFallback(workbook);
   const fingerprint = "legacy"; // no meaningful fingerprint for legacy
+  // PDF: la grilla es nuestra; si el lector no la lee, el PDF sigue su flujo de
+  // texto (comprobante/IA) y lo cuenta el evento propio "pdf_ruta" (motivo
+  // lector_no_la_leyo). Ni parser_logs capa 4 ni la alarma de planilla.
+  if (opts?.origen === "pdf") {
+    return { content, result: { content, capa_usada: 4, fingerprint, adapter_id: null, rows_extracted: 0, validator_failed_checks: [], warnings: ["pdf_lector_no_la_leyo"], error: null, plantilla: false, preExtracted: null, verificacion: null } };
+  }
   await logParserEvent({
     documento_id: opts?.documento_id,
     fingerprint,

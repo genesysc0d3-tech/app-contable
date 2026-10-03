@@ -18,7 +18,8 @@ import type { AdapterConfig } from "./types";
 export function esPlanillaMapeable(tipo: string | null | undefined): boolean {
   // PDF (2026-10-02): la cola lo lee con el mismo lector que el Excel, sobre la
   // grilla armada por posiciones (pdf-grilla.ts). Sin sello pide "Revisa las
-  // columnas" igual que una planilla, y el popup ve ESA misma grilla.
+  // columnas" igual que una planilla, y el popup ve ESA misma grilla. Un PDF que
+  // el router no clasifica como cartola no arma grilla (bajarArchivoCartola falla).
   return tipo === "excel" || tipo === "csv" || tipo === "pdf";
 }
 
@@ -76,22 +77,26 @@ export async function bajarArchivoCartola(sb: SupabaseClient, doc: DocArchivo, o
  * variantes del RUT de la empresa que prueba la cola (nunca se persisten).
  */
 async function libroDeCartolaPdf(sb: SupabaseClient, doc: DocArchivo, pdf: Uint8Array): Promise<ArrayBuffer> {
-  const { itemsDePdf, grillaDesdeItems, libroDesdeGrilla } = await import("./pdf-grilla");
+  const { leerItemsPdf, libroDesdeGrilla } = await import("./pdf-grilla");
+  const { clasificarPdf } = await import("./pdf-router");
   const { esErrorDeClavePdf, variantesClaveDesdeRut } = await import("@/lib/document-processing/pdf-protegido");
-  let items;
+  let leido: Awaited<ReturnType<typeof leerItemsPdf>> | undefined;
   try {
-    items = await itemsDePdf(pdf);
+    leido = await leerItemsPdf(pdf);
   } catch (error) {
     if (!esErrorDeClavePdf(error) || !doc.empresa_id) throw error;
     const { data: empresa } = await sb.from("empresas").select("rut").eq("id", doc.empresa_id).maybeSingle();
     for (const clave of variantesClaveDesdeRut((empresa as { rut?: string } | null)?.rut)) {
-      try { items = await itemsDePdf(pdf, clave); break; } catch (e) { if (!esErrorDeClavePdf(e)) throw e; }
+      try { leido = await leerItemsPdf(pdf, clave); break; } catch (e) { if (!esErrorDeClavePdf(e)) throw e; }
     }
-    if (!items) throw error;
+    if (!leido) throw error;
   }
-  const rows = grillaDesdeItems(items);
-  if (!rows.length) throw new Error("PDF sin tabla de movimientos");
-  return libroDesdeGrilla(rows);
+  // Mismo criterio que la cola: el popup es solo para un PDF que el ROUTER
+  // clasificó como cartola, y bajo el tope de páginas.
+  if (leido.truncado) throw new Error("PDF con demasiadas páginas");
+  const ruta = clasificarPdf(leido.items);
+  if (ruta.tipo !== "cartola" || !ruta.rows.length) throw new Error("El PDF no es una cartola");
+  return libroDesdeGrilla(ruta.rows);
 }
 
 /** Cliente service-role (lecturas de parser_logs/parser_adapters filtradas por empresa, auditoría). */

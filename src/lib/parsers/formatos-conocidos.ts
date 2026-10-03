@@ -60,6 +60,8 @@ function deSpec(f: FormatoDeSpec): FormatoConocido {
     titulos: f.titulos.map((t, i) => [t, (f.roles[i] ?? "ignorar") as Rol]),
     marcas: f.marcas.map((m) => new RegExp(`^${escapar(m)}$`)),
     date_format: "dd/mm/yyyy",
+    // Fechas sin año (BancoEstado "02/09"): sin período explícito no es este formato.
+    requierePeriodo: f.fecha_sin_anio,
   };
 }
 

@@ -5,6 +5,7 @@ import { leerCeldaMonto, valorCeldaSuelta } from "./numeros";
 import { normalizarTitulo, RE_ENTRADA, RE_SALDO, RE_SALIDA } from "./encabezados";
 import { cuadreDeLectura, TOLERANCIA_SELLO_PESOS, toleranciaDelSello } from "./saldo-cuadre";
 import { cellEsFecha } from "./celdas";
+import { inferirRangoFechas } from "./apply";
 
 /**
  * JUEZ EXTERNO: lo que el propio banco imprime (puntos 5 y 6, 2026-09-30).
@@ -65,6 +66,14 @@ function montoDeCelda(v: unknown): number | null {
  */
 export function detectarResumenImpreso(rows: Row[]): ResumenImpreso | null {
   const out: ResumenImpreso = {};
+  // Filas con "Desde" y "Hasta" (encabezado de un estado de cuenta): las
+  // etiquetas `soloDerecha` ("Saldo Actual", "Cargos / Giros") solo valen en ese
+  // bloque. En una planilla suelta "Saldo Actual" es el saldo de HOY, no el
+  // cierre del período (revisión adversarial 2026-10-02).
+  const filasDesdeHasta = rows.flatMap((r, i) => {
+    const t = (r ?? []).map((c) => normalizarTitulo(c));
+    return t.some((c) => /^(fecha )?desde\b/.test(c)) && t.some((c) => /^(fecha )?hasta\b/.test(c)) ? [i] : [];
+  });
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] ?? [];
     // Una fila con fecha es un MOVIMIENTO, no el resumen del banco.
@@ -79,6 +88,7 @@ export function detectarResumenImpreso(rows: Row[]): ResumenImpreso | null {
       if (campos.length !== 1) continue;
       const campo = campos[0].campo;
       const soloDerecha = campos[0].soloDerecha === true;
+      if (soloDerecha && !filasDesdeHasta.some((k) => Math.abs(k - i) <= 3)) continue;
       if (out[campo] != null) continue;
       let valor: number | null = null;
       const enCelda = v.split(/:/).slice(1).join(":");
@@ -449,7 +459,38 @@ function saldoSinMapear(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): n
   return -1;
 }
 
+/**
+ * ¿Hay fechas SIN AÑO ("02/09") en lo leído y el encabezado no dice el período?
+ * Entonces el año se adivinó (el actual) y el saldo cuadra con cualquier año:
+ * no se sella (revisión adversarial 2026-10-02).
+ */
+function anioAdivinado(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): boolean {
+  const col = cfg.columns.fecha;
+  if (col < 0) return false;
+  const sinAnio = lines.some((l) => /^\s*\d{1,2}[\/\-]\d{1,2}\s*$/.test(String(rows[(l.excel_row ?? 0) - 1]?.[col] ?? "")));
+  return sinAnio && !inferirRangoFechas(rows, cfg)?.explicito;
+}
+
 export function sellarCartola(args: {
+  rows: Row[];
+  cfg: AdapterConfig;
+  lines: ParsedLine[];
+  descartes: DescarteFila[];
+  resumen: ResumenImpreso | null;
+  formulas: FormulaSuma[];
+}): VerificacionCartola {
+  const v = sellarSinMirarElAnio(args);
+  if ((v.tipo === "saldo" || v.tipo === "total_banco") && anioAdivinado(args.rows, args.cfg, args.lines)) {
+    return {
+      tipo: "sin_comprobar",
+      revisar: true,
+      detalle: "Las fechas no traen año y la cartola no dice el período: revisa el año de los movimientos",
+    };
+  }
+  return v;
+}
+
+function sellarSinMirarElAnio(args: {
   rows: Row[];
   cfg: AdapterConfig;
   lines: ParsedLine[];
@@ -482,10 +523,18 @@ export function sellarCartola(args: {
   // reconocerla) y sellar por los totales del banco. Pero esa columna sigue ahí:
   // si su saldo corrido NO calza con lo leído, el banco contradice la lectura
   // (un monto mal impreso/leído que los totales no ven). Sin sello.
-  const colTestigo = saldoSinMapear(rows, cfg, lines);
+  // El cliente dijo "mi cartola trae solo abonos": el saldo salta justo por los
+  // cargos que no vienen; el testigo no le quita esa salida.
+  const colTestigo = cfg.revision_cliente?.solo_abonos ? -1 : saldoSinMapear(rows, cfg, lines);
   if (colTestigo >= 0) {
     const conSaldo = lines.map((l) => ({ ...l, saldo: montoDeCelda(rows[(l.excel_row ?? 0) - 1]?.[colTestigo]) ?? undefined }));
     const q = cuadreDeLectura(conSaldo, rows, { ...cfg, columns: { ...cfg.columns, saldo: colTestigo } }, args.resumen?.saldoInicial ?? null, tolerancia);
+    // Export filtrado a abonos (todo entra y cada salto es un cargo que falta):
+    // misma salida "solo abonos" que el saldo mapeado.
+    const internos = q.saltos.length > 1 ? q.saltos.slice(1) : q.saltos;
+    if (q.fallidas > 0 && !q.invertidaCuadra && lines.every((l) => l.tipo === "ENTRADA") && internos.every((x) => x < 0)) {
+      return { tipo: "sin_comprobar", alerta: true, contradice: "saldo", filtrada: "abonos", detalle: `El saldo corrido no cierra: ${q.fallidas} de ${q.revisadas} filas no cuadran (¿cartola filtrada o incompleta?)` };
+    }
     if (q.fallidas > 0) {
       return {
         tipo: "sin_comprobar",

@@ -77,7 +77,10 @@ export async function leerItemsPdf(data: Uint8Array, clave?: string): Promise<{ 
     // load() es interno de pdf-parse (el doc de pdf.js ya abierto, con clave).
     const doc = await (parser as unknown as { load(): Promise<DocPdf> }).load();
     paginas = doc.numPages;
-    const n = Math.min(doc.numPages, MAX_PAGINAS);
+    // Sobre el tope no se lee NADA (ni las primeras páginas): no se sella una
+    // cartola con páginas sin leer y no se gasta CPU en un PDF gigante.
+    if (paginas > MAX_PAGINAS) return { items: [], paginas, truncado: true };
+    const n = doc.numPages;
     for (let p = 1; p <= n; p++) {
       const page = await doc.getPage(p);
       const tc = await page.getTextContent();
