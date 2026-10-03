@@ -236,16 +236,25 @@ export async function parseExcelWithOrchestrator(
     // mapa registrado, sin adivinar. El juez sigue mandando: sin prueba de
     // saldo/total no hay sello. Si la EMPRESA ya guardó su propio mapa para esta
     // huella (corrigió columnas en el popup), manda el suyo.
-    const conocido = cached?.creado_por_empresa_id ? null : detectarFormatoConocido(rows);
+    // Solo un mapa que la empresa CORRIGIÓ (popup / manual) le gana al conocido;
+    // un adaptador propio provisorio (una adivinanza vieja) no.
+    const mapaDeLaEmpresa = !!cached?.creado_por_empresa_id
+      && (cached.source === "manual" || cached.confirmado_por === "cliente" || cached.confirmado_por === "manual");
+    const conocido = mapaDeLaEmpresa ? null : detectarFormatoConocido(rows);
     if (conocido) {
       const lectura = leer(ctx, conocido.cfg, fallas, `conocido:${conocido.formato.id}`);
       if (lectura) {
         lectura.warnings.push(`formato_conocido: ${conocido.formato.id}`);
+        // Las COLUMNAS se saben; que ESTA cartola esté bien leída, no. Sin prueba
+        // del banco (saldo/total) se pide mirar igual que un formato nuevo: si
+        // no, una lectura mala sin alerta (p. ej. subtotales del día leídos como
+        // movimientos en un export sin saldo) pasaría callada (corpus 2026-10-02).
+        const probada = lectura.verificacion.tipo === "saldo" || lectura.verificacion.tipo === "total_banco";
         return terminar(lectura, 1, null, {
           adapter_id: null,
-          estado: "confirmado",
-          nuevo: false,
-          confirmado_por: "formato_conocido",
+          estado: probada ? "confirmado" : "provisorio",
+          nuevo: !probada,
+          confirmado_por: probada ? lectura.verificacion.tipo : null,
           formato_conocido: conocido.formato.id,
         });
       }
