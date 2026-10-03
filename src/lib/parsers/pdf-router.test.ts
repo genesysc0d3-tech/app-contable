@@ -436,3 +436,56 @@ describe("vuelta 6b: marcas falsas, cuenta corriente mercantil y marcas que falt
     expect(ruta(doc(["Movimientos"])).senales[0]).toBe("sin_marca_banco");
   });
 });
+
+// Revisión final (vuelta 6c): los 5 casos del revisor que aún dejaban marca.
+describe("vuelta 6c: marcas de banco falsas que aún sellaban", () => {
+  const L = (y: number, ...c: [string, number][]): ItemPdf[] => c.map(([str, x]) => ({ str, x, y, w: str.length * 4, pagina: 1 }));
+  function tabla(n: number, f: number) {
+    const out: ItemPdf[] = [...L(600, ["Fecha", 40], ["Detalle", 100], ["Cargo", 300], ["Abono", 380], ["Saldo", 460])];
+    let s = 100000;
+    for (let i = 0; i < n; i++) {
+      const m = 1000 + i * 37; const c = i % 2 === 0; s += c ? -m : m;
+      out.push(...L(588 - 12 * i, [`${String(1 + (i % 28)).padStart(2, "0")}/09/2026`, 40], [i < f ? `Factura N° ${8000 + i}` : `Pago recibido ${i}`, 100], [`$ ${m.toLocaleString("es-CL")}`, c ? 300 : 380], [`$ ${s.toLocaleString("es-CL")}`, 460]));
+    }
+    return out;
+  }
+  const doc = (enc: string[], f = 5) => [...enc.flatMap((t, k) => L(790 - 12 * k, [t, 40])), ...L(626, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(10, f)];
+  async function pdfQueCuadra(enc: string[]) {
+    const { jsPDF } = await import("jspdf");
+    const d = new jsPDF({ unit: "pt", format: "a4" }); d.setFontSize(8);
+    enc.forEach((t, k) => d.text(t, 40, 30 + k * 12));
+    const y0 = 30 + enc.length * 12;
+    d.text("Saldo anterior", 40, y0 + 4); d.text("$ 1.000.000", 140, y0 + 4);
+    ["Fecha", "Descripción", "Cargos", "Abonos", "Saldo"].forEach((x, i) => d.text(x, [40, 110, 330, 400, 470][i], y0 + 30));
+    let s = 1_000_000;
+    for (let i = 0; i < 10; i++) {
+      const m = 50_000 + i * 1_370; const c = i % 2 === 0; s += c ? -m : m;
+      [`${String(1 + i).padStart(2, "0")}/09/2026`, `Movimiento ${i}`, c ? `$ ${m.toLocaleString("es-CL")}` : "", c ? "" : `$ ${m.toLocaleString("es-CL")}`, `$ ${s.toLocaleString("es-CL")}`]
+        .forEach((t, k) => t && d.text(t, [40, 110, 330, 400, 470][k], y0 + 44 + i * 13));
+    }
+    let diag: DiagnosticoPdf | null = null;
+    const r = await parsePdfCartola(new Uint8Array(d.output("arraybuffer")), { diagnostico: (x) => { diag = x; } });
+    return { r, d: diag as DiagnosticoPdf | null };
+  }
+  const casos: [string, string[]][] = [
+    ["bloque de pago LARGO (5 líneas tras «Datos para transferencia:»)", ["Distribuidora Ejemplo", "Datos para transferencia:", "Titular: Distribuidora Ejemplo", "RUT 76.000.000-0", "Correo pagos@ejemplo.cl", "Banco de Chile", "Cuenta Corriente N° 0001234567"]],
+    ["«BancoEstado Cta. Cte. 12345678» + «Señores:»", ["Señores: Comercial Ejemplo SpA", "BancoEstado Cta. Cte. 12345678"]],
+    ["cuenta corriente mercantil con «N° Cuenta Corriente» + «Señores:»", ["ESTADO DE CUENTA CORRIENTE", "Señores: Comercial Ejemplo SpA", "N° Cuenta Corriente 4455"]],
+    ["«Ferreteria Perez … Banco de Chile»", ["Ferreteria Perez Cta Banco de Chile"]],
+    ["«Santander Motors»", ["Santander Motors"]],
+    ["«Mach Repuestos»", ["Mach Repuestos"]],
+  ];
+  for (const [caso, enc] of casos) {
+    it(`${caso} → sin marca: otro con facturas, y sin sello aunque cuadre`, async () => {
+      expect(clasificarPdf(doc(enc))).toMatchObject({ tipo: "otro", marca_banco: null });
+      const { r, d } = await pdfQueCuadra(enc);
+      expect(d?.marca_banco ?? null).toBeNull();
+      if (r) expect(r.censo?.verificacion?.tipo).not.toMatch(/^(saldo|total_banco)$/);
+    });
+  }
+  it("las marcas reales siguen: «BancoEstado» solo, «Banco de Chile - Cartola Cuenta Corriente», «Mercado Pago»", () => {
+    expect(clasificarPdf(doc(["BancoEstado"])).marca_banco).toBe("nombre_banco");
+    expect(clasificarPdf(doc(["Banco de Chile - Cartola Cuenta Corriente"])).marca_banco).not.toBeNull();
+    expect(clasificarPdf(doc(["Mercado Pago"])).marca_banco).toBe("nombre_banco");
+  });
+});

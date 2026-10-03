@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileXls, FilePdf, FileCsv, FileImage, File as FileGenerico, type Icon } from "@phosphor-icons/react";
 import { fmt, type Propuesta } from "./revisar-shared";
 import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
@@ -304,6 +304,8 @@ export default function VeredictoCartola({
             </div>
           );
         })()}
+        {/* Deshacer "No es una cartola" (vuelta 6c): solo en un PDF sin lectura de cartola. */}
+        {!cuadre && /\.pdf$/i.test(doc.nombre_archivo) && <LeerComoCartola documentoId={doc.id} onHecho={onCuadreAgregado} />}
       </div>
 
       {/* ACCIONES — decidida: la cartola ya se fue a Emitir; acá no hay nada que
@@ -404,6 +406,45 @@ export default function VeredictoCartola({
       </div>
       )
       )}
+    </div>
+  );
+}
+
+/**
+ * Enlace discreto "Leerlo como cartola" (vuelta 6c): aparece solo si el cliente
+ * marcó ESTE PDF como "No es una cartola". Quita la marca del mapa de su empresa
+ * y lo reprocesa (el server valida que el reproceso pueda partir).
+ */
+function LeerComoCartola({ documentoId, onHecho }: { documentoId: string; onHecho?: () => void }) {
+  const [marcado, setMarcado] = useState(false);
+  const [estado, setEstado] = useState<"" | "enviando" | string>("");
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/parser/leer-como-cartola?documento_id=${encodeURIComponent(documentoId)}`)
+      .then((r) => (r.ok ? r.json() : { marcado: false }))
+      .then((j: { marcado?: boolean }) => { if (vivo) setMarcado(!!j.marcado); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [documentoId]);
+  if (!marcado) return null;
+  async function leer() {
+    setEstado("enviando");
+    try {
+      const res = await fetch("/api/parser/leer-como-cartola", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documento_id: documentoId }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "No pudimos volver a leerlo");
+      setEstado("Listo: lo estamos leyendo como cartola");
+      setMarcado(false);
+      onHecho?.();
+    } catch (e) { setEstado(e instanceof Error ? e.message : "No pudimos volver a leerlo"); }
+  }
+  return (
+    <div style={{ marginTop: "0.55em", fontSize: "0.8em", color: "var(--text3)", lineHeight: 1.4 }}>
+      Dijiste que este PDF no es una cartola.{" "}
+      <button onClick={leer} disabled={estado === "enviando"} style={{ border: "none", background: "transparent", padding: 0, color: "var(--text2)", fontWeight: 650, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, fontSize: "1em" }}>
+        Leerlo como cartola
+      </button>
+      {estado && estado !== "enviando" ? <span> · {estado}</span> : null}
     </div>
   );
 }

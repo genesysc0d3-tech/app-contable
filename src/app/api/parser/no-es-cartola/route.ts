@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { recordCuentaAudit } from "@/lib/audit/account";
-import { computeFingerprint } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
-import { leerLibroCartola } from "@/lib/parsers/libro";
-import type { Row } from "@/lib/parsers/types";
-import { bajarCartola, clienteServicio, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
+import { bajarCartola, clienteServicio, configDelCliente, configValida, huellaDeLibro } from "@/lib/parsers/documento-cartola";
+import { reprocesoPosible } from "@/lib/parsers/reproceso-posible";
 
 /**
  * "No es una cartola" del popup (vuelta 6, A2): un PDF SIN marca propia de banco
@@ -42,6 +39,13 @@ export async function POST(request: Request) {
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   if (documento.tipo !== "pdf") return NextResponse.json({ error: "Solo PDF" }, { status: 400 });
 
+  // Primero, ¿el reproceso puede partir? Si no (emitidas, emisión a medias, job
+  // en curso), no se guarda la marca: quedaría un formato "fuera del lector" con
+  // los movimientos que el lector ya creó.
+  const svc = clienteServicio();
+  const posible = await reprocesoPosible(svc, documentoId);
+  if (!posible.ok) return NextResponse.json({ error: posible.error }, { status: posible.status });
+
   let archivo: Awaited<ReturnType<typeof bajarCartola>>;
   try { archivo = await bajarCartola(supabase, documento, { cache: true }); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
@@ -50,12 +54,11 @@ export async function POST(request: Request) {
   if (!archivo.pdfSinMarcaBanco) return NextResponse.json({ error: "Este PDF sí trae los datos de un banco" }, { status: 422 });
 
   // La misma huella que calcula el orquestador (1ª hoja con filas de la grilla).
-  const wb = leerLibroCartola(archivo.buf, {});
-  const hoja = wb.SheetNames.map((n) => XLSX.utils.sheet_to_json<Row>(wb.Sheets[n], { header: 1, defval: "" })).find((r) => r.length);
-  if (!hoja) return NextResponse.json({ error: "No pudimos leer el PDF" }, { status: 422 });
+  const huella = huellaDeLibro(archivo.buf);
+  if (!huella) return NextResponse.json({ error: "No pudimos leer el PDF" }, { status: 422 });
 
   const adapterId = await upsertManualAdapter({
-    fingerprint: computeFingerprint(hoja),
+    fingerprint: huella,
     empresaId,
     nombre: "No es cartola (dicho por el cliente)",
     config: { ...configDelCliente(body.config), revision_cliente: { documento_id: documentoId, firma: "", no_es_cartola: true } },
@@ -63,11 +66,10 @@ export async function POST(request: Request) {
   });
   if (!adapterId) return NextResponse.json({ error: "No se pudo guardar" }, { status: 500 });
 
-  const sb = clienteServicio();
-  if (sb) {
+  if (svc) {
     await recordCuentaAudit({
-      sb, empresaId, usuarioId: user.id,
-      accion: "cartola_lectura_confirmada",
+      sb: svc, empresaId, usuarioId: user.id,
+      accion: "cartola_no_es_cartola",
       recursoTipo: "documento_subido",
       recursoId: documentoId,
       resumen: "El cliente dijo que el PDF no es una cartola de su banco",

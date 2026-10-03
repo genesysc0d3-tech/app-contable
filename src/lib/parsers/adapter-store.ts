@@ -636,3 +636,51 @@ export async function adapterDelDocumento(
     return null;
   }
 }
+
+/**
+ * ¿Este documento quedó marcado "No es una cartola" por la empresa (vuelta 6c)?
+ * La marca vive en revision_cliente del mapa propio (documento_id = el PDF en
+ * que el cliente lo dijo).
+ */
+export async function documentoMarcadoNoEsCartola(empresaId: string, documentoId: string): Promise<boolean> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return false;
+    const { data } = await sb.from("parser_adapters").select("config").eq("creado_por_empresa_id", empresaId).limit(500);
+    return ((data ?? []) as unknown as { config: AdapterConfig | null }[])
+      .some((r) => r.config?.revision_cliente?.no_es_cartola === true && r.config.revision_cliente.documento_id === documentoId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * DESHACER "No es una cartola" (vuelta 6c): quita la marca de los mapas PROPIOS
+ * de la empresa para esta huella. Las columnas que quedaban en ese mapa nunca las
+ * confirmó el cliente (solo dijo que no era cartola): el mapa vuelve a
+ * provisorio, salvo que tuviera prueba del banco (saldo/total). Devuelve cuántos
+ * mapas tocó (null = error).
+ */
+export async function quitarNoEsCartola(empresaId: string, fingerprint: string): Promise<number | null> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return null;
+    const { data, error } = await sb.from("parser_adapters").select("id, config, confirmado_por")
+      .eq("fingerprint", fingerprint).eq("creado_por_empresa_id", empresaId);
+    if (error) return null;
+    let n = 0;
+    for (const r of (data ?? []) as unknown as { id: string; config: AdapterConfig | null; confirmado_por?: string | null }[]) {
+      if (!r.config?.revision_cliente?.no_es_cartola) continue;
+      const { revision_cliente: _r, ...config } = r.config;
+      const pruebaDelBanco = r.confirmado_por === "saldo" || r.confirmado_por === "total_banco";
+      const cambios = { config: toJson(config as AdapterConfig), ...(pruebaDelBanco ? {} : { estado: "provisorio", confirmado_por: null, confirmado_en: null }) };
+      const u = await sb.from("parser_adapters").update(cambios as never).eq("id", r.id);
+      if (u?.error && esColumnaFaltante(u.error)) await sb.from("parser_adapters").update({ config: toJson(config as AdapterConfig) }).eq("id", r.id);
+      else if (u?.error) return null;
+      n++;
+    }
+    return n;
+  } catch {
+    return null;
+  }
+}

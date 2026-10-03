@@ -1,7 +1,10 @@
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { descargarDocumento } from "@/lib/storage";
-import type { AdapterConfig } from "./types";
+import * as XLSX from "xlsx";
+import type { AdapterConfig, Row } from "./types";
+import { leerLibroCartola } from "./libro";
+import { computeFingerprint } from "./fingerprint";
 
 /**
  * Piezas compartidas de las rutas del popup "Revisa las columnas"
@@ -144,4 +147,11 @@ export function clienteServicio(): SupabaseClient<Database> | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return url && key ? createServiceClient<Database>(url, key) : null;
+}
+
+/** La misma huella que calcula el orquestador (1ª hoja con filas del libro), o null. */
+export function huellaDeLibro(buf: ArrayBuffer): string | null {
+  const wb = leerLibroCartola(buf, {});
+  const hoja = wb.SheetNames.map((n) => XLSX.utils.sheet_to_json<Row>(wb.Sheets[n], { header: 1, defval: "" })).find((r) => r.length);
+  return hoja ? computeFingerprint(hoja) : null;
 }

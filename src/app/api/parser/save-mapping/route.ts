@@ -55,7 +55,8 @@ export async function POST(request: Request) {
   // PDF sin marca propia de banco (vuelta 6, A2): el "Listo" exige que el
   // cliente diga "Sí, es mi cartola" (si no lo es, va por /api/parser/no-es-cartola).
   if (archivo.pdfSinMarcaBanco && body.es_banco !== true) {
-    return NextResponse.json({ error: "Confirma si este PDF es de tu banco", pregunta_banco: true }, { status: 422 });
+    // Una UI vieja (sin la pregunta) llega acá sin es_banco: que recargue.
+    return NextResponse.json({ error: "Recarga la página para continuar: falta confirmar si este PDF es de tu banco", pregunta_banco: true }, { status: 422 });
   }
   // Ya confirmado antes para el formato: la confirmación viaja al mapa nuevo
   // (aunque cambien las columnas, la fila nueva gana en la caché).

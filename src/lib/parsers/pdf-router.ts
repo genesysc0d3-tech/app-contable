@@ -98,30 +98,35 @@ function esEncabezadoBancario(t: string): boolean {
 }
 
 /**
- * MARCA PROPIA DE BANCO (vuelta 6, endurecida tras la revisión adversarial):
+ * MARCA PROPIA DE BANCO (vuelta 6, endurecida en dos revisiones adversariales):
  * el nombre del banco cuenta SOLO en el ENCABEZADO (antes de la tabla; en el pie
- * sale publicidad, en una glosa la contraparte) y solo como:
- *   - "Banco X" (la razón social del propio banco, "Banco Santander-Chile S.A.",
- *     vale), o
- *   - la marca comercial al INICIO de la línea ("BancoEstado", "Mercado Pago",
- *     "Tenpo", "MACH"…), sin una razón social de un tercero en la línea
- *     ("MACH Ingeniería SpA", "Inversiones Santander Ltda." no son bancos).
+ * sale publicidad, en una glosa la contraparte), al INICIO de la línea y con la
+ * línea sola o casi sola: "Banco X" o la marca comercial ("BancoEstado",
+ * "Mercado Pago", "Tenpo", "MACH"…) y, aparte de eso, solo palabras de una
+ * cartola ("cartola", "cuenta corriente", "S.A.", "Chile", números). Cualquier
+ * otra palabra es el nombre de un tercero: "Santander Motors", "Mach Repuestos",
+ * "MACH Ingeniería SpA", "Ferretería Pérez … Banco de Chile" no son bancos.
  * Nunca como dato de pago ("Banco: Santander", "Su banco: …").
  */
-const RE_BANCO_X = /\bbanco (de chile|edwards|estado|santander|bci|de credito e inversiones|itau|scotiabank|bice|security|falabella|ripley|consorcio|internacional|btg( pactual)?|do brasil|de la nacion argentina|hsbc|bbva|corpbanca)\b/;
-const RE_MARCA_COMERCIAL = /^(bancoestado|scotiabank|itau|bci|bice|coopeuch|mercado ?pago|tenpo|mach|global ?66|santander|prex|chek|cmr falabella)\b/;
-const RE_RAZON_SOCIAL = /\b(ltda|limitada|spa|eirl|e\.i\.r\.l|inversiones|sociedad|comercial|ingenieria|servicios|distribuidora|cia|asesorias|constructora|importadora|exportadora)\b|(^|\s)s\.? ?a\.?($|[\s,])/;
+const RE_BANCO_INICIO = /^(banco (de chile|edwards|estado|santander|bci|de credito e inversiones|itau|scotiabank|bice|security|falabella|ripley|consorcio|internacional|btg( pactual)?|do brasil|de la nacion argentina|hsbc|bbva|corpbanca)|bancoestado|scotiabank|itau|bci|bice|coopeuch|mercado ?pago|tenpo|mach|global ?66|santander|prex|chek|cmr falabella)\b/;
+/** Palabras que pueden acompañar al nombre del banco en su propia línea de título. */
+const PALABRAS_DE_BANCO = new Set([
+  "banco", "chile", "s", "a", "sa", "s.a", "s.a.", "cartola", "cartolas", "cuenta", "cuentas", "corriente", "corrientes", "vista", "rut", "cuentarut",
+  "cta", "cte", "estado", "de", "del", "la", "las", "el", "los", "y", "en", "e", "al", "n", "no", "nro", "numero", "movimientos", "historica", "historico",
+  "resumen", "personas", "empresas", "empresa", "pyme", "pymes", "negocios", "linea", "online", "periodo", "desde", "hasta", "emision", "fecha",
+]);
 export function esNombreDeBanco(t: string): boolean {
-  if (/^banco\s*:|\bsu banco\b/.test(t)) return false;
-  if (RE_BANCO_X.test(t)) return /^banco /.test(t) || !RE_RAZON_SOCIAL.test(t);
-  return RE_MARCA_COMERCIAL.test(t) && !RE_RAZON_SOCIAL.test(t);
+  const m = RE_BANCO_INICIO.exec(t);
+  if (!m) return false;
+  const resto = t.slice(m[0].length).split(/[^a-z0-9.°º]+/).filter((w) => /[a-z]/.test(w));
+  return resto.every((w) => PALABRAS_DE_BANCO.has(w.replace(/\.+$/, "")) || PALABRAS_DE_BANCO.has(w));
 }
 /**
  * Datos para PAGARLE a un tercero ("Datos para transferencia:" / "Banco: …" /
  * "Cta Cte N° …" / "a nombre de …"): típico de un estado de cuenta de proveedor.
  * Se evalúa por BLOQUE: el verbo suele ir en una línea y el banco y la cuenta en
- * las siguientes, así que la línea que lo abre y las 3 que siguen quedan fuera
- * de las marcas. Frases de PAGO, no rótulos de un resumen ("Transferencias en
+ * las siguientes, así que desde la línea que lo abre hasta la tabla (o hasta un
+ * salto de bloque: un espacio mayor que el interlineado) nada es marca. Frases de PAGO, no rótulos de un resumen ("Transferencias en
  * línea", "Depósitos", "Pagos" no son instrucción).
  */
 const RE_INSTRUCCION_PAGO = /\bdatos (bancarios|para (la |el |su )?(transferencia|deposito|pago|abono)|de (pago|transferencia|deposito))\b|\btransfi?er(ir|a|e) a\b|\btransferencias? a nombre\b|\bdeposit(ar|e|en) (en|a)\b|\bforma de pago\b|\bmedios? de pago\b|\bsu banco\b|\ba nombre de\b|\bpag(ar|ue|uen) (en|a)\b|\brealice (su |el |la )?(pago|deposito|transferencia)\b|\bcancelar (en|a)\b|\b(enviar|remitir) (el )?comprobante\b|^banco\s*:/;
@@ -200,12 +205,19 @@ export function clasificarPdf(items: ItemPdf[], opts: { sinFormatosConocidos?: b
 
   const noCartola = NO_CARTOLA.filter((s) => fuera.some((t) => s.re.test(t)));
   const glosasDte = lineas.filter((l) => esMovimiento(l) && RE_GLOSA_DTE.test(texto(l))).length;
-  // Encabezado SIN los bloques de instrucción de pago (la línea que lo abre y las 3 siguientes de la página).
+  // Encabezado SIN los bloques de instrucción de pago: desde la línea que lo
+  // abre hasta la tabla o hasta un salto de bloque (espacio > 1,6 interlineados).
   const enBloquePago = new Set<number>();
-  encabezadoIdx.forEach((i) => {
-    if (!RE_INSTRUCCION_PAGO.test(texto(lineas[i]))) return;
-    for (let j = i; j <= i + 3 && j < lineas.length && lineas[j].pagina === lineas[i].pagina; j++) enBloquePago.add(j);
-  });
+  for (const p of paginas) {
+    const enc = encabezadoIdx.filter((i) => lineas[i].pagina === p);
+    const pasos = enc.slice(1).map((i, k) => lineas[enc[k]].y - lineas[i].y).filter((d) => d > 0).sort((a, b) => a - b);
+    const paso = pasos.length ? pasos[Math.floor(pasos.length / 2)] : 14;
+    for (let k = 0; k < enc.length; k++) {
+      if (!RE_INSTRUCCION_PAGO.test(texto(lineas[enc[k]]))) continue;
+      enBloquePago.add(enc[k]);
+      for (let j = k + 1; j < enc.length && lineas[enc[j - 1]].y - lineas[enc[j]].y <= Math.max(paso, 8) * 1.6; j++) enBloquePago.add(enc[j]);
+    }
+  }
   const encabezadoTxt = encabezadoIdx.filter((i) => !enBloquePago.has(i)).map((i) => texto(lineas[i]));
   // "ESTADO DE CUENTA CORRIENTE" + "Señores: …" es la cuenta corriente MERCANTIL
   // de un proveedor (M3): ahí solo vale un título que diga "cartola".
@@ -222,11 +234,13 @@ export function clasificarPdf(items: ItemPdf[], opts: { sinFormatosConocidos?: b
   // "N° de cuenta" sin tipo, "Saldo anterior" o los títulos Fecha/Cargo/Abono/
   // Saldo NO son marca propia: un estado de cuenta de proveedor los trae igual.
   // Las tres marcas de texto se buscan SOLO en el encabezado (no en el pie) y
-  // fuera de un bloque de instrucción de pago.
+  // fuera de un bloque de instrucción de pago. En un documento COMERCIAL
+  // ("Señores:/Cliente:/RUT cliente") el N° de cuenta y el nombre del banco son
+  // los datos de pago del proveedor: ahí solo vale un título que diga "cartola".
   const marcaBanco: string | null = conocido ? "formato_conocido"
-    : encabezadoTxt.some((t) => reDe("n_cuenta_banco").test(t)) ? "n_cuenta_banco"
+    : !docComercial && encabezadoTxt.some((t) => reDe("n_cuenta_banco").test(t)) ? "n_cuenta_banco"
     : encabezadoTxt.some(esTituloCartola) ? "titulo_cartola"
-    : encabezadoTxt.some(esNombreDeBanco) ? "nombre_banco"
+    : !docComercial && encabezadoTxt.some(esNombreDeBanco) ? "nombre_banco"
     : null;
   // Facturas en las glosas (vueltas 3-4-6). SIN marca propia de banco, desde el
   // 20% de glosas con Factura/Boleta/NC/ND N° ya no se distingue de un estado de
