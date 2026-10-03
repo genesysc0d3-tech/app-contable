@@ -126,8 +126,11 @@ describe("revisión adversarial del router", () => {
   it("F estado de cuenta corriente de un PROVEEDOR (facturas en las glosas) → no cartola", () => {
     expect(tipo([...L(780, ["ESTADO DE CUENTA CORRIENTE CLIENTE", 40]), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 8, (i) => `Factura Electrónica N° ${1000 + i}`)])).not.toBe("cartola");
   });
-  it("F2 proveedor sin el título «cliente»: facturas con N° en la mayoría de las glosas → no cartola", () => {
-    expect(tipo([...hdr, ...tabla(700, 8, (i) => (i % 3 ? `Factura Electrónica ${2000 + i}` : `Pago recibido ${i}`))])).not.toBe("cartola");
+  it("F2 cartola B2B con muchos «PAGO FACTURA 1234» y saldo anterior → cartola (vuelta 2)", () => {
+    expect(tipo([...hdr, ...tabla(700, 8, (i) => (i % 3 ? `Pago Factura ${2000 + i}` : `Transferencia ${i}`))])).toBe("cartola");
+  });
+  it("F3 casi todas las glosas son facturas con N° y no hay saldo del banco → no cartola", () => {
+    expect(tipo([...L(780, ["Movimientos", 40]), ...L(766, ["Cuenta Corriente N° 123456", 40]), ...tabla(700, 8, (i) => `Factura Electrónica N° ${3000 + i}`)])).not.toBe("cartola");
   });
   it("G estado de cuenta de línea de crédito (cupo autorizado) → no cartola", () => {
     expect(tipo([...L(780, ["Estado de cuenta Línea de Crédito", 40]), ...L(766, ["Cupo autorizado $ 2.000.000", 40]), ...L(752, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 8, (i) => `Traspaso a cuenta corriente ${i}`)])).not.toBe("cartola");
@@ -163,5 +166,35 @@ describe("revisión adversarial del router", () => {
     let d: DiagnosticoPdf | null = null;
     expect(await parsePdfCartola(new Uint8Array(doc.output("arraybuffer")), { diagnostico: (x) => { d = x; } })).toBeNull();
     expect(d!.tipo).not.toBe("cartola");
+  });
+
+  // Vuelta 2 (2026-10-03): casos realistas que el router perdía o dejaba pasar.
+  it("Pyme: «Línea de crédito · Cupo autorizado $ x» como DATO del encabezado → cartola", () => {
+    expect(tipo([...hdr, ...L(752, ["Cuenta Corriente N° 0001234567", 40]), ...L(738, ["Línea de crédito", 40], ["Cupo autorizado $ 5.000.000", 160], ["Cupo total $ 5.000.000", 330]), ...tabla(700, 6)])).toBe("cartola");
+  });
+  for (const pie of ["Simule su Crédito de Consumo en bancoejemplo.cl", "Paga tus cotizaciones AFP desde tu cuenta", "Dólar observado $ 950,12"]) {
+    it(`pie publicitario «${pie}» → cartola`, () => {
+      expect(tipo([...hdr, ...tabla(700, 6), ...L(40, [pie, 40])])).toBe("cartola");
+    });
+  }
+  it("glosa partida DESPUÉS del último movimiento de la página («TARJETA DE CREDITO VISA», «Destinatario: …») → cartola", () => {
+    const t = tabla(700, 6);
+    expect(tipo([...hdr, ...t, ...L(700 - 12 * 6 - 7, ["TARJETA DE CREDITO VISA", 100])])).toBe("cartola");
+    expect(tipo([...hdr, ...t, ...L(700 - 12 * 6 - 7, ["Destinatario: Juan Perez", 100])])).toBe("cartola");
+  });
+  it("CuentaRUT N° (sin saldo anterior) → cartola", () => {
+    expect(tipo([...L(780, ["Movimientos CuentaRUT", 40]), ...L(766, ["CuentaRUT N° 12345678", 40]), ...tabla(700, 6)])).toBe("cartola");
+  });
+  it("MACH «Cuenta Vista: 123456» (sin N°) → cartola", () => {
+    expect(tipo([...L(780, ["Mis movimientos", 40]), ...L(766, ["Cuenta Vista: 77712345", 40]), ...tabla(700, 6)])).toBe("cartola");
+  });
+  it("«Estado de cuenta del cliente · N° cuenta cliente» → no cartola", () => {
+    expect(tipo([...L(780, ["Estado de cuenta del cliente", 40]), ...L(766, ["N° cuenta cliente 4455", 40]), ...L(752, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 8)])).not.toBe("cartola");
+  });
+  it("«Cartola Línea de Crédito · Cupo aprobado» → no cartola", () => {
+    expect(tipo([...L(780, ["Cartola Línea de Crédito", 40]), ...L(766, ["Cupo aprobado $ 3.000.000", 40]), ...L(752, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 8)])).not.toBe("cartola");
+  });
+  it("«N° cuenta» genérico solo (sin corriente/vista/RUT) no es marca fuerte", () => {
+    expect(tipo([...L(780, ["Movimientos", 40]), ...L(766, ["N° cuenta 4455", 40]), ...tabla(700, 8)])).not.toBe("cartola");
   });
 });

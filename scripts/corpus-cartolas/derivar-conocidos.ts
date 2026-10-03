@@ -26,8 +26,6 @@ export const EXCLUIDAS: Record<string, string> = {
   "me-planilla-fecha-monto-comision": "planilla casera (Fecha|Monto|Comisión), sin banco",
   "plantilla-massdte-boletas": "plantilla massDTE: ya tiene su propia capa (firma exacta)",
   "santander-3-columnas-editada": "export editado por la clienta: MONTO sin columna de dirección",
-  "bancoestado-chequera-completa": "fechas sin año (dd/mm) y el export no trae el período: el año no se puede saber con certeza",
-  "bancoestado-chequera-solo-abonos": "fechas sin año (dd/mm) y el export no trae el período: el año no se puede saber con certeza",
   "bci-mes-actual-xls": "export editado por la clienta (solo 'Abono EXENTAS'): sin evidencia del export original del banco",
   // Mismos títulos y rótulos que otra spec (el mismo formato filtrado): una sola entrada.
   "mis-movimientos-solo-ingresos-con-saldo": "mismo formato que mis-movimientos-completa",
@@ -66,7 +64,9 @@ function derivar(s: Spec) {
     .filter((m) => m.length >= 3 && arriba.has(m));
   const fFecha = s.columnas.find((x) => x.rol === "fecha");
   const flag = s.columnas.find((x) => x.rol === "flag")?.flag ?? null;
-  return { id: s.id, banco: BANCO[s.id], familia: s.familia.replace(/[{}]/g, ""), titulos: fila, roles, marcas, fecha_sin_anio: fFecha?.fmt === "dd/mm", flag };
+  // Hoja de resumen del MISMO export (BancoEstado chequera: "Resumen" con el período y los saldos).
+  const resumen_en_hoja = (s.hojas_extra ?? []).find((h) => h.tipo === "resumen")?.nombre ?? null;
+  return { id: s.id, banco: BANCO[s.id], familia: s.familia.replace(/[{}]/g, ""), titulos: fila, roles, marcas, fecha_sin_anio: fFecha?.fmt === "dd/mm", flag, resumen_en_hoja };
 }
 
 const out = leerSpecs().filter((s) => !EXCLUIDAS[s.id]).map(derivar);

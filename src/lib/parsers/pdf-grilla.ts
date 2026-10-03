@@ -255,10 +255,16 @@ export function grillaDesdeItems(items: ItemPdf[]): Row[] {
   // movimientos". Se pega acá si está más cerca que el paso entre filas y solo
   // trae texto en columnas de texto.
   const pegar = new Set<Linea>();
+  const pasosDoc = paginas.flatMap((p) => {
+    const ys = lineas.filter((l) => l.pagina === p && esMovimiento(l)).map((l) => l.y);
+    return ys.slice(1).map((y, k) => ys[k] - y).filter((d) => d > 0);
+  }).sort((a, b) => a - b);
+  const pasoDoc = pasosDoc.length ? pasosDoc[Math.floor(pasosDoc.length / 2)] : 0;
   for (const { lp, iUltimo } of porPagina.values()) {
     const ys = lp.filter(esMovimiento).map((l) => l.y);
     const pasos = ys.slice(1).map((y, k) => ys[k] - y).filter((d) => d > 0).sort((a, b) => a - b);
-    const paso = pasos.length ? pasos[Math.floor(pasos.length / 2)] : 0;
+    // Página con UN solo movimiento (la última, típicamente): el paso de todo el documento.
+    const paso = pasos.length ? pasos[Math.floor(pasos.length / 2)] : pasoDoc;
     const sig = lp[iUltimo + 1];
     if (sig && paso > 0 && lp[iUltimo].y - sig.y < 0.85 * paso
       && sig.celdas.every((c) => /[a-záéíóúñ]/i.test(c.texto) && leerCeldaMonto(c.texto) == null && !cellEsFecha(c.texto)

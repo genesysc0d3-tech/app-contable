@@ -53,7 +53,12 @@ function fechaCompletaDeCelda(cell: unknown): string | null {
  *   2. Si no, fechas completas de la COLUMNA fecha, desde la primera fila de datos.
  */
 export interface RangoFechas { min: string; max: string; explicito: boolean }
-export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "columns" | "skip_rows_before_data">): RangoFechas | null {
+export function inferirRangoFechas(
+  rows: Row[],
+  cfg: Pick<AdapterConfig, "columns" | "skip_rows_before_data">,
+  /** Encabezado del período en OTRA hoja del mismo export (BancoEstado: hoja "Resumen"). */
+  filasPeriodo: Row[] = [],
+): RangoFechas | null {
   const rangoDe = (isos: string[], explicito: boolean): RangoFechas | null => {
     if (isos.length === 0) return null;
     const orden = [...isos].sort();
@@ -62,7 +67,7 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
 
   const explicitas: string[] = [];
   const reEnCelda = /\b(?:desde|hasta)\s*:?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/gi;
-  const reEtiqueta = /\b(?:desde|hasta)\s*:?\s*$/i;
+  const reEtiqueta = /\b(?:desde|hasta|fecha (?:de )?(?:inicio|final|termino|t[eé]rmino))\s*:?\s*$/i;
   // "Período: 01/03/2025 - 31/03/2025" (Itaú, PDF 2026-10-02): sin esto las
   // fechas "dd/mm" sin año tomaban el año ACTUAL y una cartola de 2025 subida en
   // 2026 salía con todas las fechas un año corridas (y el saldo igual cuadraba).
@@ -72,7 +77,7 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
   // Solo el ENCABEZADO (hasta la fila de títulos): una glosa "PERIODO 01/03/2024
   // AL 31/03/2024" o "Desde 01/01/2020" entre los movimientos no fija el año
   // (revisión adversarial 2026-10-02).
-  const encabezado = rows.slice(0, Math.max(0, cfg.skip_rows_before_data));
+  const encabezado = [...rows.slice(0, Math.max(0, cfg.skip_rows_before_data)), ...filasPeriodo];
   encabezado.forEach((r) => {
     (r ?? []).forEach((cell, j) => {
       if (typeof cell !== "string") return;
@@ -93,7 +98,8 @@ export function inferirRangoFechas(rows: Row[], cfg: Pick<AdapterConfig, "column
         if (iso) { explicitas.push(iso); hit = true; }
       }
       if (hit || !reEtiqueta.test(cell.trim())) return;
-      for (const vecina of [r[j + 1], encabezado[i + 1]?.[j]]) {
+      // El valor a la derecha (hasta 4 celdas vacías de por medio: celdas combinadas) o abajo.
+      for (const vecina of [...(r ?? []).slice(j + 1, j + 6), encabezado[i + 1]?.[j]]) {
         const iso = fechaCompletaDeCelda(vecina);
         if (iso) { explicitas.push(iso); break; }
       }
@@ -409,6 +415,8 @@ export interface OpcionesApply {
    * plata: son de totales POR DEFINICIÓN (juez-banco.ts), no por una palabra.
    */
   filasFormula?: Set<number>;
+  /** Encabezado del período en otra hoja del export (para el año de "dd/mm"). */
+  filasPeriodo?: Row[];
 }
 
 /**
@@ -435,7 +443,7 @@ export function applyAdapter(
   const start = cfg.skip_rows_before_data;
   // "dd/mm" sin año: el año sale del rango del período (DESDE/HASTA o la
   // columna fecha; cruce dic–ene), nunca más de 7 días al futuro.
-  const rango = inferirRangoFechas(rows, cfg);
+  const rango = inferirRangoFechas(rows, cfg, opts.filasPeriodo ?? []);
   // Formato de número decidido POR COLUMNA con todas sus celdas (numeros.ts).
   const lector = new LectorMontos(rows as unknown[][], start, cfg.number_format === "generic" ? "generic" : "chilean");
   // Bloque de resumen del banco (BICE: "RESUMEN DEL PERIODO", "TOTAL ABONOS",

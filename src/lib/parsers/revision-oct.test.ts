@@ -4,18 +4,31 @@ import * as XLSX from "xlsx";
 /** Revisión adversarial 2026-10-02 (juez y formatos conocidos). */
 let cache: Record<string, unknown> | null = null;
 const guardados: unknown[] = [];
+/** Tabla parser_adapters EN MEMORIA (vuelta 2: N lecturas → 1 fila). Solo cuando `tabla` está activa. */
+let tabla: Record<string, unknown>[] | null = null;
 vi.mock("./adapter-store", () => ({
-  getAdapterByFingerprint: async () => cache,
+  getAdapterByFingerprint: async (fp: string, emp?: string) => (tabla ? tabla.find((r) => r.fingerprint === fp && r.creado_por_empresa_id === emp) ?? null : cache),
   getAdaptersConfirmadosEmpresa: async () => [],
   confirmarAdapter: async () => true,
-  saveAdapter: async (a: unknown) => { guardados.push(a); return "adapter-nuevo"; },
+  saveAdapter: async (a: Record<string, unknown>) => {
+    guardados.push(a);
+    if (!tabla) return "adapter-nuevo";
+    const id = `fila-${tabla.length + 1}`;
+    tabla.push({ id, fingerprint: a.fingerprint, creado_por_empresa_id: a.empresaId, source: a.source, config: a.config, estado: a.confirmadoPor ? "confirmado" : "provisorio", confirmado_por: a.confirmadoPor ?? null });
+    return id;
+  },
+  reusarAdapterPropio: async (id: string, config: unknown, o: { prueba?: string | null }) => {
+    const f = tabla?.find((r) => r.id === id);
+    if (f) { f.config = config; if (o.prueba === "saldo" || o.prueba === "total_banco") { f.estado = "confirmado"; f.confirmado_por = o.prueba; } }
+    return id;
+  },
   promoverMapaGlobalSiHayConsenso: async () => false,
   incrementAdapterSuccess: async () => {},
   decrementAdapterConfianza: async () => {},
   logParserEvent: async () => {},
 }));
 vi.mock("../ops/events", () => ({ recordOpsEvent: async () => {} }));
-beforeEach(() => { cache = null; guardados.length = 0; });
+beforeEach(() => { cache = null; guardados.length = 0; tabla = null; });
 
 import { parseExcelWithOrchestrator } from "./orchestrator";
 import { inferirRangoFechas } from "./apply";
@@ -113,5 +126,54 @@ describe("6. formatos editados por la clienta no son conocidos", () => {
     const { FORMATOS_DE_SPECS, SPECS_EXCLUIDAS } = await import("./formatos-conocidos.specs");
     expect(FORMATOS_DE_SPECS.map((f) => f.id)).not.toContain("bci-mes-actual-xls");
     expect(SPECS_EXCLUIDAS["bci-mes-actual-xls"]).toBeTruthy();
+  });
+});
+
+describe("vuelta 2 · 1. un formato conocido NO inserta un adaptador por lectura", () => {
+  const dia = (d: number) => `${String(d).padStart(2, "0")}/03/2026`;
+  /** BCI Detallado (formato conocido): n filas en orden inverso con «Saldo inicial» abajo. */
+  function bci(n: number) {
+    let saldo = 1_000_000;
+    const asc = Array.from({ length: n }, (_, i) => {
+      const egreso = i % 6 === 2; const m = 10_000 + i * 700; saldo += egreso ? -m : m;
+      return [dia(1 + (i % 25)), `HASH|${9010716960000 + i}`, `Transferencia recibida de Cliente ${i}`, egreso ? null : m, egreso ? m : null, saldo];
+    });
+    return [["Fecha de transacción", "Código de transacción", "Glosa detalle", "Ingreso (+)", "Egreso (-)", "Saldo contable"], ...asc.reverse(), ["", "", "Saldo inicial", null, null, 1_000_000]];
+  }
+  it("3 lecturas sin prueba → 1 sola fila provisoria; una con prueba → la MISMA fila pasa a confirmado", async () => {
+    tabla = [];
+    for (let k = 0; k < 3; k++) {
+      const { result } = await parseExcelWithOrchestrator(libro(bci(5)), { empresa_id: "emp" });
+      expect(result.capa_usada).toBe(1);
+      expect(result.verificacion?.tipo).toBe("sin_comprobar");
+    }
+    expect(tabla).toHaveLength(1);
+    expect(tabla[0].estado).toBe("provisorio");
+    const { result } = await parseExcelWithOrchestrator(libro(bci(14)), { empresa_id: "emp" });
+    expect(result.verificacion?.tipo).toBe("saldo");
+    expect(result.adapter_id).toBe("fila-1");
+    expect(tabla).toHaveLength(1);
+    expect(tabla[0]).toMatchObject({ id: "fila-1", estado: "confirmado", confirmado_por: "saldo" });
+  });
+});
+
+describe("vuelta 2 · 5. el aviso del año es cumplible en el popup", () => {
+  it("dice qué año confirmar y que «Listo» lo confirma", async () => {
+    const { result } = await parseExcelWithOrchestrator(libro(cartola(14, (i) => `${String(1 + i).padStart(2, "0")}/03`)), {});
+    expect(result.verificacion?.detalle).toMatch(/confirma que estos movimientos son del año \d{4}.*Listo/);
+  });
+});
+
+describe("vuelta 2 · 4. BancoEstado chequera: el año y el resumen salen de su hoja «Resumen»", () => {
+  it("chequera completa y solo-abonos entran por conocido con el año del período", async () => {
+    const { leerSpecs, rendir } = await import("../../../scripts/corpus-cartolas/generador");
+    const specs = leerSpecs();
+    for (const id of ["bancoestado-chequera-completa", "bancoestado-chequera-solo-abonos"]) {
+      const c = rendir(specs.find((s) => s.id === id)!, 11, { mes: 3 });
+      const { result } = await parseExcelWithOrchestrator(c.buf, {});
+      expect({ id, conocido: result.censo?.mapa?.formato_conocido }).toEqual({ id, conocido: id });
+      const leido = (result.preExtracted ?? []).map((m) => `${m.fecha}|${m.monto}`).sort();
+      expect(leido).toEqual(c.verdad.map((v) => `${v.fecha}|${v.monto}`).sort());
+    }
   });
 });

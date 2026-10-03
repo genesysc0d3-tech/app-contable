@@ -81,6 +81,12 @@ describe("cartola PDF formato 'itau' (Letter, dd/mm sin año, resumen abajo)", (
 });
 
 describe("cartola PDF formato 'estado' (A4, dd-mm-aaaa, cargos con signo en su columna)", () => {
+  it("glosa partida en el ÚLTIMO movimiento de una página con un solo movimiento: se pega (corpus vuelta 2)", async () => {
+    const seed = 9 * 97 + 13;
+    const { c, r } = await leer({ formato: "estado", seed, filas: 40 + (seed % 120), glosaMultilinea: true });
+    exacta(r!.preExtracted as Pre[], c.verdad);
+  });
+
   it("120 filas en 3 páginas: exacta y sellada por saldo", async () => {
     const { c, r } = await leer({ formato: "estado", filas: 120, seed: 21, anio: 2022 });
     exacta(r!.preExtracted as Pre[], c.verdad);

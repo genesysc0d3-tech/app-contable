@@ -84,7 +84,7 @@ describe("formatos conocidos derivados de las specs reales (Excel)", () => {
     const { parseExcelWithOrchestrator } = await import("./orchestrator");
     const { FORMATOS_DE_SPECS } = await import("./formatos-conocidos.specs");
     const specs = new Map(leerSpecs().map((s) => [s.id, s]));
-    expect(FORMATOS_DE_SPECS.length).toBe(10);
+    expect(FORMATOS_DE_SPECS.length).toBe(12);
     for (const f of FORMATOS_DE_SPECS) {
       const c = rendir(specs.get(f.id)!, 7);
       const { result: r } = await parseExcelWithOrchestrator(c.buf, {});

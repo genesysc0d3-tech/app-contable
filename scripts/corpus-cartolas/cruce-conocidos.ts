@@ -29,9 +29,10 @@ async function main() {
   const sumar = (k: string) => tabla.set(k, (tabla.get(k) ?? 0) + 1);
   for (const it of corpus) {
     const wb = leerLibroCartola(it.buf);
+    const todas = wb.SheetNames.map((n) => ({ nombre: n, rows: XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: "" }) as never[] }));
     for (const n of wb.SheetNames) {
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: "" }) as never[];
-      const d = detectarFormatoConocido(rows)?.formato.id ?? null;
+      const rows = todas.find((h) => h.nombre === n)!.rows;
+      const d = detectarFormatoConocido(rows, todas.filter((h) => h.nombre !== n))?.formato.id ?? null;
       if (!d) continue;
       const propio = ALIAS[it.spec_id] ?? it.spec_id;
       // Mismo formato de hecho: la mutación dejó el archivo con los MISMOS títulos

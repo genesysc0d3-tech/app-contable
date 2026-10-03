@@ -93,7 +93,9 @@ export function detectarResumenImpreso(rows: Row[]): ResumenImpreso | null {
       let valor: number | null = null;
       const enCelda = v.split(/:/).slice(1).join(":");
       if (enCelda) valor = montoDeCelda(enCelda.trim());
-      for (let k = j + 1; valor == null && k < Math.min(r.length, j + 4); k++) {
+      // Hasta 4 celdas a la derecha (celdas combinadas del rótulo, como la hoja
+      // "Resumen" de BancoEstado: rótulo en A, valor en E).
+      for (let k = j + 1; valor == null && k < Math.min(r.length, j + 5); k++) {
         if (typeof r[k] === "string" && /[a-z]/i.test(String(r[k]).replace(/\$|clp/gi, ""))) break;
         valor = montoDeCelda(r[k]);
       }
@@ -464,11 +466,11 @@ function saldoSinMapear(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): n
  * Entonces el año se adivinó (el actual) y el saldo cuadra con cualquier año:
  * no se sella (revisión adversarial 2026-10-02).
  */
-function anioAdivinado(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[]): boolean {
+function anioAdivinado(rows: Row[], cfg: AdapterConfig, lines: ParsedLine[], filasPeriodo: Row[] = []): boolean {
   const col = cfg.columns.fecha;
   if (col < 0) return false;
   const sinAnio = lines.some((l) => /^\s*\d{1,2}[\/\-]\d{1,2}\s*$/.test(String(rows[(l.excel_row ?? 0) - 1]?.[col] ?? "")));
-  return sinAnio && !inferirRangoFechas(rows, cfg)?.explicito;
+  return sinAnio && !inferirRangoFechas(rows, cfg, filasPeriodo)?.explicito;
 }
 
 export function sellarCartola(args: {
@@ -478,13 +480,19 @@ export function sellarCartola(args: {
   descartes: DescarteFila[];
   resumen: ResumenImpreso | null;
   formulas: FormulaSuma[];
+  /** Encabezado del período en otra hoja del export (BancoEstado "Resumen"). */
+  filasPeriodo?: Row[];
 }): VerificacionCartola {
   const v = sellarSinMirarElAnio(args);
-  if ((v.tipo === "saldo" || v.tipo === "total_banco") && anioAdivinado(args.rows, args.cfg, args.lines)) {
+  if ((v.tipo === "saldo" || v.tipo === "total_banco") && anioAdivinado(args.rows, args.cfg, args.lines, args.filasPeriodo)) {
+    // Algo que el cliente PUEDE cumplir en el popup: mirar el año y tocar "Listo"
+    // (el "Listo" sobre esta misma lectura la deja confirmada por el cliente).
+    const anios = [...new Set(args.lines.map((l) => l.fecha.slice(0, 4)))].sort();
+    const anio = anios.length === 1 ? anios[0] : `${anios[0]}–${anios[anios.length - 1]}`;
     return {
       tipo: "sin_comprobar",
       revisar: true,
-      detalle: "Las fechas no traen año y la cartola no dice el período: revisa el año de los movimientos",
+      detalle: `Las fechas de la cartola no traen año: confirma que estos movimientos son del año ${anio} (si está bien, toca Listo)`,
     };
   }
   return v;

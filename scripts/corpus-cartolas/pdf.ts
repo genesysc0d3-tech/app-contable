@@ -38,6 +38,9 @@ const VARIANTES: Variante[] = [
   { id: "glosa_multilinea", sabotaje: false, o: (s) => ({ seed: s, filas: 6 + (s % 60), glosaMultilinea: true }) },
   { id: "sin_resumen", sabotaje: false, o: (s) => ({ seed: s, filas: 3 + (s % 30), sinResumen: true }) },
   { id: "un_sentido", sabotaje: false, o: (s) => ({ seed: s, filas: 2 + (s % 40), unSentido: s % 2 ? "cargos" : "abonos" }) },
+  { id: "pyme_cupo_autorizado", sabotaje: false, o: (s) => ({ seed: s, filas: 3 + (s % 40), lineaCredito: true }) },
+  { id: "pie_aviso", sabotaje: false, o: (s) => ({ seed: s, filas: 3 + (s % 60), aviso: ["Simule su Crédito de Consumo en bancoejemplo.cl", "Paga tus cotizaciones AFP desde tu cuenta", "Dólar observado $ 950,12", "Pague su Tarjeta de Crédito con cargo a su cuenta"][s % 4] }) },
+  { id: "glosa_partida_fin_pagina", sabotaje: false, o: (s) => ({ seed: s, filas: 40 + (s % 120), glosaMultilinea: true }) },
   { id: "dic_ene", sabotaje: false, o: (s) => ({ seed: s, filas: 5 + (s % 25), anio: 2024 + (s % 2), mes: s % 2 ? 12 : 1 }) },
   { id: "SAB_monto_alterado", sabotaje: true, o: (s) => ({ seed: s, filas: 4 + (s % 80), montoAlterado: true }) },
   { id: "SAB_titulos_cruzados", sabotaje: true, o: (s) => ({ seed: s, filas: 4 + (s % 80), titulosCruzados: true }) },
@@ -58,6 +61,7 @@ async function main() {
   for (const formato of ["itau", "estado"] as const) {
     for (const v of VARIANTES) {
       if (formato === "estado" && v.id === "sin_resumen") continue; // "estado" no trae resumen abajo
+      if (formato === "itau" && v.id === "pyme_cupo_autorizado") continue; // Itaú ya informa su línea
       for (let seed = 1; seed <= N; seed++) {
         const o = { formato, ...v.o(seed * 97 + 13) } as OpcionesPdf;
         const c = await cartolaPdfSintetica(o);

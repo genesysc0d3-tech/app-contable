@@ -37,6 +37,12 @@ export interface FormatoConocido {
   date_format: AdapterConfig["date_format"];
   /** Fechas sin año: exigir el período explícito en el encabezado (de ahí sale el año). */
   requierePeriodo?: boolean;
+  /**
+   * Hoja del MISMO export con el encabezado del período y el resumen del banco
+   * (BancoEstado chequera: hoja "Resumen" con Fecha Inicio/Final, Saldo
+   * Inicial/Final, totales). De ahí sale el año y el resumen que juzga.
+   */
+  resumenEnHoja?: RegExp;
 }
 
 /** Forma en que llegan los formatos derivados de las specs (formatos-conocidos.specs.ts, generado). */
@@ -49,6 +55,7 @@ export interface FormatoDeSpec {
   marcas: string[];
   fecha_sin_anio: boolean;
   flag: { entrada: string; salida: string } | null;
+  resumen_en_hoja?: string | null;
 }
 
 const escapar = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -62,6 +69,7 @@ function deSpec(f: FormatoDeSpec): FormatoConocido {
     date_format: "dd/mm/yyyy",
     // Fechas sin año (BancoEstado "02/09"): sin período explícito no es este formato.
     requierePeriodo: f.fecha_sin_anio,
+    ...(f.resumen_en_hoja ? { resumenEnHoja: new RegExp(`^${escapar(normalizarTitulo(f.resumen_en_hoja))}$`) } : {}),
   };
 }
 
@@ -131,8 +139,12 @@ function mapaDe(f: FormatoConocido, rows: Row[], i: number, fila: string[]): Ada
  * El formato conocido con el que calza la hoja (y su mapa fijo), o null. Si la
  * hoja calza con DOS formatos a la vez, ninguno: ambiguo = no se sabe.
  */
-export function detectarFormatoConocido(rows: Row[]): { formato: FormatoConocido; cfg: AdapterConfig } | null {
-  const hallados: { formato: FormatoConocido; cfg: AdapterConfig }[] = [];
+export function detectarFormatoConocido(
+  rows: Row[],
+  /** Las OTRAS hojas del libro (para formatos con resumen en otra hoja). */
+  hojas: { nombre: string; rows: Row[] }[] = [],
+): { formato: FormatoConocido; cfg: AdapterConfig; filasPeriodo: Row[] } | null {
+  const hallados: { formato: FormatoConocido; cfg: AdapterConfig; filasPeriodo: Row[] }[] = [];
   for (let i = 0; i < Math.min(rows.length, MAX_FILAS_ENCABEZADO); i++) {
     const fila = (rows[i] ?? []).map(normalizarTitulo);
     while (fila.length && !fila[fila.length - 1]) fila.pop();
@@ -145,8 +157,9 @@ export function detectarFormatoConocido(rows: Row[]): { formato: FormatoConocido
       if (!cfg) continue;
       // Regla de año: fechas sin año exigen el período EXPLÍCITO en el encabezado
       // ("Período: dd/mm/aaaa - dd/mm/aaaa" o Desde/Hasta).
-      if (f.requierePeriodo && !inferirRangoFechas(rows, cfg)?.explicito) continue;
-      hallados.push({ formato: f, cfg });
+      const filasPeriodo = f.resumenEnHoja ? hojas.filter((h) => f.resumenEnHoja!.test(normalizarTitulo(h.nombre))).flatMap((h) => h.rows.slice(0, 60)) : [];
+      if (f.requierePeriodo && !inferirRangoFechas(rows, cfg, filasPeriodo)?.explicito) continue;
+      hallados.push({ formato: f, cfg, filasPeriodo });
     }
     if (hallados.length) break;
   }

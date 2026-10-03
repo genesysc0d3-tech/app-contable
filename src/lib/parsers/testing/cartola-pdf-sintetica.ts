@@ -48,6 +48,10 @@ export interface OpcionesPdf {
   sinResumen?: boolean;
   /** Un mes con movimientos en UN solo sentido (la otra columna queda vacía). */
   unSentido?: "cargos" | "abonos";
+  /** Aviso publicitario al pie de cada página ("Simule su Crédito de Consumo"…). */
+  aviso?: string;
+  /** Cuenta Pyme: la línea de crédito informada como DATO ("Cupo autorizado $ x") en el encabezado ("estado"). */
+  lineaCredito?: boolean;
 }
 export interface CartolaPdf { pdf: Uint8Array; verdad: MovPdf[]; saldoInicial: number; saldoFinal: number }
 
@@ -197,6 +201,7 @@ export async function cartolaPdfSintetica(opts: OpcionesPdf): Promise<CartolaPdf
     t("Saldo Anterior", 42, 204); t(pesos(o.saldoInicial, true), 119, 204); t("Depositos / Abonos", 300, 204); t(pesos(totalAbonos, true), 377, 204);
     t("Cargos / Giros", 42, 218); t(pesos(totalCargos, true), 119, 218); t("Saldo Actual", 300, 218); t(pesos(saldoFinal, true), 377, 218);
     t("Ejecutivo", 42, 232); t("EJECUTIVO DE PRUEBA", 119, 232); t("Sucursal", 300, 232); t("OFICINA CENTRO", 377, 232);
+    if (opts.lineaCredito) { t("Línea de crédito", 42, 246); t("Cupo autorizado $ 5.000.000", 119, 246); t("Cupo utilizado $ 0", 300, 246); }
     titulos(266);
     let y = 280;
     let saldo = o.saldoInicial;
@@ -216,6 +221,10 @@ export async function cartolaPdfSintetica(opts: OpcionesPdf): Promise<CartolaPdf
     t("ANTECEDENTES REFERENCIALES SUJETOS A CONFIRMACIÓN, INFÓRMESE SOBRE", 42, y + 14);
     t("LA GARANTÍA ESTATAL DE LOS DEPÓSITOS EN SU BANCO O EN WWW.EJEMPLO.CL", 42, y + 23);
   }
+  if (opts.aviso) {
+    const total = doc.getNumberOfPages();
+    for (let k = 1; k <= total; k++) { doc.setPage(k); t(opts.aviso, 42, opts.formato === "itau" ? 760 : 830, 6); }
+  }
   const pdf = new Uint8Array(doc.output("arraybuffer"));
   return { pdf, verdad: movs.map(({ fecha, monto, tipo, glosa }) => ({ fecha, monto, tipo, glosa })), saldoInicial: o.saldoInicial, saldoFinal };
 }
@@ -227,15 +236,16 @@ export async function cartolaPdfSintetica(opts: OpcionesPdf): Promise<CartolaPdf
 
 export type TipoNegativo =
   | "factura_sii" | "comprobante_transferencia" | "comprobante_facturas_pagadas" | "nomina_transferencias"
-  | "tarjeta_credito" | "rcv_libro_compras" | "liquidacion_sueldo";
+  | "tarjeta_credito" | "rcv_libro_compras" | "liquidacion_sueldo" | "estado_cuenta_cliente" | "cartola_linea_credito";
 export const TIPOS_NEGATIVOS: TipoNegativo[] = [
   "factura_sii", "comprobante_transferencia", "comprobante_facturas_pagadas", "nomina_transferencias",
-  "tarjeta_credito", "rcv_libro_compras", "liquidacion_sueldo",
+  "tarjeta_credito", "rcv_libro_compras", "liquidacion_sueldo", "estado_cuenta_cliente", "cartola_linea_credito",
 ];
 /** Tipo que el router debería decir (o "otro" si no es uno de los 4 tipos con flujo propio). */
 export const ESPERADO_NEGATIVO: Record<TipoNegativo, string> = {
   factura_sii: "factura", comprobante_transferencia: "comprobante", comprobante_facturas_pagadas: "comprobante",
   nomina_transferencias: "comprobante", tarjeta_credito: "tarjeta", rcv_libro_compras: "otro", liquidacion_sueldo: "otro",
+  estado_cuenta_cliente: "otro", cartola_linea_credito: "otro",
 };
 
 export async function negativoPdfSintetico(tipo: TipoNegativo, seed = 1, filas = 8): Promise<Uint8Array> {
@@ -289,6 +299,16 @@ export async function negativoPdfSintetico(tipo: TipoNegativo, seed = 1, filas =
     t("Registro de Compras y Ventas", 40, 50, 12); t("Detalle de Compras - Periodo 2026-09", 40, 66); t("RUT contribuyente: 76.222.222-2", 40, 80);
     tabla(110, [["Fecha Docto", 40], ["Tipo Doc", 110], ["Folio", 170], ["RUT Proveedor", 220], ["Neto", 380], ["IVA", 450], ["Total", 520]],
       (i) => [[fecha(i), 40], ["33", 120], [String(5000 + i), 170], [`7${i}.333.333-3`, 220], [`$ ${monto().toLocaleString("es-CL")}`, 420, true], [`$ ${monto().toLocaleString("es-CL")}`, 490, true], [`$ ${monto().toLocaleString("es-CL")}`, 555, true]]);
+  } else if (tipo === "estado_cuenta_cliente" || tipo === "cartola_linea_credito") {
+    // Parecen cartola: Saldo anterior, tabla Fecha/…/Cargos/Abonos/Saldo con saldo corrido.
+    if (tipo === "estado_cuenta_cliente") { t("Estado de cuenta del cliente", 40, 50, 12); t("N° cuenta cliente 4455-1", 40, 66); }
+    else { t("Cartola Línea de Crédito", 40, 50, 12); t("Cupo aprobado $ 3.000.000", 40, 66); }
+    t("Saldo anterior", 40, 82); t("$ 1.000.000", 140, 82);
+    let saldo = 1_000_000;
+    tabla(110, [["Fecha", 40], ["Documento", 110], ["Cargos", 330], ["Abonos", 400], ["Saldo", 470]], (i) => {
+      const m = monto(); const c = i % 3 !== 0; saldo += c ? -m : m;
+      return [[fecha(i), 40], [tipo === "estado_cuenta_cliente" ? `Factura Electrónica ${4000 + i}` : `Giro línea ${i + 1}`, 110], [c ? `$ ${m.toLocaleString("es-CL")}` : "", 370, true], [c ? "" : `$ ${m.toLocaleString("es-CL")}`, 440, true], [`$ ${saldo.toLocaleString("es-CL")}`, 520, true]];
+    });
   } else {
     t("LIQUIDACION DE SUELDO", 40, 50, 12); t("Trabajador: PERSONA FICTICIA", 40, 66); t("Periodo: septiembre 2026", 40, 80);
     const y = tabla(110, [["Fecha", 40], ["Concepto", 110], ["Haberes", 400], ["Descuentos", 470], ["Saldo", 530]],

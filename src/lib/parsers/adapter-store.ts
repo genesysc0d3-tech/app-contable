@@ -387,6 +387,31 @@ export async function saveAdapter(args: {
 }
 
 /**
+ * La empresa YA tiene un mapa propio para esta huella: se REUSA esa fila (nunca
+ * otra inserción por lectura). El mapa se reemplaza por el nuevo (p. ej. el de un
+ * formato conocido sobre una adivinanza vieja) y se cuenta el uso; con prueba,
+ * el provisorio pasa a confirmado (incrementAdapterSuccess).
+ */
+export async function reusarAdapterPropio(
+  adapterId: string,
+  config: AdapterConfig,
+  opts: { nombre?: string; source?: AdapterRow["source"]; prueba?: TipoVerificacion | null } = {},
+): Promise<string> {
+  try {
+    const sb = getServiceClient();
+    if (sb) {
+      await sb.from("parser_adapters")
+        .update({ config: toJson(config), ...(opts.nombre ? { nombre: opts.nombre } : {}), ...(opts.source ? { source: opts.source } : {}) } as never)
+        .eq("id", adapterId);
+    }
+  } catch {
+    /* non-blocking */
+  }
+  await incrementAdapterSuccess(adapterId, { prueba: opts.prueba ?? null });
+  return adapterId;
+}
+
+/**
  * Reuso de un mapa. SIEMPRE cuenta el uso; la confianza y los éxitos suben SOLO
  * si la lectura trajo prueba (saldo / total del banco / cliente). Con prueba, un
  * provisorio pasa a confirmado.

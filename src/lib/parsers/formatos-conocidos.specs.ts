@@ -51,7 +51,70 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "movimientos cuenta corriente"
     ],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
+  },
+  {
+    "id": "bancoestado-chequera-completa",
+    "banco": "BancoEstado",
+    "familia": "BancoEstado Chequera Electrónica completa (Cheques / Cargos | Depósitos / Abonos | Saldo)",
+    "titulos": [
+      "fecha",
+      "sucursal",
+      "n° cuenta",
+      "alias",
+      "n° cartola",
+      "n° operacion",
+      "descripcion",
+      "cheques / cargos",
+      "depositos / abonos",
+      "saldo"
+    ],
+    "roles": [
+      "fecha",
+      "ignorar",
+      "ignorar",
+      "ignorar",
+      "ignorar",
+      "n_documento",
+      "descripcion",
+      "cargo",
+      "abono",
+      "saldo"
+    ],
+    "marcas": [],
+    "fecha_sin_anio": true,
+    "flag": null,
+    "resumen_en_hoja": "Resumen"
+  },
+  {
+    "id": "bancoestado-chequera-solo-abonos",
+    "banco": "BancoEstado",
+    "familia": "BancoEstado Chequera Electrónica (hoja Resumen + hoja Movimientos, solo 'Depósitos / Abonos')",
+    "titulos": [
+      "fecha",
+      "sucursal",
+      "n° cuenta",
+      "alias",
+      "n° cartola",
+      "n° operacion",
+      "descripcion",
+      "depositos / abonos"
+    ],
+    "roles": [
+      "fecha",
+      "ignorar",
+      "ignorar",
+      "ignorar",
+      "ignorar",
+      "n_documento",
+      "descripcion",
+      "monto"
+    ],
+    "marcas": [],
+    "fecha_sin_anio": true,
+    "flag": null,
+    "resumen_en_hoja": "Resumen"
   },
   {
     "id": "bancoestado-fechas-compactas",
@@ -77,7 +140,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "cuentarut"
     ],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "bci-detallado-invertido",
@@ -101,7 +165,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
     ],
     "marcas": [],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "bci-movimientos-detallado",
@@ -165,7 +230,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
     ],
     "marcas": [],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "bci-transferencias-recibidas",
@@ -203,7 +269,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
     ],
     "marcas": [],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "bice-estado-de-cuenta-solo-abonos",
@@ -232,7 +299,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "movimientos de la cuenta"
     ],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "bice-estado-de-cuenta",
@@ -263,7 +331,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "movimientos de la cuenta"
     ],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "mis-movimientos-completa",
@@ -289,7 +358,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "mis movimientos"
     ],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "mis-movimientos-solo-ingresos",
@@ -313,7 +383,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
       "mis movimientos"
     ],
     "fecha_sin_anio": false,
-    "flag": null
+    "flag": null,
+    "resumen_en_hoja": null
   },
   {
     "id": "santander-movimientos-ctacte",
@@ -355,7 +426,8 @@ export const FORMATOS_DE_SPECS: FormatoDeSpec[] = [
     "flag": {
       "entrada": "A",
       "salida": "C"
-    }
+    },
+    "resumen_en_hoja": null
   }
 ];
 
@@ -368,8 +440,6 @@ export const SPECS_EXCLUIDAS: Record<string, string> = {
   "me-planilla-fecha-monto-comision": "planilla casera (Fecha|Monto|Comisión), sin banco",
   "plantilla-massdte-boletas": "plantilla massDTE: ya tiene su propia capa (firma exacta)",
   "santander-3-columnas-editada": "export editado por la clienta: MONTO sin columna de dirección",
-  "bancoestado-chequera-completa": "fechas sin año (dd/mm) y el export no trae el período: el año no se puede saber con certeza",
-  "bancoestado-chequera-solo-abonos": "fechas sin año (dd/mm) y el export no trae el período: el año no se puede saber con certeza",
   "bci-mes-actual-xls": "export editado por la clienta (solo 'Abono EXENTAS'): sin evidencia del export original del banco",
   "mis-movimientos-solo-ingresos-con-saldo": "mismo formato que mis-movimientos-completa",
   "santander-movimientos-ctacte-completa": "mismo formato que santander-movimientos-ctacte"

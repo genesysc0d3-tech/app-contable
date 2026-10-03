@@ -32,10 +32,8 @@ const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 type Senal = { id: string; tipo: Exclude<TipoPdf, "cartola" | "otro"> | "no_cartola"; re: RegExp };
 
 /**
- * Señales de documentos que NO son cartola (cualquiera manda sobre la cartola).
- * Frases ESPECÍFICAS: "tarjeta de crédito" suelta (un pie publicitario "Pague su
- * Tarjeta de Crédito…") o "línea de crédito" (las cartolas de cuenta corriente
- * informan su línea) no bastan.
+ * Señales de documentos que NO son cartola, buscadas en TODO lo de fuera de la
+ * tabla. Frases ESPECÍFICAS del documento (no de un aviso).
  */
 const NO_CARTOLA: Senal[] = [
   { id: "dte", tipo: "factura", re: /\b(factura|boleta|nota de (credito|debito)|guia de despacho|liquidacion factura)\s+(electronica|exenta|afecta|de honorarios)\b|\bboleta de honorarios\b|\btimbre electronico\b|\bverifique (este )?documento\b|\bres(olucion)?\.? (ex\.? )?n?[°º]?\s?\d+ de \d{4}\b/ },
@@ -43,20 +41,35 @@ const NO_CARTOLA: Senal[] = [
   { id: "neto_iva_total", tipo: "factura", re: /\bmonto neto\b|\bneto\b.*\biva\b.*\btotal\b/ },
   { id: "comprobante", tipo: "comprobante", re: /\bcomprobante de (transferencia|pago|deposito|abono)\b|\bmonto transferido\b|\bdatos del destinatario\b|^destinatario\b|\btransferencia (exitosa|realizada|enviada)\b|\bfacturas pagadas\b|\bdocumentos pagados\b/ },
   { id: "nomina", tipo: "comprobante", re: /\bnomina de (pagos?|transferencias?|proveedores|remuneraciones)\b/ },
-  { id: "tarjeta", tipo: "tarjeta", re: /\bpago minimo\b|\bcupo (total|nacional|internacional)\b|\bfecha (de )?facturacion\b|\bperiodo de facturacion\b|\bmonto (total )?facturado\b|\bestado de cuenta (de )?(la )?tarjeta( de credito)?\b/ },
-  { id: "credito", tipo: "no_cartola", re: /\bcupo autorizado\b|\bestado de cuenta (de )?(la )?linea de credito\b|\bcredito (de consumo|hipotecario|comercial)\b|\bvalor cuota\b|\bcuotas? (pagadas|pendientes|por pagar)\b/ },
-  { id: "prevision", tipo: "no_cartola", re: /\bafp\b|\bfondo de pensiones\b|\bcotizacion(es)? (obligatoria|voluntaria|previsional)/ },
-  { id: "cuenta_corriente_cliente", tipo: "no_cartola", re: /\b(estado de )?cuenta corriente (de )?(cliente|proveedor)\b/ },
-  { id: "moneda_extranjera", tipo: "no_cartola", re: /\bus\$|\busd\b|\bdolar(es)?\b|\beur\b|\beuros?\b/ },
+  { id: "tarjeta", tipo: "tarjeta", re: /\bpago minimo\b|\bfecha (de )?facturacion\b|\bperiodo de facturacion\b|\bmonto (total )?facturado\b/ },
+  // Moneda de la CUENTA (un rótulo "Moneda: Dólar"), no un aviso "Dólar observado".
+  { id: "moneda_extranjera", tipo: "no_cartola", re: /\bmoneda\s*:?\s*(dolar(es)?|usd|us\$|euros?|eur)\b/ },
   { id: "libro_sii", tipo: "no_cartola", re: /\bregistro de compras y ventas\b|\blibro de (compras|ventas|remuneraciones|honorarios)\b|\bdetalle de (compras|ventas)\b/ },
   { id: "liquidacion", tipo: "no_cartola", re: /\bliquidacion de (sueldo|remuneraciones)\b|\bliquido a pagar\b|\btotal haberes\b|\btotal descuentos\b/ },
+];
+
+/**
+ * Señales que solo valen en el TÍTULO del documento (las primeras líneas de la
+ * 1ª página, antes de la tabla): "Línea de crédito", "Cupo autorizado", "AFP",
+ * "Crédito de consumo" o "Dólar" también salen como DATO en el encabezado de una
+ * cuenta corriente Pyme o en un pie publicitario ("Simule su Crédito de
+ * Consumo", "Paga tus cotizaciones AFP", "Dólar observado").
+ */
+const NO_CARTOLA_TITULO: Senal[] = [
+  { id: "tarjeta_titulo", tipo: "tarjeta", re: /\bestado de cuenta (de )?(la )?tarjeta\b|\btarjeta de credito\b/ },
+  { id: "credito_titulo", tipo: "no_cartola", re: /\blinea de credito\b|\bcredito (de consumo|hipotecario|comercial)\b/ },
+  { id: "prevision_titulo", tipo: "no_cartola", re: /\bafp\b|\bfondo de pensiones\b|\bcuenta de capitalizacion\b/ },
+  { id: "cliente_proveedor_titulo", tipo: "no_cartola", re: /\bestado de cuenta (del |de )?(cliente|proveedor)\b|\bcuenta corriente (de |del )?(cliente|proveedor)\b|\bcuenta (de |del )?(cliente|proveedor)\b/ },
+  { id: "moneda_titulo", tipo: "no_cartola", re: /\bdolares\b|\busd\b|\bus\$|\bmoneda extranjera\b/ },
 ];
 
 /** Marcas FUERTES de cartola bancaria (en el encabezado o el pie, nunca en una glosa). */
 const FUERTES: { id: string; re: RegExp }[] = [
   { id: "saldo_inicial", re: /\bsaldo (inicial|anterior)\b/ },
-  { id: "n_cuenta_banco", re: /\bn(umero|ro\.?|[°º])?\s*(de )?cuenta (corriente|vista|rut)\b|\bcuenta (corriente|vista|rut) n[°º]|\bn(umero|ro\.?|[°º])\s*(de )?cuenta\b/ },
-  { id: "titulo_cartola", re: /\bcartola (de )?(cuenta )?(corriente|vista|rut|historica)\b|\bestado de cuenta (corriente|vista)\b|\bcartola cuenta\b/ },
+  // N° de cuenta CORRIENTE/VISTA/RUT ("Cuenta Corriente N° 123", "CuentaRUT N°",
+  // "Cuenta Vista: 123"). Un "N° cuenta cliente" genérico no.
+  { id: "n_cuenta_banco", re: /\bn(umero|ro\.?|[°º])?\s*(de )?cuenta ?(corriente|vista|rut)\b|\bcuenta ?(corriente|vista|rut)\s*(n[°º]|nro\.?|numero|:)\s*\d/ },
+  { id: "titulo_cartola", re: /\bcartola (de )?(cuenta ?)?(corriente|vista|rut|historica)\b|\bestado de cuenta (corriente|vista)\b|\bcartola cuenta\b/ },
 ];
 /** Marcas débiles: solas no bastan ("Período" sale en un crédito de consumo). */
 const DEBILES: { id: string; re: RegExp }[] = [
@@ -87,6 +100,7 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
   // CREDITO VISA", "Destinatario: …") no es señal de nada; lo de afuera sí,
   // aunque traiga fecha y monto ("Fecha facturación 15/09 · Pago mínimo $ x").
   const fueraIdx: number[] = [];
+  const titulo: string[] = [];
   let encabezado = false;
   let movs = 0;
   const paginas = [...new Set(lineas.map((l) => l.pagina))];
@@ -101,7 +115,30 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
     }
     if (h >= 0) encabezado = true;
     const desde = h >= 0 ? h : esMov.indexOf(true);
-    const hasta = esMov.lastIndexOf(true);
+    let hasta = esMov.lastIndexOf(true);
+    // Glosa partida DESPUÉS del último movimiento de la página: la línea de
+    // continuación (sin fecha ni monto, a menos de un renglón) es del cuerpo.
+    if (hasta >= 0) {
+      const ys = idx.filter((_, k) => esMov[k]).map((i) => lineas[i].y);
+      const pasos = ys.slice(1).map((y, k) => ys[k] - y).filter((d) => d > 0).sort((a, b) => a - b);
+      const paso = pasos.length ? pasos[Math.floor(pasos.length / 2)] : 14;
+      while (hasta + 1 < idx.length) {
+        const sig = lineas[idx[hasta + 1]];
+        const cerca = lineas[idx[hasta]].y - sig.y <= Math.max(paso, 8) * 0.95;
+        const soloTexto = sig.celdas.every((c) => /[a-z]/i.test(c.texto) && !/\d{1,2}[\/-]\d{1,2}/.test(c.texto) && !/\$\s?-?\d/.test(c.texto));
+        if (!cerca || !soloTexto) break;
+        hasta++;
+      }
+    }
+    if (p === paginas[0]) {
+      // Título = las 2 primeras líneas de la 1ª página, más las que lo anuncian
+      // ("Estado de cuenta …", "Cartola …") entre las 5 primeras antes de la tabla.
+      const tope = Math.min(desde >= 0 ? desde : idx.length, 5);
+      idx.slice(0, tope).forEach((i, k) => {
+        const t = texto(lineas[i]);
+        if (k < 2 || /^(estado de cuenta|cartola|resumen|detalle|informe)\b/.test(t)) titulo.push(t);
+      });
+    }
     idx.forEach((i, k) => {
       if (esMov[k] && (h < 0 || k > h)) movs++;
       if (desde < 0 || k < desde || k > hasta) fueraIdx.push(i);
@@ -113,8 +150,12 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
 
   const noCartola = NO_CARTOLA.filter((s) => fuera.some((t) => s.re.test(t)));
   const glosasDte = lineas.filter((l) => esMovimiento(l) && RE_GLOSA_DTE.test(texto(l))).length;
-  if (movs >= 3 && glosasDte >= 3 && glosasDte * 5 >= movs * 2) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
   const fuertes = FUERTES.filter((s) => fuera.some((t) => s.re.test(t))).map((s) => s.id);
+  // Estado de cuenta de un proveedor: casi TODAS las glosas son facturas con N°
+  // y no hay saldo del banco. Una cartola B2B con muchos "PAGO FACTURA 1234"
+  // trae saldo anterior/inicial y sigue siendo cartola.
+  if (movs >= 3 && glosasDte >= 3 && glosasDte * 5 >= movs * 4 && !fuertes.includes("saldo_inicial")) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
+  noCartola.push(...NO_CARTOLA_TITULO.filter((s) => titulo.some((t) => s.re.test(t))));
   const debiles = DEBILES.filter((s) => fuera.some((t) => s.re.test(t))).map((s) => s.id);
   const senales = [
     ...noCartola.map((s) => s.id),
