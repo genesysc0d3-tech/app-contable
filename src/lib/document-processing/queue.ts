@@ -5,7 +5,7 @@ import { empresasOcupadas, msHastaProximoJobTomable } from "./proximo-job";
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel, parsePdfCartola } from "@/lib/parsers";
 import { leerCartolaPdf } from "./cartola-pdf";
-import { leerPdf, type LecturaPdf } from "@/lib/parsers/pdf-grilla";
+import { esPdfInvalido, leerPdf, sinPosicionesConTexto, type LecturaPdf } from "@/lib/parsers/pdf-grilla";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { conCanalIA } from "@/lib/ai/canal";
@@ -467,9 +467,31 @@ async function comprobanteDeterministico(
 async function leerPdfDeJob(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer): Promise<{ texto: string; clave?: string; leido?: LecturaPdf }> {
   try {
     const { valor, clave } = await abrirPdfConClave(sb, job, (c) => leerPdf(new Uint8Array(fileBuffer), c));
+    if (sinPosicionesConTexto(valor)) {
+      // Respaldo ante un cambio interno de pdf-parse: hay texto pero la copia de
+      // posiciones no juntó nada. Sin `leido`, el paso cartola llama a
+      // leerItemsPdf (2ª apertura, solo en este caso raro). Sin datos del PDF.
+      console.warn("[pdf] apertura única sin posiciones con texto: respaldo leerItemsPdf");
+      await recordOpsEvent({
+        sb,
+        severity: "warn",
+        source: "upload",
+        eventName: "pdf_posiciones_respaldo",
+        summary: "PDF con texto pero sin posiciones en la apertura única: se releen con leerItemsPdf",
+        empresaId: job.empresa_id,
+        usuarioId: job.usuario_id,
+        resourceType: "document_processing_job",
+        resourceId: job.id,
+        metadata: { paginas: valor.paginas },
+      }).catch(() => {});
+      return { texto: valor.texto, clave };
+    }
     return { texto: valor.texto, clave, leido: valor };
   } catch (error) {
     if (error instanceof PdfProtegidoError) throw error;
+    // PDF roto (estructura inválida): pdf-parse daría EXACTAMENTE este error con
+    // los mismos bytes y la misma versión de pdf.js → reabrir no sirve.
+    if (esPdfInvalido(error)) throw error;
   }
   const { valor, clave } = await abrirPdfConClave(sb, job, (c) => textoPdfParse(fileBuffer, c));
   return { texto: valor, clave };

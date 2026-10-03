@@ -106,8 +106,11 @@ describe("cola: un PDF se abre UNA vez con pdf.js", () => {
     const antes = await textoDeAntes(basura).then(() => null, (e: Error) => e);
     expect(antes).toBeTruthy();
     archivo = Buffer.from(basura);
+    conteo.aperturas = 0;
     const { extractContentFromJob } = await import("./queue");
     await expect(extractContentFromJob(sbFalso(), job)).rejects.toMatchObject({ name: antes!.name, message: antes!.message });
+    // Error de estructura: se relanza tal cual, sin reabrir con el flujo de antes.
+    expect(conteo.aperturas).toBe(1);
   });
 });
 
@@ -146,6 +149,36 @@ describe("fail-safe: si la apertura única se rompe, el PDF sigue el flujo de an
       archivo = Buffer.from(neg);
       expect((await extractContentFromJob(sbFalso(), job)).contenido).toBe(await textoDeAntes(neg));
     } finally {
+      vi.doUnmock("@/lib/parsers/pdf-grilla");
+      vi.resetModules();
+    }
+  });
+});
+
+describe("respaldo ante un cambio interno de pdf-parse (posiciones vacías con texto)", () => {
+  it("sinPosicionesConTexto: solo sospecha con texto real; escaneado o truncado no", async () => {
+    const { sinPosicionesConTexto } = await import("@/lib/parsers/pdf-grilla");
+    expect(sinPosicionesConTexto({ texto: "Cartola\n\n-- 1 of 1 --\n\n", items: [], paginas: 1, truncado: false })).toBe(true);
+    expect(sinPosicionesConTexto({ texto: "\n\n-- 1 of 2 --\n\n\n\n-- 2 of 2 --\n\n", items: [], paginas: 2, truncado: false })).toBe(false);
+    expect(sinPosicionesConTexto({ texto: "Cartola", items: [], paginas: 90, truncado: true })).toBe(false);
+    expect(sinPosicionesConTexto({ texto: "Cartola", items: [{ str: "Cartola", x: 0, y: 0, w: 1, pagina: 1 }], paginas: 1, truncado: false })).toBe(false);
+  });
+  it("leerPdf trae texto pero 0 items → la cola relee posiciones con leerItemsPdf y la cartola sale igual", async () => {
+    vi.resetModules();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.doMock("@/lib/parsers/pdf-grilla", async (importOriginal) => {
+      const real = await importOriginal<typeof import("@/lib/parsers/pdf-grilla")>();
+      return { ...real, leerPdf: async (d: Uint8Array, c?: string) => ({ ...(await real.leerPdf(d, c)), items: [] }) };
+    });
+    try {
+      const { pdf, verdad } = await cartolaPdfSintetica({ formato: "itau", filas: 10, seed: 11 });
+      const { r, aperturas } = await extraer(pdf);
+      expect(r.preExtracted?.length).toBe(verdad.length);
+      expect(aperturas).toBe(2); // la apertura única + el respaldo
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("respaldo leerItemsPdf"));
+      expect(String(warn.mock.calls[0])).not.toMatch(/\d{2}\/\d{2}\/\d{4}|\$/);
+    } finally {
+      warn.mockRestore();
       vi.doUnmock("@/lib/parsers/pdf-grilla");
       vi.resetModules();
     }

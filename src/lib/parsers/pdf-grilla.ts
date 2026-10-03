@@ -147,6 +147,26 @@ export async function leerPdf(data: Uint8Array, clave?: string): Promise<Lectura
   }
 }
 
+/**
+ * Lectura sospechosa: no truncada, SIN posiciones y CON texto de verdad (fuera de
+ * los separadores de página "-- N of M --" que pdf-parse pone siempre). Un PDF
+ * escaneado (solo imagen) no tiene ni lo uno ni lo otro → no es sospechoso.
+ */
+export function sinPosicionesConTexto(l: LecturaPdf): boolean {
+  if (l.truncado || l.items.length) return false;
+  return /\S/.test(l.texto.replace(/^-- \d+ of \d+ --$/gm, ""));
+}
+
+/**
+ * Error de ESTRUCTURA del PDF (pdf.js/pdf-parse): determinista para los mismos
+ * bytes y la misma versión de pdf.js; reabrir el PDF daría el mismo error. Los
+ * errores de la copia de posiciones (TypeError, etc.) NO calzan acá.
+ */
+export function esPdfInvalido(error: unknown): boolean {
+  const name = (error as { name?: unknown } | null)?.name;
+  return name === "InvalidPDFException" || name === "FormatError";
+}
+
 function empujarItems(raw: { str?: string; transform?: number[]; width?: number }[], pagina: number, out: ItemPdf[]) {
   for (const it of raw) {
     if (typeof it.str !== "string" || !it.str.trim() || !it.transform) continue;

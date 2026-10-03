@@ -17,6 +17,10 @@ export interface EventoRutaPdf {
  * plantilla de facturas dentro de un PDF tampoco es error: parsePdfCartola ya
  * devuelve null. Siempre deja UN evento "pdf_ruta" con el camino elegido (tipo,
  * motivo, sello, filas, capa, páginas, ms), sin datos del documento.
+ * OJO `ms` (2026-10-03): con la apertura única la cola le pasa las posiciones
+ * ya leídas (`leido`), así que `ms` ya NO incluye la lectura del PDF (solo
+ * router + grilla + lector). Sin `leido` (respaldo) sí la incluye. No comparar
+ * con eventos anteriores a ese cambio.
  */
 export async function leerCartolaPdf(args: {
   pdf: Uint8Array;
