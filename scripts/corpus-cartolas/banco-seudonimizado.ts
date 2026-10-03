@@ -16,7 +16,7 @@ type Verdad = { saldoInicial: number | null; filas: { fecha: string; monto: numb
 
 async function main() {
   const dir = process.argv[2] ?? join(process.env.HOME ?? "", "entrenamiento-lector", "banco-seudonimizado");
-  let ok = 0, total = 0;
+  let ok = 0, total = 0, conMarcaSinConocidos = 0;
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
     const { id, items, verdad } = JSON.parse(readFileSync(join(dir, f), "utf8")) as { id: string; items: ItemPdf[]; verdad: Verdad };
     const rows = grillaDesdeItems(items);
@@ -32,9 +32,13 @@ async function main() {
     const sello = r?.censo?.verificacion?.tipo ?? "capa4";
     const exacta = filasOk === verdad.filas.length && pe.length === verdad.filas.length;
     total++; if (exacta && (sello === "saldo" || sello === "total_banco")) ok++;
-    const camino = `router ${ruta.tipo}(${ruta.motivo}, marca ${ruta.marca_banco ?? "—"}) · ` + (r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`);
+    // Si el formato dejara de ser conocido, ¿le queda marca propia de banco (texto)?
+    const sinConocidos = clasificarPdf(items, { sinFormatosConocidos: true });
+    if (sinConocidos.marca_banco) conMarcaSinConocidos++;
+    const camino = `router ${ruta.tipo}(${ruta.motivo}, marca ${ruta.marca_banco ?? "—"}; sin conocidos: ${sinConocidos.tipo}, marca ${sinConocidos.marca_banco ?? "—"}) · ` + (r?.censo?.mapa?.formato_conocido ? `conocido:${r.censo.mapa.formato_conocido}` : `capa ${r?.capa_usada ?? 4}`);
     console.log(`${id}\t${camino}\tfilas ${filasOk}/${verdad.filas.length}${pe.length !== verdad.filas.length ? ` (leídas ${pe.length})` : ""}\tsello ${sello}\tcuadre banco ${verdad.cuadra ? "sí" : "no"}`);
   }
   console.log(`exactas y selladas: ${ok}/${total}`);
+  console.log(`con marca propia de banco SIN formatos conocidos: ${conMarcaSinConocidos}/${total}`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

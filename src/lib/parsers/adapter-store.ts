@@ -331,9 +331,14 @@ export async function upsertManualAdapter(args: {
     // cuenta para el consenso global): el "Listo" solo agrega su revisión.
     const pruebaDelBanco = igual && estadoDeAdapter(igual) === "confirmado" && (igual.confirmado_por === "saldo" || igual.confirmado_por === "total_banco");
     const confirmado = pruebaDelBanco ? {} : { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: ahora };
-    const config: AdapterConfig = igual?.config?.cuenta_huella && !args.config.cuenta_huella
+    let config: AdapterConfig = igual?.config?.cuenta_huella && !args.config.cuenta_huella
       ? { ...args.config, cuenta_huella: igual.config.cuenta_huella }
       : args.config;
+    // Vuelta 6 (M1): "Sí, es mi cartola" ya dicho para este formato se conserva
+    // cuando el cliente vuelve a guardar columnas (salvo que ahora diga lo contrario).
+    if (igual?.config?.revision_cliente?.es_banco && config.revision_cliente && !config.revision_cliente.es_banco && !config.revision_cliente.no_es_cartola) {
+      config = { ...config, revision_cliente: { ...config.revision_cliente, es_banco: true } };
+    }
 
     if (existing.data?.id) {
       const base = {
@@ -360,7 +365,7 @@ export async function upsertManualAdapter(args: {
       nombre: args.nombre ?? null,
       tipo_doc: args.tipo_doc ?? "cartola_bancaria",
       source: "manual",
-      config: toJson(args.config),
+      config: toJson(config),
       confianza: 1.0,
       usage_count: 0,
       success_count: 0,

@@ -40,6 +40,8 @@ export interface DiagnosticoPdf {
   tipo: import("./parsers/pdf-router").TipoPdf;
   motivo: string;
   senales: string[];
+  /** Marca propia de banco del router (pdf-router.ts), null = sin marca: el lector no sella. */
+  marca_banco?: string | null;
   paginas: number;
   ms: number;
   /** Solo si entró al lector. */
@@ -72,7 +74,7 @@ export async function parsePdfCartola(
   }
   const ruta = clasificarPdf(items);
   if (ruta.tipo !== "cartola" || !ruta.rows.length) {
-    avisar({ tipo: ruta.tipo, motivo: ruta.motivo, senales: ruta.senales });
+    avisar({ tipo: ruta.tipo, motivo: ruta.motivo, senales: ruta.senales, marca_banco: ruta.marca_banco });
     return null;
   }
   let r: Awaited<ReturnType<typeof parseExcel>>;
@@ -86,12 +88,12 @@ export async function parsePdfCartola(
   } catch (error) {
     const { PlantillaFacturasEnCartolaError } = await import("./parsers/orchestrator");
     if (!(error instanceof PlantillaFacturasEnCartolaError)) throw error;
-    avisar({ tipo: "otro", motivo: "plantilla_facturas", senales: ruta.senales });
+    avisar({ tipo: "otro", motivo: "plantilla_facturas", senales: ruta.senales, marca_banco: ruta.marca_banco });
     return null;
   }
   const leida = r.capa_usada < 4 && !!r.preExtracted?.length;
   avisar({
-    tipo: "cartola", motivo: leida ? ruta.motivo : "lector_no_la_leyo", senales: ruta.senales,
+    tipo: "cartola", motivo: leida ? ruta.motivo : "lector_no_la_leyo", senales: ruta.senales, marca_banco: ruta.marca_banco,
     filas: r.preExtracted?.length ?? 0, sello: r.censo?.verificacion?.tipo ?? "sin_comprobar", capa: r.capa_usada,
   });
   return leida ? r : null;

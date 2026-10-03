@@ -7,6 +7,7 @@ import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
 import { leerCuadre, resumenCuadre } from "@/lib/cartola/cuadre-mesa";
 import CuadreCartolaLinea from "./CuadreCartolaLinea";
 import { revisarColumnas } from "@/lib/cartola/verificacion";
+import { esDetalleSinMarcaBanco } from "@/lib/parsers/types";
 import { contarTerminadas, terminadaDe } from "./cartola-filas";
 
 // Visor RESUMEN de una cartola (documento multi-tx) — espejo de VeredictoCard pero
@@ -98,6 +99,8 @@ export default function VeredictoCartola({
   // /Aprobar se esconden hasta confirmar las columnas. Cualquier otra cartola
   // (comprobada, ya confirmada, plantilla) mantiene el visor de siempre.
   const columnas = cuadre ? revisarColumnas(cuadre) : null;
+  // PDF sin marca propia de banco (vuelta 6): el aviso va completo y visible, no solo en el tooltip.
+  const sinMarcaBanco = esDetalleSinMarcaBanco(columnas?.motivo);
 
   // Split exenta/afecta: del agregado server-side si está, si no lo cuento acá.
   const esExenta = (p: Propuesta) => {
@@ -308,9 +311,10 @@ export default function VeredictoCartola({
           único gesto es IR a Emitir, donde vive la última mirada y el Devolver. */}
       {revisionPendiente ? (
         <div data-testid="cta-columnas" style={{ width: "clamp(180px, 34%, 320px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "0.75em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
-          <div title={columnas?.motivo ?? undefined} style={{ fontSize: "0.92em", color: "var(--text2)", lineHeight: 1.4, textAlign: "center", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {/* El aviso del AÑO (fechas sin año) va visible: es lo único que el cliente tiene que mirar. */}
-            {columnas?.otraVez || /\baño\b/.test(columnas?.motivo ?? "") ? columnas?.motivo : "No pudimos comprobar esta cartola solos: dinos qué es cada columna y listo."}
+          <div title={columnas?.motivo ?? undefined} style={{ fontSize: "0.92em", color: sinMarcaBanco ? "var(--amber)" : "var(--text2)", fontWeight: sinMarcaBanco ? 650 : undefined, lineHeight: 1.4, textAlign: "center", ...(sinMarcaBanco ? {} : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }) }}>
+            {/* El aviso del AÑO (fechas sin año) y el de PDF SIN MARCA DE BANCO
+                (vuelta 6) van visibles y completos: es lo que el cliente tiene que mirar. */}
+            {columnas?.otraVez || sinMarcaBanco || /\baño\b/.test(columnas?.motivo ?? "") ? columnas?.motivo : "No pudimos comprobar esta cartola solos: dinos qué es cada columna y listo."}
           </div>
           <button className="vcart-cb" onClick={onRevisarColumnas} disabled={!onRevisarColumnas || busy}
             style={{ background: "var(--accent)", color: "#fff", fontSize: "1.15em", padding: "1.2em 1em" }}>

@@ -50,7 +50,17 @@ export interface AdapterConfig {
    * si lee exactamente lo mismo (`firma`), queda sellado `cliente`. Otras
    * cartolas del formato no heredan el sello: solo usan el mapa confirmado.
    */
-  revision_cliente?: { documento_id: string; firma: string; solo_abonos?: boolean };
+  revision_cliente?: {
+    documento_id: string; firma: string; solo_abonos?: boolean;
+    /**
+     * PDF sin marca propia de banco (vuelta 6): el cliente respondió "Sí, es mi
+     * cartola" → vale como marca de banco para los PDFs de ESTE formato y ESTA
+     * empresa (no viaja a otras empresas ni al global: el consenso la borra).
+     */
+    es_banco?: true;
+    /** "No es una cartola": los PDFs de este formato de esta empresa no entran al lector. */
+    no_es_cartola?: true;
+  };
   columns: {
     fecha: number;
     descripcion: number;
@@ -277,3 +287,11 @@ export interface PreExtractedMovimiento {
   excel_row?: number;
   saldo?: number;
 }
+
+/**
+ * Detalle del juez para un PDF SIN marca propia de banco (vuelta 6): el lector
+ * lo lee pero no lo sella. La UI lo reconoce por este texto (sin importar el
+ * orquestador en el cliente) y lo muestra completo.
+ */
+export const DETALLE_SIN_MARCA_BANCO = "El PDF no dice de qué banco es (ni banco, ni N° de cuenta corriente/vista, ni título de cartola): podría ser el estado de cuenta de un proveedor. Revisa las columnas y dinos si es de tu banco";
+export const esDetalleSinMarcaBanco = (detalle: string | null | undefined): boolean => !!detalle && detalle.includes("El PDF no dice de qué banco es");

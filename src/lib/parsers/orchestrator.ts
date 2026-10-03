@@ -11,6 +11,7 @@ import type {
   Row,
   VerificacionCartola,
 } from "./types";
+import { DETALLE_SIN_MARCA_BANCO } from "./types";
 import { computeFingerprint, computeFingerprintLegacy, encabezadoNormalizado } from "./fingerprint";
 import { leerLibroCartola } from "./libro";
 import { detectHeuristic } from "./heuristic";
@@ -254,6 +255,19 @@ export async function parseExcelWithOrchestrator(
     let cached =
       (await getAdapterByFingerprint(fingerprint, opts?.empresa_id)) ??
       (await adaptadorManualConHuellaLegacy(rows, fingerprint, opts?.empresa_id));
+    // PDF y la respuesta del CLIENTE a "¿Este PDF es de tu banco?" (vuelta 6, M1),
+    // guardada en SU mapa de este formato (nunca global: el consenso borra
+    // revision_cliente). "No es una cartola" → el lector no lo lee (sigue el
+    // flujo de texto de antes, la IA); "Sí, es mi cartola" → cuenta como marca
+    // propia de banco para este y los siguientes PDFs del formato de ESA empresa.
+    if (opts?.origen === "pdf" && cached?.creado_por_empresa_id && cached.creado_por_empresa_id === opts.empresa_id) {
+      const rev = cached.config.revision_cliente;
+      if (rev?.no_es_cartola) {
+        const content = legacyFallback(workbook);
+        return { content, result: { content, capa_usada: 4, fingerprint, adapter_id: null, rows_extracted: 0, validator_failed_checks: [], warnings: ["pdf_no_es_cartola_cliente"], error: null, plantilla: false, preExtracted: null, verificacion: null } };
+      }
+      if (rev?.es_banco) ctx.pdfSinMarcaBanco = false;
+    }
     // Títulos de ESTA hoja al revés del mapa (vuelta 2, N1): un global no se
     // aplica (se re-deriva); uno propio se lee pero con alerta.
     let titulosAlReves = false;
@@ -642,6 +656,8 @@ export function firmaDeLineas(lines: ParsedLine[]): string {
 export function juzgarMapaEnLibro(
   workbook: XLSX.WorkBook,
   cfg: AdapterConfig,
+  /** PDF sin marca propia de banco: el juez del popup tampoco lo sella (mismo trato que la cola). */
+  opts: { pdfSinMarcaBanco?: boolean } = {},
 ): { ok: true; hoja: string; rows: Row[]; lines: ParsedLine[]; descartes: DescarteFila[]; verificacion: VerificacionCartola; otrasHojas: string[] } | { ok: false; error: string } {
   const hojas = workbook.SheetNames
     .map((n) => ({ n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" }) }))
@@ -654,7 +670,7 @@ export function juzgarMapaEnLibro(
   const fallas: string[] = [];
   // El popup juzga con el MISMO contexto que la cola (período/resumen de la hoja
   // "Resumen" de BancoEstado): si no, pedía confirmar el año actual (vuelta 3).
-  const { ctx } = contextoConPeriodo(contextoDeHoja(workbook, hoja.n, hoja.rows), hoja.rows);
+  const { ctx } = contextoConPeriodo({ ...contextoDeHoja(workbook, hoja.n, hoja.rows), pdfSinMarcaBanco: !!opts.pdfSinMarcaBanco }, hoja.rows);
   let lectura: Lectura | null = null;
   try {
     lectura = leer(ctx, cfg, fallas, "cliente", { saldoLoJuzgaElJuez: true });
@@ -678,7 +694,7 @@ const esSelloDelBanco = (v: VerificacionCartola) => v.tipo === "saldo" || v.tipo
 const SIN_MARCA_DE_BANCO: VerificacionCartola = {
   tipo: "sin_comprobar",
   alerta: true,
-  detalle: "El PDF no dice de qué banco es (ni banco, ni N° de cuenta corriente/vista, ni título de cartola): podría ser el estado de cuenta de un proveedor. Revisa cómo la leímos",
+  detalle: DETALLE_SIN_MARCA_BANCO,
 };
 
 /** Aplica un mapa, valida y SELLA. null = no pasó el validador (con el porqué en `fallas`). */
