@@ -59,12 +59,16 @@ export interface DiagnosticoPdf {
  */
 export async function parsePdfCartola(
   pdf: Uint8Array,
-  opts?: { documento_id?: string; empresa_id?: string; clave?: string; diagnostico?: (d: DiagnosticoPdf) => void }
+  opts?: {
+    documento_id?: string; empresa_id?: string; clave?: string; diagnostico?: (d: DiagnosticoPdf) => void;
+    /** Posiciones ya leídas en la MISMA apertura que el texto (leerPdf): no se vuelve a abrir el PDF. */
+    leido?: { items: import("./parsers/pdf-grilla").ItemPdf[]; paginas: number; truncado: boolean };
+  }
 ): Promise<Awaited<ReturnType<typeof parseExcel>> | null> {
   const t0 = Date.now();
   const { leerItemsPdf, libroDesdeGrilla } = await import("./parsers/pdf-grilla");
   const { clasificarPdf } = await import("./parsers/pdf-router");
-  const { items, paginas, truncado } = await leerItemsPdf(pdf, opts?.clave);
+  const { items, paginas, truncado } = opts?.leido ?? await leerItemsPdf(pdf, opts?.clave);
   const avisar = (d: Omit<DiagnosticoPdf, "paginas" | "ms">) => opts?.diagnostico?.({ ...d, paginas, ms: Date.now() - t0 });
   if (truncado) {
     avisar({ tipo: "otro", motivo: "demasiadas_paginas", senales: [] });

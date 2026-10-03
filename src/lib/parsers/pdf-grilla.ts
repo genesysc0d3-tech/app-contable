@@ -84,10 +84,7 @@ export async function leerItemsPdf(data: Uint8Array, clave?: string): Promise<{ 
     for (let p = 1; p <= n; p++) {
       const page = await doc.getPage(p);
       const tc = await page.getTextContent();
-      for (const it of tc.items) {
-        if (typeof it.str !== "string" || !it.str.trim() || !it.transform) continue;
-        out.push({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width ?? 0, pagina: p });
-      }
+      empujarItems(tc.items, p, out);
     }
   } finally {
     await parser.destroy().catch(() => {});
@@ -95,9 +92,74 @@ export async function leerItemsPdf(data: Uint8Array, clave?: string): Promise<{ 
   return { items: out, paginas, truncado: paginas > MAX_PAGINAS };
 }
 
+/** Lo que sale de UNA apertura del PDF: texto plano + posiciones + páginas. */
+export interface LecturaPdf {
+  /** El MISMO texto que `new PDFParse(...).getText()` (flujo de texto / comprobante / IA). */
+  texto: string;
+  /** Posiciones (vacío si `truncado`: sobre MAX_PAGINAS no se juntan). */
+  items: ItemPdf[];
+  paginas: number;
+  truncado: boolean;
+}
+
+/**
+ * UNA SOLA APERTURA del PDF (2026-10-03). Antes la cola abría y parseaba cada
+ * PDF dos veces con pdf.js: una para el texto (getText de pdf-parse) y otra para
+ * las posiciones (leerItemsPdf). Ahora un solo documento y UN getTextContent por
+ * página entregan las dos cosas.
+ *
+ * El texto lo sigue armando pdf-parse (su getText, sin tocar sus parámetros) →
+ * es byte a byte el de antes. Las posiciones se copian en el camino: se envuelve
+ * getPage del documento ya abierto para fotografiar los items de cada
+ * getTextContent ANTES de que getPageText los mute (le antepone "\t" a str).
+ * Sobre MAX_PAGINAS el texto se lee entero (el flujo de antes lo necesita) pero
+ * no se juntan posiciones (la grilla no lee un PDF así). Errores de clave salen
+ * tal cual (el caller prueba las variantes del RUT).
+ */
+export async function leerPdf(data: Uint8Array, clave?: string): Promise<LecturaPdf> {
+  const { PDFParse } = await import("pdf-parse");
+  // COPIA: pdf.js se apropia del buffer y lo deja desprendido.
+  const copia = new Uint8Array(data);
+  const parser = new PDFParse(clave ? { data: copia, password: clave } : { data: copia });
+  try {
+    const doc = await (parser as unknown as { load(): Promise<DocPdf> }).load();
+    const paginas = doc.numPages;
+    const truncado = paginas > MAX_PAGINAS;
+    const items: ItemPdf[] = [];
+    if (!truncado) {
+      const getPage = doc.getPage.bind(doc);
+      doc.getPage = async (p: number) => {
+        const page = await getPage(p);
+        const getTextContent = page.getTextContent.bind(page);
+        page.getTextContent = async (...a: unknown[]) => {
+          const tc = await getTextContent(...a);
+          empujarItems(tc.items, p, items);
+          return tc;
+        };
+        return page;
+      };
+    }
+    // getText reusa el MISMO doc (load() lo deja en caché): no vuelve a abrir.
+    const texto = (await parser.getText()).text;
+    return { texto, items, paginas, truncado };
+  } finally {
+    await parser.destroy().catch(() => {});
+  }
+}
+
+function empujarItems(raw: { str?: string; transform?: number[]; width?: number }[], pagina: number, out: ItemPdf[]) {
+  for (const it of raw) {
+    if (typeof it.str !== "string" || !it.str.trim() || !it.transform) continue;
+    out.push({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width ?? 0, pagina });
+  }
+}
+
+interface PaginaPdf {
+  getTextContent(...a: unknown[]): Promise<{ items: { str?: string; transform?: number[]; width?: number }[] }>;
+}
 interface DocPdf {
   numPages: number;
-  getPage(n: number): Promise<{ getTextContent(): Promise<{ items: { str?: string; transform?: number[]; width?: number }[] }> }>;
+  getPage(n: number): Promise<PaginaPdf>;
 }
 
 export function agruparLineas(items: ItemPdf[]): Linea[] {

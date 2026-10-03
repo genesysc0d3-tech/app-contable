@@ -1,4 +1,5 @@
 import type { DiagnosticoPdf } from "@/lib/parsers";
+import type { ItemPdf } from "@/lib/parsers/pdf-grilla";
 
 type Lectura = Awaited<ReturnType<typeof import("@/lib/parsers").parsePdfCartola>>;
 
@@ -22,7 +23,9 @@ export async function leerCartolaPdf(args: {
   documento_id: string;
   empresa_id: string;
   clave?: string;
-  parse: (pdf: Uint8Array, opts: { documento_id: string; empresa_id: string; clave?: string; diagnostico: (d: DiagnosticoPdf) => void }) => Promise<Lectura>;
+  /** Posiciones de la apertura única (leerPdf); sin esto el lector abre el PDF él mismo (flujo de antes). */
+  leido?: { items: ItemPdf[]; paginas: number; truncado: boolean };
+  parse: (pdf: Uint8Array, opts: { documento_id: string; empresa_id: string; clave?: string; leido?: { items: ItemPdf[]; paginas: number; truncado: boolean }; diagnostico: (d: DiagnosticoPdf) => void }) => Promise<Lectura>;
   registrar: (e: EventoRutaPdf) => Promise<unknown>;
 }): Promise<Lectura> {
   let diag: DiagnosticoPdf | null = null;
@@ -30,7 +33,7 @@ export async function leerCartolaPdf(args: {
   let error: string | null = null;
   try {
     r = await args.parse(args.pdf, {
-      documento_id: args.documento_id, empresa_id: args.empresa_id, clave: args.clave, diagnostico: (d) => { diag = d; },
+      documento_id: args.documento_id, empresa_id: args.empresa_id, clave: args.clave, leido: args.leido, diagnostico: (d) => { diag = d; },
     });
   } catch (e) {
     error = (e as Error)?.name ?? "Error";

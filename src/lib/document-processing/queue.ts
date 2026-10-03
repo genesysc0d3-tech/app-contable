@@ -5,6 +5,7 @@ import { empresasOcupadas, msHastaProximoJobTomable } from "./proximo-job";
 import type { Database, Json } from "@/lib/database.types";
 import { parseExcel, parsePdfCartola } from "@/lib/parsers";
 import { leerCartolaPdf } from "./cartola-pdf";
+import { leerPdf, type LecturaPdf } from "@/lib/parsers/pdf-grilla";
 import { PlantillaFacturasEnCartolaError } from "@/lib/parsers/orchestrator";
 import { ocrAndGroupImages } from "@/lib/ai/ocr";
 import { conCanalIA } from "@/lib/ai/canal";
@@ -361,14 +362,15 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
     plantilla = parsed.plantilla;
     censo = parsed.censo;
   } else if (job.tipo === "pdf") {
-    const pdf = await leerTextoPdf(sb, job, fileBuffer);
+    // UNA apertura (2026-10-03): texto + posiciones del mismo documento pdf.js.
+    const pdf = await leerPdfDeJob(sb, job, fileBuffer);
     contenido = pdf.texto;
     // Cartola en PDF (2026-10-02): el ROUTER (parsers/pdf-router.ts) decide por
     // evidencia positiva; SOLO una cartola entra al MISMO lector determinístico
     // que el Excel (grilla por posiciones, juez + sello). Lo demás, como antes. Antes
     // iba a la IA como texto plano (sin columnas ni sello) y una cartola corta
     // (≤3000 caracteres, p. ej. Itaú de 1-2 páginas) se probaba como comprobante.
-    const cartola = await leerCartolaPdfDeJob(sb, job, fileBuffer, pdf.clave);
+    const cartola = await leerCartolaPdfDeJob(sb, job, fileBuffer, pdf.clave, pdf.leido);
     if (cartola) {
       contenido = cartola.content;
       preExtracted = cartola.preExtracted;
@@ -397,12 +399,13 @@ export async function extractContentFromJob(sb: Sb, job: DocumentProcessingJob) 
 }
 
 /** Paso cartola PDF de la cola: router + lector, fail-safe y con evento pdf_ruta (ver cartola-pdf.ts). */
-function leerCartolaPdfDeJob(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer, clave: string | undefined) {
+function leerCartolaPdfDeJob(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer, clave: string | undefined, leido: LecturaPdf | undefined) {
   return leerCartolaPdf({
     pdf: new Uint8Array(fileBuffer),
     documento_id: job.documento_id,
     empresa_id: job.empresa_id,
     clave,
+    leido,
     parse: parsePdfCartola,
     registrar: (e) => recordOpsEvent({
       sb,
@@ -452,22 +455,45 @@ async function comprobanteDeterministico(
 }
 
 /**
- * Lee el texto de un PDF. Si está protegido con clave, prueba automáticamente
+ * Lee un PDF de la cola con UNA sola apertura de pdf.js (2026-10-03): texto plano
+ * (el mismo de siempre, para comprobante/IA) + posiciones (router y grilla) +
+ * páginas. Antes se abría dos veces: leerTextoPdf para el texto y leerItemsPdf
+ * (dentro de parsePdfCartola) para las posiciones.
+ *
+ * FAIL-SAFE: si la apertura única falla por algo que NO es la clave, se cae al
+ * flujo de antes (solo texto; el paso cartola abre el PDF por su cuenta y es él
+ * mismo fail-safe). Un PDF basura falla igual que antes, con el mismo error.
+ */
+async function leerPdfDeJob(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer): Promise<{ texto: string; clave?: string; leido?: LecturaPdf }> {
+  try {
+    const { valor, clave } = await abrirPdfConClave(sb, job, (c) => leerPdf(new Uint8Array(fileBuffer), c));
+    return { texto: valor.texto, clave, leido: valor };
+  } catch (error) {
+    if (error instanceof PdfProtegidoError) throw error;
+  }
+  const { valor, clave } = await abrirPdfConClave(sb, job, (c) => textoPdfParse(fileBuffer, c));
+  return { texto: valor, clave };
+}
+
+/** Texto de un PDF como siempre (getText de pdf-parse). Solo el camino de respaldo. */
+async function textoPdfParse(fileBuffer: Buffer, password?: string): Promise<string> {
+  const { PDFParse } = await import("pdf-parse");
+  // pdf.js TRANSFIERE el buffer al worker (queda desprendido tras el 1er intento):
+  // cada intento necesita una copia fresca, si no el 2º tira DataCloneError.
+  const data = new Uint8Array(fileBuffer); // copia por intento
+  const parser = new PDFParse(password ? { data, password } : { data });
+  try { return (await parser.getText()).text; } finally { await parser.destroy().catch(() => {}); }
+}
+
+/**
+ * Abre un PDF con `abrir`. Si está protegido con clave, prueba automáticamente
  * variantes del RUT de la empresa (lo usual en bancos chilenos). Si ninguna
  * abre el PDF, lanza PdfProtegidoError (definitivo, sin reintentos, mensaje
  * humano). La clave solo vive en memoria durante la lectura.
  */
-async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buffer): Promise<{ texto: string; clave?: string }> {
-  const { PDFParse } = await import("pdf-parse");
-  // pdf.js TRANSFIERE el buffer al worker (queda desprendido tras el 1er intento):
-  // cada intento necesita una copia fresca, si no el 2º tira DataCloneError.
-  const intentar = async (password?: string) => {
-    const data = new Uint8Array(fileBuffer); // copia por intento
-    const parser = new PDFParse(password ? { data, password } : { data });
-    try { return (await parser.getText()).text; } finally { await parser.destroy().catch(() => {}); }
-  };
+async function abrirPdfConClave<T>(sb: Sb, job: DocumentProcessingJob, abrir: (clave?: string) => Promise<T>): Promise<{ valor: T; clave?: string }> {
   try {
-    return { texto: await intentar() };
+    return { valor: await abrir() };
   } catch (error) {
     if (!esErrorDeClavePdf(error)) throw error;
   }
@@ -475,7 +501,7 @@ async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buff
   const { data: empresa } = await sb.from("empresas").select("rut").eq("id", job.empresa_id).maybeSingle();
   for (const clave of variantesClaveDesdeRut(empresa?.rut)) {
     try {
-      const texto = await intentar(clave);
+      const valor = await abrir(clave);
       await recordOpsEvent({
         sb,
         severity: "info",
@@ -488,7 +514,7 @@ async function leerTextoPdf(sb: Sb, job: DocumentProcessingJob, fileBuffer: Buff
         resourceId: job.id,
         metadata: { documento_id: job.documento_id },
       });
-      return { texto, clave };
+      return { valor, clave };
     } catch (error) {
       if (!esErrorDeClavePdf(error)) throw error;
     }
