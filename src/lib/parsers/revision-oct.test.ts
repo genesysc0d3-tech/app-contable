@@ -264,3 +264,38 @@ describe("vuelta 3 · 4-5. BancoEstado: el período del Resumen se cruza con las
     void wb;
   });
 });
+
+describe("vuelta 4 · 1. varias filas propias por huella: elección determinística y «Listo» sin pisar", () => {
+  it("H (heurística provisoria) / K (confirmada por saldo) / manual (cliente): siempre gana la del cliente, en cualquier orden", async () => {
+    const { selectAdapterForEmpresa } = await vi.importActual<typeof import("./adapter-store")>("./adapter-store");
+    const H = { id: "h", creado_por_empresa_id: "e", confianza: 1, disabled_until: null, estado: "provisorio", source: "heuristic", last_used_at: "2026-10-03" };
+    const K = { id: "k", creado_por_empresa_id: "e", confianza: 1, disabled_until: null, estado: "confirmado", confirmado_por: "saldo", source: "named", last_used_at: "2026-10-02" };
+    const M = { id: "m", creado_por_empresa_id: "e", confianza: 1, disabled_until: null, estado: "confirmado", confirmado_por: "cliente", source: "manual", last_used_at: "2026-10-01" };
+    for (const filas of [[H, K, M], [K, M, H], [M, H, K], [H, M, K]]) expect(selectAdapterForEmpresa(filas, "e")?.id).toBe("m");
+    expect(selectAdapterForEmpresa([H, K], "e")?.id).toBe("k");
+    // Empate total: decide el uso más reciente y luego el id (nunca "la primera").
+    const A = { ...H, id: "a", last_used_at: "2026-10-01" }; const B = { ...H, id: "b", last_used_at: "2026-10-01" };
+    expect(selectAdapterForEmpresa([B, A], "e")?.id).toBe("a");
+  });
+  it("«Listo» reusa SOLO la fila con el mismo mapa (si no, fila nueva): K confirmada por saldo nunca se reescribe", async () => {
+    const { filaPropiaMismoMapa } = await vi.importActual<typeof import("./adapter-store")>("./adapter-store");
+    const base = { header_row: 0, skip_rows_before_data: 1, date_format: "dd/mm/yyyy", number_format: "chilean", layout: "two_cols", columns: { fecha: 0, descripcion: 1, n_documento: -1, cargo: 2, abono: 3, saldo: 4 } } as AdapterConfig;
+    const otro = { ...base, columns: { ...base.columns, cargo: 3, abono: 2 } } as AdapterConfig;
+    const K = { id: "k", config: base };
+    expect(filaPropiaMismoMapa([K], otro)).toBeNull();
+    expect(filaPropiaMismoMapa([K], { ...base, titulos: ["x"], revision_cliente: { documento_id: "d", firma: "f" } })?.id).toBe("k");
+    const src = (await import("fs")).readFileSync("src/lib/parsers/adapter-store.ts", "utf8");
+    const upsert = src.slice(src.indexOf("export async function upsertManualAdapter"), src.indexOf("export async function saveAdapter"));
+    expect(upsert).toContain("filaPropiaMismoMapa(");
+    expect(upsert).not.toMatch(/\.limit\(1\)\s*\.maybeSingle\(\)/);
+  });
+});
+
+describe("vuelta 4 · 3. al reusar se actualiza lo posicional", () => {
+  it("conPosicion: mismas columnas, nueva fila de títulos e inicio de datos; lo demás intacto", async () => {
+    const { conPosicion } = await vi.importActual<typeof import("./adapter-store")>("./adapter-store");
+    const viejo = { header_row: 3, skip_rows_before_data: 4, date_format: "dd/mm/yyyy", number_format: "chilean", layout: "two_cols", columns: { fecha: 0, descripcion: 1, n_documento: -1, cargo: 2, abono: 3, saldo: 4 }, revision_cliente: { documento_id: "d", firma: "f" } } as AdapterConfig;
+    const nuevo = { ...viejo, header_row: 5, skip_rows_before_data: 6, titulos: ["fecha"], revision_cliente: undefined } as AdapterConfig;
+    expect(conPosicion(viejo, nuevo)).toMatchObject({ header_row: 5, skip_rows_before_data: 6, titulos: ["fecha"], revision_cliente: { documento_id: "d" } });
+  });
+});

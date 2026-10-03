@@ -100,7 +100,35 @@ export type AdapterOwnership = {
   disabled_until: string | null;
   creado_por_empresa_id: string | null;
   estado?: string | null;
+  id?: string;
+  source?: string | null;
+  confirmado_por?: string | null;
+  last_used_at?: string | null;
 };
+
+/**
+ * Orden DETERMINÍSTICO entre varias filas propias de una huella (vuelta 4): el
+ * mapa del cliente (manual / "Listo") primero, luego los confirmados, luego por
+ * confianza, uso más reciente e id. Antes ganaba "la primera" de un orden solo
+ * por confianza: con empates, el popup podía entrar en loop.
+ */
+export function rangoDeFila(r: AdapterOwnership): number {
+  if (r.source === "manual" || r.confirmado_por === "cliente" || r.confirmado_por === "manual") return 0;
+  return estadoDeAdapter(r) === "confirmado" ? 1 : 2;
+}
+export function ordenarFilasPropias<T extends AdapterOwnership>(filas: T[]): T[] {
+  return [...filas].sort((a, b) =>
+    rangoDeFila(a) - rangoDeFila(b)
+    || b.confianza - a.confianza
+    || String(b.last_used_at ?? "").localeCompare(String(a.last_used_at ?? ""))
+    || String(a.id ?? "").localeCompare(String(b.id ?? "")));
+}
+
+/** La fila propia que se puede REUSAR para este mapa: la que tiene la MISMA claveDeMapa (o null). */
+export function filaPropiaMismoMapa<T extends { config?: AdapterConfig | null }>(filas: T[], config: AdapterConfig): T | null {
+  const clave = claveDeMapa(config);
+  return filas.find((f) => claveDeMapa(f.config ?? null) === clave) ?? null;
+}
 
 /**
  * AISLAMIENTO CROSS-TENANT (lógica pura, testeable). El adapter 'manual' es un
@@ -125,7 +153,7 @@ export function selectAdapterForEmpresa<T extends AdapterOwnership>(
     return true;
   });
   if (!usable.length) return null;
-  const propio = empresaId ? usable.find((r) => r.creado_por_empresa_id === empresaId) : undefined;
+  const propio = empresaId ? ordenarFilasPropias(usable.filter((r) => r.creado_por_empresa_id === empresaId))[0] : undefined;
   if (propio) return propio;
   const global = usable.find((r) => !r.creado_por_empresa_id && estadoDeAdapter(r) === "confirmado");
   return global ?? null;
@@ -284,13 +312,17 @@ export async function upsertManualAdapter(args: {
     // se devolvía el global y la corrección manual no se guardaba, así que una
     // empresa no podía arreglar un formato global mal leído (2026-09-26). El
     // propio gana en selectAdapterForEmpresa.
-    const existing = await sb
+    // Vuelta 4: se reusa SOLO la fila propia con el MISMO mapa (claveDeMapa). Una
+    // fila con otro mapa (p. ej. confirmada por saldo) nunca se reescribe con las
+    // columnas del popup: el mapa del cliente va en su propia fila y gana en la
+    // caché por orden (ordenarFilasPropias).
+    const { data: propias } = await sb
       .from("parser_adapters")
-      .select("id, creado_por_empresa_id")
+      .select("id, config")
       .eq("fingerprint", args.fingerprint)
-      .eq("creado_por_empresa_id", args.empresaId)
-      .limit(1)
-      .maybeSingle();
+      .eq("creado_por_empresa_id", args.empresaId);
+    const igual = filaPropiaMismoMapa((propias ?? []) as unknown as { id: string; config: AdapterConfig }[], args.config);
+    const existing = { data: igual ? { id: igual.id } : null };
 
     // Las columnas que eligió el cliente SON su confirmación.
     const confirmado = { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: new Date().toISOString() };
@@ -400,6 +432,16 @@ export async function adapterPropioMismoMapa(fingerprint: string, empresaId: str
   }
 }
 
+/** El mapa guardado con la posición (fila de títulos, inicio de datos, títulos) del nuevo. */
+export function conPosicion(guardado: AdapterConfig, nuevo: AdapterConfig): AdapterConfig {
+  return {
+    ...guardado,
+    header_row: nuevo.header_row,
+    skip_rows_before_data: nuevo.skip_rows_before_data,
+    ...(nuevo.titulos ? { titulos: nuevo.titulos } : {}),
+  };
+}
+
 /**
  * Reusa la fila propia con el MISMO mapa (adapterPropioMismoMapa): nunca otra
  * inserción por lectura. Repone la confianza a la de un provisorio vivo y quita
@@ -408,14 +450,20 @@ export async function adapterPropioMismoMapa(fingerprint: string, empresaId: str
  */
 export async function reusarAdapterPropio(
   adapterId: string,
-  opts: { prueba?: TipoVerificacion | null } = {},
+  opts: { prueba?: TipoVerificacion | null; config?: AdapterConfig } = {},
 ): Promise<string> {
   try {
     const sb = getServiceClient();
     if (sb) {
-      const { data } = await sb.from("parser_adapters").select("confianza").eq("id", adapterId).maybeSingle();
-      const confianza = Math.max(Number((data as { confianza?: number } | null)?.confianza ?? 0), CONFIANZA_PROVISORIO);
-      await sb.from("parser_adapters").update({ confianza, disabled_until: null } as never).eq("id", adapterId);
+      const { data } = await sb.from("parser_adapters").select("confianza, config").eq("id", adapterId).maybeSingle();
+      const fila = data as { confianza?: number; config?: AdapterConfig } | null;
+      const confianza = Math.max(Number(fila?.confianza ?? 0), CONFIANZA_PROVISORIO);
+      // Mismo mapa de columnas, pero lo POSICIONAL puede haber cambiado (filas de
+      // encabezado de más o de menos): se actualiza sin tocar lo demás (vuelta 4).
+      const config = opts.config && fila?.config
+        ? toJson(conPosicion(fila.config, opts.config))
+        : undefined;
+      await sb.from("parser_adapters").update({ confianza, disabled_until: null, ...(config ? { config } : {}) } as never).eq("id", adapterId);
     }
   } catch {
     /* non-blocking */

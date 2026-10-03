@@ -215,4 +215,21 @@ describe("revisión adversarial del router", () => {
   it("«Cuenta Corriente Pyme con Línea de Crédito» como título → cartola", () => {
     expect(tipo([...L(780, ["Cuenta Corriente Pyme con Línea de Crédito", 40]), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140]), ...tabla(700, 6)])).toBe("cartola");
   });
+
+  // Vuelta 4: tabla del revisor (movimientos/facturas, con y sin N° de cuenta).
+  const conFacturas = (n: number, f: number) => tabla(700, n, (i) => (i < f ? `PAGO FACTURA N° ${7000 + i}` : `Transferencia ${i}`));
+  const encabezadoSinTipo = (cuenta: string | null) => [...L(780, ["Movimientos", 40]), ...(cuenta ? L(772, [cuenta, 40]) : []), ...L(766, ["Saldo anterior", 40], ["$ 100.000", 140])];
+  for (const [n, f] of [[3, 2], [4, 2], [10, 4], [20, 8], [20, 7]] as const) {
+    it(`B2B ${n} movs / ${f} «PAGO FACTURA N°» con «Cuenta Corriente N°» → cartola`, () => {
+      expect(tipo([...encabezadoSinTipo("Cuenta Corriente N° 0001234567"), ...conFacturas(n, f)])).toBe("cartola");
+    });
+    it(`B2B ${n} movs / ${f} facturas con «N° de cuenta» sin tipo + saldo anterior + títulos bancarios → cartola`, () => {
+      expect(tipo([...encabezadoSinTipo("N° de cuenta 0001234567"), ...conFacturas(n, f)])).toBe("cartola");
+    });
+    it(`${n} movs / ${f} facturas SIN N° de cuenta → ${n <= 4 ? "no cartola (estado corto de proveedor)" : "cartola (B2B)"}`, () => {
+      const r = tipo([...hdr.filter((i) => i.str !== "CARTOLA CUENTA CORRIENTE"), ...L(780, ["Movimientos", 40]), ...conFacturas(n, f)]);
+      if (n <= 4) expect(r).not.toBe("cartola");
+      else expect(r).toBe("cartola");
+    });
+  }
 });

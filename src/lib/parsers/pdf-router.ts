@@ -154,14 +154,19 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
   // Estado de cuenta de un proveedor: casi TODAS las glosas son facturas con N°
   // y no hay saldo del banco. Una cartola B2B con muchos "PAGO FACTURA 1234"
   // trae saldo anterior/inicial y sigue siendo cartola.
-  // Vuelta 3: "Saldo anterior" lo trae también el estado de cuenta de un
-  // proveedor; solo una marca PROPIA de banco (N° de cuenta corriente/vista/RUT o
-  // título de cartola) lo exime. Sin ella, ≥40% de glosas con factura N° → no es
-  // del banco.
-  const marcaDeBanco = fuertes.includes("n_cuenta_banco") || fuertes.includes("titulo_cartola");
-  // Sin marca de banco basta con 2 facturas (un estado de cuenta corto de 2-4 filas).
-  const muchasFacturas = (!marcaDeBanco && movs >= 2 && glosasDte >= 2 && glosasDte * 5 >= movs * 2)
-    || (movs >= 3 && glosasDte >= 3 && glosasDte * 5 >= movs * 4 && !fuertes.includes("saldo_inicial"));
+  // Facturas en las glosas (vueltas 3-4). Marca de banco = N° de cuenta
+  // corriente/vista/RUT o título de cartola; o un "N° de cuenta" sin tipo junto a
+  // "Saldo anterior" y títulos bancarios (cartola Pyme). Sin marca de banco:
+  // estados cortos (≤4 movimientos) con ≥40% de facturas, o ≥60% en los largos
+  // (una cartola B2B trae 35-40% de "PAGO FACTURA N°"; un proveedor, 70%+). Con
+  // marca: solo ≥80% y sin saldo inicial. Si calza un formato conocido, no aplica.
+  const nCuentaGenerico = fuera.some((t) => /\bn(umero|ro\.?|[°º])\s*(de )?cuenta\b(?! (de |del )?(cliente|proveedor))/.test(t));
+  const marcaDeBanco = fuertes.includes("n_cuenta_banco") || fuertes.includes("titulo_cartola")
+    || (nCuentaGenerico && fuertes.includes("saldo_inicial") && encabezado);
+  const pct = movs ? glosasDte / movs : 0;
+  const muchasFacturas = !conocido && glosasDte >= 2 && (
+    (!marcaDeBanco && ((movs <= 4 && pct >= 0.4) || (movs > 4 && pct >= 0.6)))
+    || (glosasDte >= 3 && pct >= 0.8 && !fuertes.includes("saldo_inicial")));
   if (muchasFacturas) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
   // Señales de TÍTULO: no ganan si el PDF calza un formato conocido, ni sobre una
   // línea que además anuncia la cuenta ("CARTOLA CUENTA CORRIENTE · LÍNEA DE

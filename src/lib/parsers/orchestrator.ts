@@ -807,7 +807,7 @@ async function guardarFormatoDerivado(
   // posiciones es nuestra reconstrucción, no el archivo del banco.
   if (opts.origen === "pdf" && !prueba) return propio;
   if (propio) {
-    await reusarAdapterPropio(propio, { prueba });
+    await reusarAdapterPropio(propio, { prueba, config: args.config });
     if (prueba) await promoverMapaGlobalSiHayConsenso(args.fingerprint, args.config);
     return propio;
   }
