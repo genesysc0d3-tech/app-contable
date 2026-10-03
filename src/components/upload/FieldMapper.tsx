@@ -169,7 +169,10 @@ export function LineaResumen({ resumen, cargando }: { resumen: ResumenMapa | nul
     );
   }
   const desde = ddmm(resumen.desde), hasta = ddmm(resumen.hasta);
-  const estado = resumen.contradice
+  // PDF sin marca de banco (vuelta 6): nunca verde; se pregunta abajo si es de su banco.
+  const estado = resumen.sinMarcaBanco && !resumen.contradice
+    ? { color: "var(--amber)", txt: "Este PDF no dice de qué banco es (ni banco, ni N° de cuenta corriente): podría ser el estado de cuenta de un proveedor." }
+    : resumen.contradice
     ? { color: "var(--red)", txt: resumen.soloAbonos
         ? "El saldo no calza porque faltan movimientos. Si tu cartola trae solo abonos, díselo abajo."
         : "Esto no calza con tu banco (saldo o totales): revisa las columnas." }
@@ -330,13 +333,13 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant
   const puedeListo = !saving && !loading && !!preview && !validationErr && !!vigente?.valido && vigente.guardable;
   const puedeSoloAbonos = !saving && !validationErr && !!vigente?.valido && vigente.soloAbonos;
 
-  async function guardar(soloAbonos: boolean) {
+  async function guardar(soloAbonos: boolean, esBanco = false) {
     if (validationErr) { toast(validationErr, "error"); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/parser/save-mapping", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ documento_id: documentoId, config, reprocess: true, solo_abonos: soloAbonos }),
+        body: JSON.stringify({ documento_id: documentoId, config, reprocess: true, solo_abonos: soloAbonos, ...(esBanco ? { es_banco: true } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || "No se pudieron guardar tus columnas");
@@ -345,6 +348,23 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant
     } catch (err) { toast(err instanceof Error ? err.message : "No se pudieron guardar tus columnas", "error"); }
     setSaving(false);
   }
+
+  // "No es una cartola" (vuelta 6): el PDF sale del lector y vuelve al flujo de antes.
+  async function noEsCartola() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/parser/no-es-cartola", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documento_id: documentoId, config }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "No pudimos guardar tu respuesta");
+      toast(j.reprocessStarted ? "Listo: no lo leeremos como cartola de banco" : "Guardado: este formato no se leerá como cartola de banco");
+      onSaved?.(); onClose();
+    } catch (err) { toast(err instanceof Error ? err.message : "No pudimos guardar tu respuesta", "error"); }
+    setSaving(false);
+  }
+  const preguntaBanco = !!vigente?.valido && !!vigente.sinMarcaBanco;
 
   const fuente = preview?.suggestedSource ?? null;
   const statusNode = preview ? (
@@ -355,7 +375,7 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant
     </div>
   ) : null;
   const motivoNode = motivo ? (
-    <div title={motivo} style={{ fontSize: 11.5, color: "var(--amber)", fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{motivo}</div>
+    <div style={{ fontSize: 11.5, color: "var(--amber)", fontWeight: 650, lineHeight: 1.35, whiteSpace: "normal", overflowWrap: "anywhere" }}>{motivo}</div>
   ) : null;
 
   // Fragmento de 3 secciones (header / content / footer). El grid lo pone el
@@ -400,15 +420,27 @@ export function FieldMapperBody({ documentoId, onClose, onSaved, motivo, variant
         </div>
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
           <button onClick={onClose} style={btn(false, false)}>{variant === "embedded" ? "Volver" : "Ahora no"}</button>
-          {vigente?.soloAbonos && (
+          {/* Con un PDF sin marca de banco primero se responde si es de su banco. */}
+          {vigente?.soloAbonos && !preguntaBanco && (
             <button onClick={() => guardar(true)} disabled={!puedeSoloAbonos} style={btn(false, !puedeSoloAbonos)}>
               Mi cartola trae solo abonos
             </button>
           )}
-          <button onClick={() => guardar(false)} disabled={!puedeListo} style={btn(true, !puedeListo)}
-            title={vigente && !vigente.guardable ? "Tu banco no calza con estas columnas" : undefined}>
-            {saving ? "Guardando…" : "Listo"}
-          </button>
+          {preguntaBanco ? (
+            <div role="group" aria-label="¿Este PDF es de tu banco?" style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 750, color: "var(--text)" }}>¿Este PDF es de tu banco?</span>
+              <button onClick={noEsCartola} disabled={saving} style={btn(false, saving)}>No es una cartola</button>
+              <button onClick={() => guardar(false, true)} disabled={!puedeListo} style={btn(true, !puedeListo)}
+                title={vigente && !vigente.guardable ? "Tu banco no calza con estas columnas" : undefined}>
+                {saving ? "Guardando…" : "Sí, es mi cartola"}
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => guardar(false)} disabled={!puedeListo} style={btn(true, !puedeListo)}
+              title={vigente && !vigente.guardable ? "Tu banco no calza con estas columnas" : undefined}>
+              {saving ? "Guardando…" : "Listo"}
+            </button>
+          )}
         </div>
       </div>
     </>

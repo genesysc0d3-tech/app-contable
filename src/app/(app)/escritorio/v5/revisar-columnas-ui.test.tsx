@@ -164,3 +164,25 @@ describe("revisión adversarial 2026-09-30", () => {
     expect(src).toMatch(/<VeredictoCartola key=\{selDoc\.id\}/);
   });
 });
+
+// Vuelta 6b (A2): PDF sin marca propia de banco.
+describe("PDF sin marca de banco: sin verde y con el aviso a la vista", () => {
+  it("el resumen del popup nunca dice «Cuadra al peso con tu banco» y explica por qué", async () => {
+    const { LineaResumen } = await import("@/components/upload/FieldMapper");
+    const html = renderToStaticMarkup(createElement(LineaResumen, {
+      cargando: false,
+      resumen: { valido: true, entradas: { n: 5, monto: 1 }, salidas: { n: 5, monto: 1 }, desde: null, hasta: null, estado: "comprobada", motivo: null, contradice: false, soloAbonos: false, noLeidas: 0, guardable: true, firma: "x", sinMarcaBanco: true },
+    }));
+    expect(html).not.toContain("Cuadra al peso");
+    expect(html).toContain("no dice de qué banco es");
+  });
+  it("el visor muestra el aviso completo (no solo en el tooltip)", async () => {
+    const { DETALLE_SIN_MARCA_BANCO } = await import("@/lib/parsers/types");
+    const { default: VeredictoCartola } = await import("./VeredictoCartola");
+    const c: CuadreCartola = { ...cuadre, verificacion: { tipo: "sin_comprobar", alerta: true, detalle: DETALLE_SIN_MARCA_BANCO } };
+    const html = renderToStaticMarkup(createElement(VeredictoCartola, props(c)));
+    expect(html).toContain('data-testid="cta-columnas"');
+    expect(html.replace(/title="[^"]*"/g, "")).toContain("no dice de qué banco es");
+    expect(html).not.toContain("-webkit-line-clamp:3");
+  });
+});
