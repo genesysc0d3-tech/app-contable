@@ -456,6 +456,7 @@ export default async function V5Page({ searchParams }: {
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
           empresaRazon={usuario.empresas.razon_social}
+          empresaRut={usuario.empresas.rut}
           emisorFaltan={faltanDelEmisor(usuario.empresas)}
           empresaTipo={mesaParam === "factura" ? tipoFacturas : tipoBoletas}
           clientes={clData.data ?? []}

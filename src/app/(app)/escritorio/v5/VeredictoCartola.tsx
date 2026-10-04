@@ -54,7 +54,7 @@ const FILE_META: Record<FileExt, { Glifo: Icon; color: string }> = {
 };
 
 export default function VeredictoCartola({
-  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado, onRevisarColumnas, aMediasIds,
+  doc, propuestas, tipoMix, empresaId: _empresaId, onClose: _onClose, onEditar, onAprobar, busy = false, onEliminar, eliminarArmado = false, mesa = "boleta", decidida = false, juzgadas = 0, contexto = null, veredicto = null, onCuadreAgregado, onRevisarColumnas, aMediasIds, preguntas = 0,
 }: {
   doc: { id: string; nombre_archivo: string; movimientos_detectados: number | null; progreso_ia?: unknown };
   propuestas: Propuesta[];
@@ -85,6 +85,8 @@ export default function VeredictoCartola({
   onRevisarColumnas?: () => void;
   /** Propuestas con lápida (a medias): terminadas, no cuentan como listas/pendientes. */
   aMediasIds?: ReadonlySet<string>;
+  /** Check agrupado: preguntas en grupo pendientes → el botón Editar invita a responderlas. */
+  preguntas?: number;
 }) {
   const count = propuestas.length || (doc.movimientos_detectados ?? 0);
   const total = propuestas.reduce((s, p) => s + (p.total ?? p.movimientos_raw?.monto ?? 0), 0);
@@ -372,7 +374,11 @@ export default function VeredictoCartola({
       ) : (
       <div style={{ width: "clamp(160px, 30%, 285px)", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: "1.1em", borderLeft: "1px solid var(--border)", paddingLeft: "1.4em" }}>
         <button className="vcart-cb" onClick={onEditar} disabled={busy} style={{ background: "var(--bg-muted)", color: "var(--text)", fontSize: "1.12em" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Editar
+          {preguntas > 0 ? (
+            <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.4" /><path d="M12 17h.01" /></svg>{preguntas === 1 ? "Responder 1 pregunta" : `Responder ${preguntas} preguntas`}</>
+          ) : (
+            <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Editar</>
+          )}
         </button>
         {(
           <>

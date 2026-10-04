@@ -70,6 +70,8 @@ const CONSUMIDORES = [
   "src/app/(app)/revisar/actions.ts",
   "src/app/api/mcp/route.ts",
   "src/app/api/emision/jobs/route.ts",
+  "src/app/(app)/escritorio/v5/preguntas-grupo.ts",
+  "src/lib/clasificacion/responder-grupo.ts",
 ];
 const TIPO = `"(?:${TODOS_LOS_TIPOS.join("|")})"`;
 // (Un `enum: ["boleta", "factura"]` de MESA en un schema no es una lista de tipos.)

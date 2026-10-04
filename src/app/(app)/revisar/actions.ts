@@ -17,6 +17,7 @@ import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
 import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 import { canalDeOrigen, nuevoLote, sello, type CanalDecision } from "@/lib/propuestas/sello";
 import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
+import { deshacerRespuestaGrupo, ejecutarRespuestaGrupo, ultimoGrupoDeshacible, type ResultadoDeshacerGrupo, type ResultadoGrupo } from "@/lib/clasificacion/responder-grupo";
 
 const BATCH_SIZE = 50;
 
@@ -493,6 +494,52 @@ export async function decidirVenta(
   return decision === "no_es_venta"
     ? rechazarPropuestas(propuestaIds, canal, lote)
     : cambiarTipoPropuestas(propuestaIds, decision, mesa, canal, lote);
+}
+
+/**
+ * CHECK AGRUPADO (Fase 4): la clienta respondió una pregunta en grupo ("¿les vendiste
+ * algo a estas personas?"). El navegador manda qué filas son venta y cuáles no; los
+ * candados, el tipo y las reglas se deciden en el servidor
+ * (src/lib/clasificacion/responder-grupo.ts). Devuelve el grupoId para Deshacer.
+ */
+export async function responderGrupo(respuesta: unknown): Promise<ResultadoGrupo> {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, ventas: 0, noVentas: 0, quedan: 0, reglas: 0 };
+  const r = await ejecutarRespuestaGrupo(ctx.sb, { empresaId: ctx.empresaId, userId: ctx.userId, soporte: ctx.soporte }, respuesta);
+  if (r.ventas + r.noVentas > 0) {
+    await recordCuentaAudit({
+      sb: ctx.sb,
+      empresaId: ctx.empresaId,
+      usuarioId: ctx.userId,
+      accion: "propuestas_respondidas_en_grupo",
+      recursoTipo: "propuesta_ia",
+      recursoId: null,
+      resumen: `${r.ventas} ventas y ${r.noVentas} sin boleta en una respuesta en grupo`,
+      metadata: { ventas: r.ventas, no_ventas: r.noVentas, quedan: r.quedan, reglas: r.reglas, grupo: r.grupoId ?? null },
+    });
+    revalidatePath("/escritorio");
+    revalidatePath("/massdte");
+  }
+  return r;
+}
+
+/** Deshace una respuesta en grupo (solo lo que nadie tocó después; nunca aprobado/emitido). */
+export async function deshacerGrupo(grupoId: unknown): Promise<ResultadoDeshacerGrupo> {
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, devueltas: 0, sinTocar: 0, reglas: 0 };
+  const r = await deshacerRespuestaGrupo(ctx.sb, { empresaId: ctx.empresaId, userId: ctx.userId, soporte: ctx.soporte }, grupoId);
+  if (r.devueltas > 0 || r.reglas > 0) {
+    revalidatePath("/escritorio");
+    revalidatePath("/massdte");
+  }
+  return r;
+}
+
+/** La última respuesta en grupo de la cartola que todavía se puede deshacer (Deshacer tras recargar). */
+export async function ultimoGrupo(documentoId: unknown): Promise<{ grupoId: string | null; filas: number }> {
+  const ctx = await getEmpresaAndService({ soloLectura: true });
+  if ("error" in ctx) return { grupoId: null, filas: 0 };
+  return ultimoGrupoDeshacible(ctx.sb, { empresaId: ctx.empresaId, userId: ctx.userId, soporte: ctx.soporte }, documentoId);
 }
 
 export async function rechazarPropuesta(propuestaId: string, origen?: string) {

@@ -39,7 +39,7 @@ cerradas as (
 ev as (
   select l.propuesta_id,
          bool_or(l.canal in ('check_fila', 'check_detalle') or l.abierta is true) as mirada,
-         bool_or(l.canal in ('check_fila', 'check_detalle', 'check_lote', 'mcp', 'telegram')
+         bool_or(l.canal in ('check_fila', 'check_detalle', 'check_lote', 'check_grupo', 'mcp', 'telegram')
                  and (l.antes_tipo_dte is distinct from l.despues_tipo_dte or l.receptor_cambio)) as humano_cambio,
          bool_or(l.canal = 'propagacion') as propagada,
          min(l.created_at) filter (where l.canal = 'propagacion') as t_propagacion,
@@ -54,7 +54,7 @@ corregida_tras_propagar as (
   from public.propuesta_decisiones l
   join ev on ev.propuesta_id = l.propuesta_id and ev.propagada
   where l.created_at > ev.t_propagacion
-    and l.canal in ('check_fila', 'check_detalle', 'check_lote')
+    and l.canal in ('check_fila', 'check_detalle', 'check_lote', 'check_grupo')
     and l.antes_tipo_dte is distinct from l.despues_tipo_dte
 )
 select p.empresa_id::text as empresa_id,
