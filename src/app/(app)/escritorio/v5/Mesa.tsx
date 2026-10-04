@@ -44,11 +44,12 @@ export type MesaProps = {
   empresaId: string;
   empresaGiro: string | null;
   empresaRazon: string;
+  empresaRut?: string | null;
   empresaTipo: string | null;
   emisorFaltan?: string[];
 };
 
-export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaTipo, emisorFaltan = [] }: MesaProps) {
+export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRazon, empresaRut = null, empresaTipo, emisorFaltan = [] }: MesaProps) {
   // Salto del chat del team a una boleta: se resalta en la pestaña Boletas.
   useEffect(() => {
     const intentar = () => {
@@ -70,7 +71,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
       fecha={mesa.calendar.selectedDateLabel}
       subidosContent={
         mesa.docsAgregados.length > 0 || mesa.propuestas.length > 0 ? (
-          <MesaTab mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaTipo={empresaTipo} />
+          <MesaTab mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaTipo={empresaTipo} empresaRazon={empresaRazon} empresaRut={empresaRut} />
         ) : (
           compactEmpty("subidos")
         )

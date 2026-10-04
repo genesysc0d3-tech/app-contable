@@ -21,6 +21,10 @@ import AtribucionDoc from "./AtribucionDoc";
 // Perf: el editor bulk de cartolas sale del bundle inicial (solo existe dentro
 // del popup); se precarga en idle tras montar la mesa — abrir sigue instantáneo.
 const CartolaEditor = dynamic(() => import("./CartolaEditor"), { ssr: false });
+// Check agrupado (Fase 4): la pantalla "Preguntas" del mismo popup. El motor es puro y
+// liviano (cuenta las preguntas para el visor); la pantalla baja recién al abrirla.
+const PreguntasGrupo = dynamic(() => import("./PreguntasGrupo"), { ssr: false });
+import { armarPreguntas, filaDePropuesta } from "./preguntas-grupo";
 import { aprobarCartola } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
@@ -49,12 +53,15 @@ function esCartolaBancaria(doc: DocRow): boolean {
 //  - Telegram (1 tx)  → tarjeta de propuesta editable (compacta) + comprobante
 //  - Boleta única     → resumen read-only ("Emitida · en Boletas")
 //  - Cartola MassDTE  → configs globales (Mapear/Tipo/Glosa) + sus propuestas
-export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empresaTipo }: {
+export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empresaTipo, empresaRazon = null, empresaRut = null }: {
   mesa: MesaDateDependent;
   clientes: ClienteResumen[];
   empresaId: string;
   empresaGiro: string | null;
   empresaTipo: string | null;
+  /** Razón social: el Check agrupado reconoce las transferencias desde la propia empresa. */
+  empresaRazon?: string | null;
+  empresaRut?: string | null;
 }) {
   const reload = useMesaReload() ?? (() => {});
   const [selDocId, setSelDocId] = useState<string | null>(null);
@@ -66,10 +73,10 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   const [viewImgDocId, setViewImgDocId] = useState<string | null>(null);
   const [mappingDocId, setMappingDocId] = useState<string | null>(null);
   const [editarCartolaId, setEditarCartolaId] = useState<string | null>(null);
-  // Pantalla activa DENTRO del popup Editar: la grilla de edición o el mapeo de
-  // columnas. "Mapear" es otra pantalla del MISMO popup (no un modal apilado que
-  // quedaba detrás por z-index).
-  const [editarScreen, setEditarScreen] = useState<"editar" | "mapear">("editar");
+  // Pantalla activa DENTRO del popup Editar: las preguntas en grupo (Check agrupado),
+  // la grilla de edición ("Una por una") o el mapeo de columnas. Son pantallas del
+  // MISMO popup (no modales apilados que quedaban detrás por z-index).
+  const [editarScreen, setEditarScreen] = useState<"preguntas" | "editar" | "mapear">("editar");
   const [aprobandoCartola, setAprobandoCartola] = useState(false);
   const { toast } = useToast();
 
@@ -225,11 +232,28 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
     return m;
   }, [mesa.pendientes]);
 
-  const selProps = (selDoc ? propsByDoc.get(selDoc.id) : undefined) ?? [];
+  const selProps = useMemo(() => (selDoc ? propsByDoc.get(selDoc.id) : undefined) ?? [], [selDoc, propsByDoc]);
   const pend = selProps.filter((p) => p.estado === "pendiente" || p.estado === "aprobado" || p.estado === "editado" || p.estado === "listo");
   const alta = pend.filter((p) => classifyConfianza(p) === "alta");
   const media = pend.filter((p) => classifyConfianza(p) === "media");
   const baja = pend.filter((p) => classifyConfianza(p) === "baja");
+
+  // Check agrupado: cuántas preguntas en grupo tiene la cartola seleccionada (motor puro,
+  // sobre lo que la mesa ya trae). Solo mesa de boletas; se apaga si la mesa vino truncada.
+  const preguntasSel = useMemo(() => {
+    if (!selDoc || mesa.mesaActiva === "factura") return 0;
+    return armarPreguntas(selProps.map((p) => filaDePropuesta(p, aMediasIds)), {
+      mesa: mesa.mesaActiva,
+      truncada: mesa.propuestasTruncadas,
+      carril: empresaTipo,
+      marca: selDoc.tipo_operacion_hint ?? null,
+      razonSocial: empresaRazon,
+      rutEmpresa: empresaRut,
+      historial: (mesa.propuestas as Propuesta[]).map((p) => filaDePropuesta(p, aMediasIds)),
+    }).tarjetas.length;
+  }, [selDoc, selProps, aMediasIds, mesa.mesaActiva, mesa.propuestasTruncadas, mesa.propuestas, empresaTipo, empresaRazon, empresaRut]);
+  // Abrir Editar: si hay preguntas, parte en Preguntas; si no, en la grilla.
+  const abrirEditar = (docId: string) => { setEditarScreen(preguntasSel > 0 ? "preguntas" : "editar"); setEditarCartolaId(docId); };
 
   // "Aprobar" de la cartola (atómico): promueve las 'listo' → 'aprobado' (a Emitir).
   const handleAprobarCartola = async () => {
@@ -366,7 +390,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         ) : tipo === "boleta" && selBoleta ? (
           <BoletaVisor key={selBoleta.id} boleta={selBoleta} onClose={() => setSelDocId(null)} onVerEnBoletas={() => window.dispatchEvent(new CustomEvent("switch-tab", { detail: "boletas" }))} />
         ) : tipo === "massdte" && selDoc.estado === "procesado" && (selProps.length > 0 || selCuadreFaltan) ? (
-          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => { setEditarScreen("editar"); setEditarCartolaId(selDoc.id); }} onAprobar={handleAprobarCartola} busy={aprobandoCartola} aMediasIds={aMediasIds} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} onRevisarColumnas={() => setMappingDocId(selDoc.id)} />
+          <VeredictoCartola key={selDoc.id} doc={selDoc} propuestas={pend} tipoMix={mesa.docTipoMix[selDoc.id]} empresaId={empresaId} onClose={() => setSelDocId(null)} onEditar={() => abrirEditar(selDoc.id)} preguntas={preguntasSel} onAprobar={handleAprobarCartola} busy={aprobandoCartola} aMediasIds={aMediasIds} onEliminar={puedeEliminarSel ? eliminarSelDoc : undefined} eliminarArmado={elimArmado === selDoc.id} mesa={mesa.mesaActiva} decidida={docsDecididos.has(selDoc.id)} juzgadas={selProps.length - pend.length} contexto={selDoc.contexto_usuario ?? null} veredicto={((selDoc.progreso_ia as { contexto_veredicto?: { contradice: boolean; motivo: string | null; revisado: boolean } } | null)?.contexto_veredicto) ?? null} onCuadreAgregado={reload} onRevisarColumnas={() => setMappingDocId(selDoc.id)} />
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px 6px", flexShrink: 0 }}>
@@ -493,7 +517,11 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Editar</span>
+                  {mesa.mesaActiva !== "factura" ? (
+                    <PildorasPantalla actual={editarScreen === "preguntas" ? "preguntas" : "editar"} onCambiar={setEditarScreen} />
+                  ) : (
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Editar</span>
+                  )}
                   <span style={{ fontSize: 14.5, fontWeight: 750, letterSpacing: "-.01em", color: "var(--text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selDoc?.nombre_archivo}</span>
                   <button onClick={() => setEditarScreen("mapear")} onMouseEnter={() => prefetchPreview(editarCartolaId)} onFocus={() => prefetchPreview(editarCartolaId)} style={{ fontSize: 11, fontWeight: 650, color: "var(--text2)", background: "var(--bg-muted)", border: "1px solid var(--border)", borderRadius: 99, padding: "7px 14px", cursor: "pointer" }}>↔ Revisar columnas</button>
                 </>
@@ -510,6 +538,25 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   onSaved={() => { setEditarScreen("editar"); reload(); }}
                 />
               </div>
+            ) : editarScreen === "preguntas" && selDoc ? (
+              <>
+                <PreguntasGrupo
+                  propuestas={selProps}
+                  historial={mesa.propuestas as Propuesta[]}
+                  documentoId={selDoc.id}
+                  truncada={mesa.propuestasTruncadas}
+                  carril={empresaTipo}
+                  marca={selDoc.tipo_operacion_hint ?? null}
+                  razonSocial={empresaRazon}
+                  rutEmpresa={empresaRut}
+                  aMediasIds={aMediasIds}
+                  onAction={reload}
+                  onUnaPorUna={() => setEditarScreen("editar")}
+                />
+                <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+                  <button onClick={() => { setEditarCartolaId(null); setEditarScreen("editar"); reload(); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}>Cerrar</button>
+                </div>
+              </>
             ) : (
               <>
                 {selDoc?.estado === "procesado" && (
@@ -539,5 +586,20 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
         document.body,
       )}
     </div>
+  );
+}
+
+/** "Preguntas · Una por una": las dos formas de revisar la cartola, en el mismo popup. */
+function PildorasPantalla({ actual, onCambiar }: { actual: "preguntas" | "editar"; onCambiar: (s: "preguntas" | "editar") => void }) {
+  const opciones: Array<["preguntas" | "editar", string]> = [["preguntas", "Preguntas"], ["editar", "Una por una"]];
+  return (
+    <span role="tablist" aria-label="Cómo revisar" style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: 99, border: "1px solid var(--border)", background: "var(--bg-muted)", flexShrink: 0 }}>
+      {opciones.map(([id, label]) => (
+        <button key={id} role="tab" aria-selected={actual === id} onClick={() => onCambiar(id)}
+          style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 99, border: "none", cursor: "pointer", background: actual === id ? "var(--surface)" : "transparent", color: actual === id ? "var(--text)" : "var(--text2)", boxShadow: actual === id ? "0 1px 3px rgba(0,0,0,.18)" : "none" }}>
+          {label}
+        </button>
+      ))}
+    </span>
   );
 }

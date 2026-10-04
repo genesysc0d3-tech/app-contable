@@ -471,6 +471,7 @@ export type Database = {
           estado: string
           estado_cambiado_at: string | null
           nacio_carril: string | null
+          nacio_lote: string | null
           nacio_hint: string | null
           veces_acunada: number
           veces_confirmada: number
@@ -507,6 +508,7 @@ export type Database = {
           estado?: string
           estado_cambiado_at?: string | null
           nacio_carril?: string | null
+          nacio_lote?: string | null
           nacio_hint?: string | null
           veces_acunada?: number
           veces_confirmada?: number
@@ -543,6 +545,7 @@ export type Database = {
           estado?: string
           estado_cambiado_at?: string | null
           nacio_carril?: string | null
+          nacio_lote?: string | null
           nacio_hint?: string | null
           veces_acunada?: number
           veces_confirmada?: number

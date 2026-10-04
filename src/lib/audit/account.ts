@@ -20,6 +20,7 @@ export type CuentaAuditAction =
   | "propuesta_aprobada"
   | "mcp_conector_desconectado"
   | "propuestas_aprobadas"
+  | "propuestas_respondidas_en_grupo"
   | "cartola_devuelta_a_check"
   | "emision_autorizacion_aceptada"
   | "boleta_emitida"

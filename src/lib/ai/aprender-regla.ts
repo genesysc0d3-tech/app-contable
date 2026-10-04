@@ -38,113 +38,11 @@ import { sello } from "../propuestas/sello";
 
 type SB = SupabaseClient<Database>;
 
-/**
- * Palabras que NO identifican a una contraparte: verbos bancarios, conectores,
- * canales y entidades genéricas. Se comparan sin acentos y en minúscula.
- */
-const RUIDO = new Set<string>([
-  // verbos / sustantivos bancarios
-  "transferencia", "transferencias", "transf", "tef", "abono", "abonos", "pago",
-  "pagos", "deposito", "depositos", "traspaso", "cargo", "giro", "transaccion",
-  "compra", "compras", "cobro", "retiro", "webpay", "redcompra", "servipag",
-  "recaudacion", "recaudacrecibida", "recibido", "recibida", "enviada", "enviado",
-  // conectores
-  "de", "a", "para", "por", "desde", "hacia", "con", "el", "la", "los", "las",
-  "un", "una", "y", "e", "o", "u", "del", "al", "su", "sus",
-  // canales / medios
-  "internet", "web", "online", "movil", "app", "banco", "bco", "cuenta", "cta",
-  "electronica", "digital", "linea", "sucursal", "caja", "cajero",
-  // movimientos INTERNOS del banco (no son contraparte de venta): un sobregiro,
-  // un interés o una comisión no identifican a un cliente. Faltaban y por eso se
-  // acuñó la regla-basura "SOBREGIRO CTE → Exenta" (2026-09-01).
-  "cte", "sobregiro", "credito", "avance", "desembolso", "descubierto",
-  "cursado", "interes", "intereses", "comision", "comisiones", "mantencion",
-  "impuesto", "impuestos", "reajuste", "dividendo", "dividendos", "cuota",
-  "cuotas", "cheque", "cheques", "timbre", "timbres",
-  // entidades genéricas (peligrosas como clave: matchean a cualquiera)
-  "proveedor", "proveedores", "cliente", "clientes", "varios", "tercero",
-  "terceros", "particular", "particulares", "sueldo", "sueldos", "remuneracion",
-  "remuneraciones", "honorarios", "arriendo", "servicio", "servicios",
-  // formas jurídicas (no identifican a la persona; un "JUAN PEREZ SPA" no es el
-  // mismo tercero que "JUAN PEREZ" persona natural, pero tampoco la razón social
-  // se distingue por el sufijo → se botan para no ensuciar/inflar el patrón)
-  "spa", "ltda", "limitada", "sa", "eirl", "sac", "cia", "hermanos", "hno",
-  "hnos", "sociedad",
-  // meta
-  "ref", "nro", "no", "num", "numero", "comprobante", "folio", "monto", "fecha",
-  "saldo", "glosa", "detalle", "operacion", "op", "id",
-]);
-
-/**
- * Regex anclada por límites de "no-letra" alrededor del nombre: hace que "MARIA"
- * NO matchee "MARIANA" ni "JUAN" matchee "JUANA" (el substring plano de
- * ilike/contains sobre-matcheaba). Se guarda como patron_tipo="regex" en la
- * regla aprendida (ruleMatches ya tiene camino regex) y se reusa en la
- * propagación. Sin flag `u` (ruleMatches usa `new RegExp(patron,"i")`): el rango
- * à-ÿ cubre los acentos latinos y, con el flag `i`, también sus mayúsculas.
- * El nombre viene de extraerPatronContraparte: solo letras+espacios, sin
- * metacaracteres regex → seguro de interpolar.
- */
-export function regexContraparte(nombre: string): string {
-  return `(^|[^a-zà-ÿ])${nombre.toLowerCase()}([^a-zà-ÿ]|$)`;
-}
-
-function deAccent(s: string): string {
-  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-export interface PatronContraparte {
-  /** Nombre de contraparte limpio (solo letras+espacios, ej. "JUAN PEREZ"). */
-  patron: string;
-}
-
-/**
- * Extrae una clave de contraparte SEGURA desde la glosa de un movimiento.
- * Devuelve null cuando no logra un patrón específico (no aprendemos entonces).
- *
- * Estrategia: limpiar a solo-letras, tokenizar, botar el ruido bancario, y
- * quedarnos con los tokens que identifican a la persona/entidad. Se exige un
- * mínimo de especificidad (≥2 tokens, o 1 token de ≥5 letras) para no crear
- * reglas que matcheen medio mundo.
- */
-export function extraerPatronContraparte(
-  descripcion: string | null | undefined,
-  receptorNombre?: string | null,
-): PatronContraparte | null {
-  const desde = (raw: string | null | undefined): string[] => {
-    // El patrón CONSERVA acentos: matchea contra la glosa cruda vía `ruleMatches`
-    // (includes case-insensitive, accent-sensitive). El chequeo de ruido, en
-    // cambio, de-acentúa el token para compararlo contra el set ASCII.
-    const base = String(raw ?? "")
-      .toUpperCase()
-      .replace(/[^A-ZÁÉÍÓÚÜÑ\s]/g, " ") // deja letras (con acento); fuera dígitos, horas, refs, puntuación
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!base) return [];
-    return base
-      .split(" ")
-      .filter((t) => t.length >= 2 && !RUIDO.has(deAccent(t).toLowerCase()));
-  };
-
-  // Candidato 1: el nombre de receptor que el humano confirmó (si vino y es útil).
-  // Candidato 2: la propia glosa. Preferimos el que dé una clave válida; si ambos,
-  // la glosa (es la superficie contra la que matchea la regla).
-  const tokensGlosa = desde(descripcion);
-  const tokensRecep = desde(receptorNombre);
-
-  const armar = (tokens: string[]): PatronContraparte | null => {
-    if (tokens.length === 0) return null;
-    const usar = tokens.slice(0, 4); // cap: no guardar glosas kilométricas
-    const especifico =
-      usar.length >= 2 || (usar.length === 1 && usar[0].length >= 5);
-    if (!especifico) return null;
-    const patron = usar.join(" ");
-    if (deAccent(patron).replace(/[^A-Z]/g, "").length < 5) return null;
-    return { patron };
-  };
-
-  return armar(tokensGlosa) ?? armar(tokensRecep);
-}
+// RUIDO, regexContraparte y extraerPatronContraparte viven en el módulo PURO
+// @/lib/clasificacion/contraparte (los usa también el Check agrupado en el navegador).
+// Se re-exportan acá: los importadores existentes no cambian.
+import { extraerPatronContraparte, regexContraparte } from "@/lib/clasificacion/contraparte";
+export { extraerPatronContraparte, regexContraparte, type PatronContraparte } from "@/lib/clasificacion/contraparte";
 
 export interface AprenderArgs {
   empresaId: string;
@@ -164,6 +62,14 @@ export interface AprenderArgs {
   canal?: string;
   /** Movimiento puntual que la enseñó (soporte: glosa viva para "Lo que aprendí"). */
   movimientoId?: string | null;
+  /**
+   * Voltear a los hermanos de la misma contraparte en la cartola (default true). El
+   * Check agrupado lo APAGA: la clienta ya respondió por cada fila de la tarjeta, y una
+   * hermana que no estaba en la pregunta no se decide a sus espaldas.
+   */
+  propagar?: boolean;
+  /** Gesto que la acuñó (Check agrupado: la respuesta) → nacio_lote. Deshacer el grupo la apaga. */
+  nacioLote?: string | null;
 }
 
 /** Lote máximo cuyo "Afecta" sobre cartola P2P/forex todavía confirma la regla en la marca. */
@@ -258,6 +164,8 @@ export async function aprenderReglaDesdeResolucion(
           nombre: nombreReglaAprendida(args.tipoDte), veces_acunada: (existente.veces_acunada ?? 0) + 1,
           veces_corregida: 0, veces_confirmada: 0, evidencia_desde: new Date().toISOString(),
           aprendida_bajo_marca: senalMarca, confianza: 0.95, deshecha_por: null,
+          // Renació en una respuesta en grupo: Deshacer esa respuesta la vuelve a apagar.
+          ...(args.nacioLote ? { nacio_lote: args.nacioLote } : {}),
         };
       } else if (existente.tipo_dte == null || existente.tipo_dte === args.tipoDte) {
         // Misma enseñanza: suma acuñación (no uso). La señal de marca no se pisa.
@@ -296,6 +204,7 @@ export async function aprenderReglaDesdeResolucion(
         veces_acunada: 1,
         nacio_hint: hint,
         nacio_carril: args.canal ?? null,
+        ...(args.nacioLote ? { nacio_lote: args.nacioLote } : {}),
         documento_origen_id: args.documentoId,
         aprendida_bajo_marca: senalMarca,
         ligada_a_cartolas: true,
@@ -322,7 +231,7 @@ export async function aprenderReglaDesdeResolucion(
       } catch { /* sin soporte: la regla no queda ligada a esta cartola */ }
     }
 
-    const propagadas = args.documentoId
+    const propagadas = args.documentoId && args.propagar !== false
       ? await propagarEnCartola(sb, {
           empresaId: args.empresaId,
           documentoId: args.documentoId,
