@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import * as A from "@/lib/ai/aprender-regla";
 import {
   claveContraparte, dvRut, extraerPatronContraparte, normalizarRut, pareceCuentaPropia, pareceEmpresa,
-  plataformaEnGlosa, regexContraparte, rutEnGlosa,
+  patronAcunableEnGrupo, plataformaEnGlosa, regexContraparte, rutEnGlosa,
 } from "./contraparte";
 
 describe("lo movido desde aprender-regla no cambia", () => {
@@ -120,6 +120,16 @@ describe("claveContraparte", () => {
       expect(claveContraparte(g), g).toBeNull();
     }
   });
+  it("vuelta 4: organismos y cajas no son personas; Uber es un canal", () => {
+    for (const g of ["TESORERIA GENERAL DE LA REPUBLICA", "CAJA COMPENSACION LA ARAUCANA", "CAJA LOS ANDES", "PAGO SERVIU",
+      "SENCE CAPACITACION", "ABONO CMR", "AGUINALDO", "RUT 12345678"]) expect(claveContraparte(g), g).toBeNull();
+    expect(claveContraparte("UBER BV PAGO SEMANAL")).toMatchObject({ tipo: "canal", etiqueta: "Uber" });
+  });
+  it("vuelta 4: solo se acuña si el patrón de la regla ES el nombre limpio", () => {
+    expect(patronAcunableEnGrupo("TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ")).toBe(true);
+    expect(patronAcunableEnGrupo("TRF REC BCOS 12.345.678-5 JUAN PEREZ")).toBe(false);
+    expect(patronAcunableEnGrupo("TRANSFERENCIA DE CAMILA")).toBe(false);
+  });
   it("una persona necesita ≥2 palabras de nombre (una sola → una por una)", () => {
     expect(claveContraparte("TRANSFERENCIA DE CAMILA")).toBeNull();
     expect(claveContraparte("ABONO TEF OTROS BANCOS JUAN PEREZ")).toMatchObject({ clave: "nombre:JUAN PEREZ" });
@@ -150,8 +160,17 @@ describe("cuenta propia y empresas", () => {
     expect(pareceCuentaPropia("TRANSFERENCIA DE CAMILA ROJAS", "Comercial Rojas SpA")).toBe(false);
     expect(pareceCuentaPropia("TEF INVERSIONES LAGOS", "Inversiones Lagos Ltda")).toBe(true);
     expect(pareceCuentaPropia("TEF INVERS LAGOS", "Inversiones Lagos Ltda")).toBe(true);
-    // vuelta 3: ni prefijos de 3 letras ni bancos/país como compañera
-    expect(pareceCuentaPropia("TEF INV LAGOS", "Inversiones Lagos Ltda")).toBe(false);
+    // vuelta 4: abreviaturas de la lista blanca, solo junto al token distintivo
+    expect(pareceCuentaPropia("TEF INV LAGOS", "Inversiones Lagos Ltda")).toBe(true);
+    expect(pareceCuentaPropia("TEF COM ROJAS", "Comercial Rojas SpA")).toBe(true);
+    expect(pareceCuentaPropia("TRANSF DIST SANTIAGO", "Distribuidora Santiago SpA")).toBe(true);
+    expect(pareceCuentaPropia("TEF INV PEREZ", "Inversiones Lagos Ltda")).toBe(false);
+    // ...y siguen cerrados los falsos positivos de la vuelta 3
+    expect(pareceCuentaPropia("TRANS ANDES", "Transportes Andes SpA")).toBe(false);
+    expect(pareceCuentaPropia("TRANSPORTES ANDES", "Transportes Andes SpA")).toBe(false);
+    expect(pareceCuentaPropia("PAGO CON QR", "Comercial Qr SpA")).toBe(false);
+    expect(pareceCuentaPropia("SER ROJAS", "Servicios Rojas SpA")).toBe(false);
+    expect(pareceCuentaPropia("TRANS ROJAS", "Transportes Rojas SpA")).toBe(false);
     expect(pareceCuentaPropia("TRANSF BANCO CHILE ROJAS", "Chile Rojas SpA")).toBe(false);
     expect(pareceCuentaPropia("TRANSF GLOBAL ROJAS", "Global Rojas SpA")).toBe(false);
     expect(pareceCuentaPropia("TEF PEDRO LAGOS", "Inversiones Lagos Ltda")).toBe(false);

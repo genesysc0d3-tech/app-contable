@@ -12,8 +12,10 @@
 --  - Las reglas que nacieron en una respuesta en grupo se quedan (tabla SAGRADA); solo
 --    se pierde el vínculo nacio_lote (respaldado en _respaldo_nacio_lote_<fecha>).
 --
--- evidencia_reglas vuelve al cuerpo de 20261005120000 (check_grupo deja de contar como
--- mirada: esas reglas necesitan 3 cartolas para quedar firmes, nunca menos).
+-- evidencia_reglas vuelve al cuerpo de 20261005120000: check_grupo deja de contar como
+-- mirada (esas reglas necesitan 3 cartolas para quedar firmes) y OJO: un "Sí" de grupo a
+-- ciegas (check_grupo, abierta=false) VUELVE a contar como confirmación de la regla.
+-- responder_grupo_ventas se elimina: el código de la Fase 4 deja de poder responder en grupo.
 
 set lock_timeout = '5s';
 

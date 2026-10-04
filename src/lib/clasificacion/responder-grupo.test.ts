@@ -244,6 +244,13 @@ describe("sello", () => {
 });
 
 describe("reglas", () => {
+  it("tocada con RUT pero glosa con ruido ('TRF REC BCOS …'): no acuña (la regla no sería el nombre)", async () => {
+    propuesta(1, "TRF REC BCOS 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
+    propuesta(2, "TRF REC BCOS 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
+    const r = await responder([{ ids: [id(1), id(2)], venta: true, tocada: true }]);
+    expect(r.ventas).toBe(2);
+    expect(aprender).not.toHaveBeenCalled();
+  });
   it("un 'Sí' de GRUPO nunca crea reglas (aunque sean personas claras con varias filas)", async () => {
     propuesta(1, "TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
     propuesta(2, "TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });

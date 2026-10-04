@@ -180,6 +180,8 @@ export const PLATAFORMAS: ReadonlyArray<{ clave: string; nombre: string; re: Reg
   { clave: "PAYPAL", nombre: "PayPal", re: /\bPAY\s?PAL\b/ },
   { clave: "MACH", nombre: "MACH", re: /\bMACH\b/ },
   { clave: "TENPO", nombre: "Tenpo", re: /\bTENPO\b/ },
+  // Uber le paga al conductor: es un ingreso por canal, no una persona ni una no-venta.
+  { clave: "UBER", nombre: "Uber", re: /\bUBER\b/ },
 ];
 
 /** Plataforma de pago nombrada en la glosa (o null). */
@@ -225,6 +227,8 @@ const RUIDO_AGRUPAR = new Set<string>([
   "trf", "trx", "rec", "recib", "bcos", "bco", "interb", "transfer", "cod", "en", "afp", "isapre", "pgu",
   "compin", "subsidio", "licencia", "rescate", "vencimiento", "plazo", "seguro", "seguros", "cesantia",
   "credito", "social", "aguinaldo", "tapp", "andes", "caja", "ips", "fonasa", "previred", "mutual",
+  // Vuelta 4: organismos y cajas (no son personas que compran).
+  "general", "republica", "compensacion", "araucana", "serviu", "sence", "cmr", "rut",
 ]);
 
 /**
@@ -234,6 +238,20 @@ const RUIDO_AGRUPAR = new Set<string>([
  * BANCOS" o "CAJA VECINA" no forman persona (se miran una por una).
  */
 export const MIN_TOKENS_NOMBRE = 2;
+
+/**
+ * ¿Se puede acuñar una regla desde esta glosa en el Check agrupado? Solo si el patrón que
+ * guardaría la regla (extraerPatronContraparte) ES el nombre de agrupamiento, sin ruido:
+ * "TRF REC BCOS 12.345.678-5 JUAN PEREZ" agrupa como "JUAN PEREZ" pero su regla sería
+ * "TRF REC BCOS JUAN" → no se acuña.
+ */
+export function patronAcunableEnGrupo(descripcion: string | null | undefined): boolean {
+  const patron = extraerPatronContraparte(descripcion)?.patron;
+  const nombre = nombreParaAgrupar(descripcion);
+  if (!patron || !nombre) return false;
+  const norm = (x: string) => deAccent(x).toUpperCase().trim();
+  return norm(patron) === norm(nombre);
+}
 function nombreParaAgrupar(descripcion: string | null | undefined): string | null {
   const tokens = String(descripcion ?? "")
     .toUpperCase()
@@ -323,8 +341,9 @@ export function pareceCuentaPropia(
   // La tarjeta "propia" no rechaza de un toque: mejor un falso positivo que esconder ventas.
   if (propias.length === 1 && propias[0].length >= 4 && enGlosa.has(propias[0])) {
     const genericas = razon.filter((t) => GENERICAS_EMPRESA.has(t.toLowerCase()) && !FORMA_O_CONECTOR.has(t.toLowerCase()));
-    // Palabra completa, o abreviatura de ≥5 letras exactas ("INVERS" = INVERSIONES); nunca "INV".
-    return genericas.some((gen) => glosa.some((t) => t === gen || (t.length >= 5 && gen.startsWith(t))));
+    // Palabra completa, o una abreviatura de la LISTA BLANCA de esa palabra ("INV LAGOS",
+    // "COM ROJAS", "DIST SANTIAGO"). Nada de prefijos libres ("TRANS", "CON", "SER").
+    return genericas.some((gen) => glosa.some((t) => t === gen || (ABREVIATURAS_RAZON[t] ?? []).includes(gen)));
   }
   return false;
 }
@@ -338,6 +357,17 @@ const NEUTRAS_EMPRESA = new Set<string>([
   "security", "falabella", "ripley", "internacional", "consorcio", "banco", "mercado", "pago", "flow",
   "khipu", "tenpo", "mach", "andes",
 ]);
+
+/** Abreviaturas de bancos para palabras genéricas de razón social (lista cerrada). */
+const ABREVIATURAS_RAZON: Record<string, readonly string[]> = {
+  INV: ["INVERSIONES", "INVERSION"], INVERS: ["INVERSIONES", "INVERSION"], INVERSIO: ["INVERSIONES", "INVERSION"],
+  COM: ["COMERCIAL", "COMERCIALIZADORA"], COMERC: ["COMERCIAL", "COMERCIALIZADORA"], COMERCIALIZ: ["COMERCIALIZADORA"],
+  DIST: ["DISTRIBUIDORA"], DISTRIB: ["DISTRIBUIDORA"], CONST: ["CONSTRUCTORA"], CONSTRUC: ["CONSTRUCTORA"],
+  ASES: ["ASESORIAS", "ASESORIA"], ASESOR: ["ASESORIAS", "ASESORIA"], SERV: ["SERVICIOS"], SERVS: ["SERVICIOS"],
+  INMOB: ["INMOBILIARIA"], IMP: ["IMPORTADORA"], IMPORT: ["IMPORTADORA"], EXP: ["EXPORTADORA"], EXPORT: ["EXPORTADORA"],
+  SOC: ["SOCIEDAD"], ING: ["INGENIERIA"], TRANSP: ["TRANSPORTES"], TRANSPTES: ["TRANSPORTES"], EMP: ["EMPRESA", "EMPRESAS"],
+  CONSULT: ["CONSULTORA", "CONSULTORES"], TECNOL: ["TECNOLOGIA"],
+};
 
 /** Forma jurídica y conectores de una razón social: no sirven para reconocerla. */
 const FORMA_O_CONECTOR = new Set<string>(["spa", "ltda", "limitada", "sa", "eirl", "y", "de", "del", "la", "el", "los", "las", "cia"]);

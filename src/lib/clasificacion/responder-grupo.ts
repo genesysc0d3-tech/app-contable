@@ -35,7 +35,7 @@ import { carrilEsExento, tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import { destinoPropuesta, esAfectoPorTipo, esExentoPorNaturaleza } from "@/lib/sii/destino";
 import { detectaNoBoletar } from "@/lib/sii/clasificador-tipo";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
-import { claveContraparte } from "./contraparte";
+import { claveContraparte, patronAcunableEnGrupo } from "./contraparte";
 import { nuevoLote, sello } from "@/lib/propuestas/sello";
 
 const TROZO = 50;
@@ -309,6 +309,8 @@ export async function ejecutarRespuestaGrupo(
       if (!x.tocada) continue;
       const c = claveContraparte(x.mov.descripcion);
       if (!c || c.tipo !== "rut" || !c.patron) continue;
+      // El patrón de la regla debe ser el nombre limpio (sin "TRF REC BCOS…").
+      if (!patronAcunableEnGrupo(x.mov.descripcion)) continue;
       porPatron.set(c.clave, [...(porPatron.get(c.clave) ?? []), x]);
     }
     for (const lista of porPatron.values()) {

@@ -1,3 +1,6 @@
+-- ORDEN: migración → código (el código nuevo sella 'check_grupo', escribe nacio_lote y
+-- llama a responder_grupo_ventas; sin la migración, responder en grupo falla cerrado).
+--
 -- Fase 4 del plan del clasificador (docs/plan-clasificador-cirujano-2026-10-03.md):
 -- CHECK AGRUPADO — preguntar en grupo ("¿les vendiste algo a estas personas?"), no fila
 -- por fila. Aditiva y chica:
@@ -16,8 +19,10 @@
 -- (d) responder_grupo_ventas(): escribe las VENTAS de una respuesta en grupo en UNA
 --     llamada (UPDATE … FROM jsonb), repitiendo en SQL los candados de la acción:
 --     empresa, documento, mesa boleta, solo pendiente/editado, sin boleta vigente ni job
---     de emisión vivo, tipo 39/41, y montos que cuadran con el total de la fila. Sella
---     en la misma escritura (check_grupo). Solo service_role.
+--     de emisión vivo, tipo 39/41, montos que cuadran con un total > 0, marca P2P/forex
+--     de la cartola o carril de boletas exento ⇒ solo 41 (misma regla que tipoDelCarril:
+--     boletas_tipo_default, si no tipo_contribuyente, si no auto), y tipo_dte coherente con
+--     tipo_propuesto. Sella en la misma escritura (check_grupo). Solo service_role.
 --
 -- Lock: CHECK NOT VALID (no escanea), ADD COLUMN nullable sin default (metadata).
 -- Rollback: 20261006120000_check_agrupado_DOWN.sql.
@@ -186,7 +191,14 @@ as $$
          decision_abierta = coalesce(f.tocada, false),
          decision_soporte = p_soporte
     from jsonb_to_recordset(p_filas) as f(id uuid, tipo_propuesto text, tipo_dte integer, monto_neto numeric, iva numeric, total numeric, tocada boolean),
-         public.movimientos_raw m
+         public.movimientos_raw m,
+         (select coalesce(d.tipo_operacion_hint in ('p2p_cripto', 'forex_divisas'), false) as marca_exenta,
+                 (case when lower(btrim(e.boletas_tipo_default)) in ('afecto', 'exento', 'auto') then lower(btrim(e.boletas_tipo_default))
+                       when lower(btrim(e.tipo_contribuyente)) in ('afecto', 'exento', 'auto') then lower(btrim(e.tipo_contribuyente))
+                       else 'auto' end) = 'exento' as carril_exento
+            from public.documentos_subidos d
+            join public.empresas e on e.id = d.empresa_id
+           where d.id = p_documento_id and d.empresa_id = p_empresa_id) c
    where p.id = f.id
      and p.empresa_id = p_empresa_id
      and m.id = p.movimiento_id
@@ -197,7 +209,13 @@ as $$
      and p.estado in ('pendiente', 'editado')
      and p.decision_lote is distinct from p_lote
      and f.tipo_dte in (39, 41)
-     and f.tipo_propuesto in ('boleta', 'exenta', 'transferencia_p2p', 'compraventa_crypto', 'operacion_forex')
+     -- marca P2P/forex o carril exento: nunca afecta
+     and not ((c.marca_exenta or c.carril_exento) and f.tipo_dte = 39)
+     -- tipo_dte coherente con tipo_propuesto
+     and ((f.tipo_dte = 39 and f.tipo_propuesto = 'boleta')
+          or (f.tipo_dte = 41 and f.tipo_propuesto in ('exenta', 'transferencia_p2p', 'compraventa_crypto', 'operacion_forex'))
+          or (f.tipo_dte = 41 and f.tipo_propuesto = 'boleta' and (c.marca_exenta or c.carril_exento)))
+     and coalesce(p.total, 0) > 0
      and round(coalesce(p.total, 0)) = round(f.total)
      and f.monto_neto + f.iva = round(f.total)
      and (f.tipo_dte = 39 or f.iva = 0)

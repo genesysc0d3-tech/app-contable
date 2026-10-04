@@ -141,9 +141,34 @@ begin
   select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c2', gen_random_uuid(), 1,
     null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'exenta', 'tipo_dte', 41, 'monto_neto', 11900, 'iva', 0, 'total', 11900, 'tocada', false)));
   if n <> 0 then raise exception '[4] FALLA: vendió una fila de otra cartola'; end if;
+  -- vuelta 4: los candados de tipo también viven en SQL
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'exenta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', false)));
+  if n <> 0 then raise exception '[4] FALLA: aceptó 39 con tipo_propuesto exenta'; end if;
+  update public.empresas set boletas_tipo_default = 'exento' where id = '00000000-0000-4000-8000-0000000000f9';
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', false)));
+  if n <> 0 then raise exception '[4] FALLA: carril exento aceptó un 39'; end if;
+  update public.empresas set boletas_tipo_default = null, tipo_contribuyente = 'exento' where id = '00000000-0000-4000-8000-0000000000f9';
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', false)));
+  if n <> 0 then raise exception '[4] FALLA: exento heredado del contribuyente aceptó un 39'; end if;
+  update public.empresas set boletas_tipo_default = 'afecto', tipo_contribuyente = 'exento' where id = '00000000-0000-4000-8000-0000000000f9';
+  update public.documentos_subidos set tipo_operacion_hint = 'p2p_cripto' where id = '00000000-0000-4000-8000-0000000009c1';
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', false)));
+  if n <> 0 then raise exception '[4] FALLA: cartola P2P aceptó un 39'; end if;
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'exenta', 'tipo_dte', 41, 'monto_neto', 11900, 'iva', 0, 'total', 11900, 'tocada', false)));
+  if n <> 1 then raise exception '[4] FALLA: cartola P2P no aceptó un 41 exento'; end if;
+  update public.propuestas_ia set total = 0, estado = 'pendiente', decision_lote = gen_random_uuid(), decision_canal = 'check_fila', decision_lote_n = 1
+   where id = '00000000-0000-4000-8000-000000000a21';
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'exenta', 'tipo_dte', 41, 'monto_neto', 0, 'iva', 0, 'total', 0, 'tocada', false)));
+  if n <> 0 then raise exception '[4] FALLA: aceptó total 0'; end if;
   if has_function_privilege('authenticated', 'public.responder_grupo_ventas(uuid, uuid, uuid, integer, uuid, boolean, jsonb)', 'execute') then
     raise exception '[4] FALLA: authenticated puede ejecutar la RPC';
   end if;
-  raise notice '[4] OK: RPC vende 1 de 4 (monto distinto, aprobada, salida y otra cartola fuera), sella check_grupo, solo service_role';
+  raise notice '[4] OK: RPC vende 1 de 4 (monto distinto, aprobada, salida y otra cartola fuera), sella check_grupo; 39 incoherente, carril exento (propio o heredado), cartola P2P y total 0 fuera; solo service_role';
 end $$;
 rollback;
