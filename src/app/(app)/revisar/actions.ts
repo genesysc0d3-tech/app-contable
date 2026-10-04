@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportMode, getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
+import { registrarCorrecciones } from "@/lib/ai/reglas-historial";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
@@ -366,6 +367,8 @@ export async function cambiarTipoPropuestas(
 
   let cambiadas = 0;
   const movIdsCambiados: string[] = [];
+  // Filas cambiadas que venían de una regla: la corrección se registra UNA vez por regla.
+  const reglaPorMov = new Map<string, string>();
   const lote = loteValido(loteGesto) ?? nuevoLote();
   const canal = origen === undefined ? "check_lote" : canalDeOrigen(origen, gestoN);
   for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
@@ -375,13 +378,13 @@ export async function cambiarTipoPropuestas(
     // movimiento_id para poder aprender la regla de contraparte (abajo).
     const { data: filas, error: leerError } = await ctx.sb
       .from("propuestas_ia")
-      .select("id, total, movimiento_id")
+      .select("id, total, movimiento_id, regla_id")
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .in("estado", ["pendiente", "editado", "listo"]);
     if (leerError) return { error: leerError.message, count: cambiadas };
 
-    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null }>) {
+    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null; regla_id: string | null }>) {
       const { neto, iva } = derivarMontosDte(Number(fila.total ?? 0), afecta);
       const { error, count } = await ctx.sb
         .from("propuestas_ia")
@@ -390,7 +393,10 @@ export async function cambiarTipoPropuestas(
         .eq("id", fila.id)
         .in("estado", ["pendiente", "editado", "listo"]);
       if (error) return { error: error.message, count: cambiadas };
-      if ((count ?? 0) > 0 && fila.movimiento_id) movIdsCambiados.push(fila.movimiento_id);
+      if ((count ?? 0) > 0 && fila.movimiento_id) {
+        movIdsCambiados.push(fila.movimiento_id);
+        if (fila.regla_id) reglaPorMov.set(fila.movimiento_id, fila.regla_id);
+      }
       cambiadas += count ?? 0;
     }
   }
@@ -411,14 +417,24 @@ export async function cambiarTipoPropuestas(
       // en SILENCIO → el aprendizaje se autodesactivaría justo en la cartola de
       // corrido grande (el caso que este fix busca resolver). + filtro empresa_id
       // (defensa en profundidad: el service role bypassa RLS).
-      const movs: Array<{ descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }> = [];
+      const movs: Array<{ id: string; descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }> = [];
       for (let i = 0; i < movIdsCambiados.length; i += BATCH_SIZE) {
         const { data } = await ctx.sb
           .from("movimientos_raw")
-          .select("descripcion, tipo_flujo, documento_id")
+          .select("id, descripcion, tipo_flujo, documento_id")
           .eq("empresa_id", ctx.empresaId)
           .in("id", movIdsCambiados.slice(i, i + BATCH_SIZE));
         if (data) movs.push(...(data as typeof movs));
+      }
+      // Fase 3: la persona cambió el tipo de filas que una regla clasificó → UNA
+      // corrección por regla (no por fila). Baja de nivel, no pisa (reglas-historial.ts).
+      // ANTES de acuñar: si la regla a prueba se da vuelta, el acuñar de abajo la refuerza.
+      if (reglaPorMov.size > 0) {
+        await registrarCorrecciones(ctx.sb, {
+          empresaId: ctx.empresaId,
+          tipoNuevo: tipoDte,
+          filas: movs.filter((m) => reglaPorMov.has(m.id)).map((m) => ({ reglaId: reglaPorMov.get(m.id), documentoId: m.documento_id })),
+        });
       }
       const vistos = new Set<string>();
       for (const m of movs) {
@@ -437,6 +453,8 @@ export async function cambiarTipoPropuestas(
           tipoDte: tipoDte as 39 | 41,
           // Tamaño del gesto: un "Afecta" en lote grande no confirma la regla contra la marca P2P.
           tamanoLote: cambiadas,
+          canal,
+          movimientoId: m.id,
         });
       }
     } catch {
@@ -615,12 +633,14 @@ export async function editarPropuesta(
   // sí es elección deliberada y acuña aparte.) Se lee ANTES porque el update
   // sobreescribe el tipo_dte previo.
   let previo:
-    | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null }
+    | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null; movimiento_id: string }
     | null = null;
+  // Regla que clasificó la fila (Fase 3): si la persona le cambia el tipo, es una corrección.
+  let reglaPrevia: { reglaId: string; documentoId: string | null } | null = null;
   if (campos.tipo_dte === 39 || campos.tipo_dte === 41) {
     const { data: p } = await ctx.sb
       .from("propuestas_ia")
-      .select("tipo_dte, movimiento_id")
+      .select("tipo_dte, movimiento_id, regla_id")
       .eq("empresa_id", ctx.empresaId)
       .eq("id", propuestaId)
       .maybeSingle();
@@ -636,9 +656,12 @@ export async function editarPropuesta(
           descripcion: m.descripcion ?? "",
           tipo_flujo: m.tipo_flujo,
           documento_id: m.documento_id,
+          movimiento_id: p.movimiento_id,
         };
       }
     }
+    const reglaId = (p as { regla_id?: string | null } | null)?.regla_id;
+    if (reglaId) reglaPrevia = { reglaId, documentoId: previo?.documento_id ?? null };
   }
 
   const selloEdicion = selloDe(ctx, "check_detalle", 1);
@@ -666,6 +689,12 @@ export async function editarPropuesta(
   // fallo acá no rompe la edición ya guardada.
   const tipoDtePersistida = "tipo_dte" in update && (update.tipo_dte === 39 || update.tipo_dte === 41);
   let aprendizaje: AprenderResultado | null = null;
+  if (reglaPrevia && tipoDtePersistida) {
+    // Una corrección por regla y acción; no-op si el tipo coincide con el de la regla.
+    try {
+      await registrarCorrecciones(ctx.sb, { empresaId: ctx.empresaId, tipoNuevo: update.tipo_dte as number, filas: [reglaPrevia] });
+    } catch { /* best-effort: la edición ya quedó */ }
+  }
   if (previo && tipoDtePersistida) {
     aprendizaje = await aprenderReglaDesdeResolucion(ctx.sb, {
       empresaId: ctx.empresaId,
@@ -674,6 +703,8 @@ export async function editarPropuesta(
       descripcion: previo.descripcion,
       tipoFlujo: previo.tipo_flujo,
       tipoDte: update.tipo_dte as 39 | 41,
+      canal: "check_detalle",
+      movimientoId: previo.movimiento_id,
     });
   }
 

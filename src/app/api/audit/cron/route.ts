@@ -3,6 +3,40 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
 import { GLOSA_CADUCADA, RETENCION_ANOS, RETENCION_DECISIONES_DIAS, cutoffRetencionISO } from "@/lib/retencion";
+import { recalcularEstadoReglas } from "@/lib/ai/reglas-historial";
+
+/**
+ * Reglas con historial (Fase 3 del clasificador): una vez por noche se recalcula el
+ * estado derivado de la evidencia (a_prueba → firme con cartolas emitidas; en_disputa
+ * por correcciones) de las empresas con reglas de usuario. Best-effort: nunca tumba la
+ * purga de retención. También corre al abrir "Lo que aprendí".
+ */
+async function recalcularReglasDeTodas(sb: NonNullable<ReturnType<typeof serviceClient>>) {
+  const empresas = new Set<string>();
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await sb
+      .from("clasificacion_reglas")
+      .select("empresa_id")
+      .not("empresa_id", "is", null)
+      .order("id", { ascending: true })
+      .range(desde, desde + 999);
+    if (error) return { empresas: 0, revisadas: 0, cambiadas: 0, errores: 1 };
+    for (const r of data ?? []) if (r.empresa_id) empresas.add(r.empresa_id);
+    if (!data || data.length < 1000) break;
+  }
+  let revisadas = 0, cambiadas = 0, errores = 0;
+  for (const empresaId of empresas) {
+    try {
+      const r = await recalcularEstadoReglas(sb, empresaId);
+      revisadas += r.revisadas;
+      cambiadas += r.cambiadas;
+      if (r.error) errores += 1;
+    } catch {
+      errores += 1;
+    }
+  }
+  return { empresas: empresas.size, revisadas, cambiadas, errores };
+}
 
 // Purga de retención (auditoría #11, Ley 21.719 — limitación de conservación).
 // audit_chunks guarda texto CRUDO de cartolas (PII); parser_logs, diagnósticos.
@@ -87,8 +121,23 @@ export async function GET(request: Request) {
       }).catch(() => {});
     }
 
+    // Separado de la purga: si falla, la purga ya quedó hecha y reportada.
+    let reglas: Awaited<ReturnType<typeof recalcularReglasDeTodas>> | null = null;
+    try {
+      reglas = await recalcularReglasDeTodas(sb);
+      await recordOpsEvent({
+        sb,
+        severity: reglas.errores > 0 ? "warn" : "info",
+        source: "audit/cron",
+        eventName: "reglas_estado_recalculado",
+        summary: `Reglas con historial: ${reglas.cambiadas} cambiaron de estado (${reglas.revisadas} revisadas en ${reglas.empresas} empresas, ${reglas.errores} con error)`,
+        metadata: reglas,
+      }).catch(() => {});
+    } catch { /* best-effort */ }
+
     return NextResponse.json({
       ok: !audit.error && !logs.error && !glosa.error && !decisiones.error,
+      reglas_recalculadas: reglas,
       cutoff,
       cutoff_glosa: cutoffGlosa,
       audit_chunks_borrados: auditBorrados,

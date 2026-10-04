@@ -16,6 +16,7 @@ import EmissionProviderConfig, { type EmissionProviderState } from "../../empres
 import EmpresaFormatoCartola from "../../empresa/EmpresaFormatoCartola";
 import type { DatosEmisor } from "../../empresa/actions";
 import FacturacionUsoPanel from "./FacturacionUsoPanel";
+import LoQueAprendi from "./LoQueAprendi";
 
 export default function EmpresaPopup({
   inicial,
@@ -666,48 +667,55 @@ export default function EmpresaPopup({
               },
               {
                 n: 3,
+                icon: "M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5v-13ZM20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5v-13Z",
+                title: "Lo que aprendí",
+                sub: "Lo que recuerdo de Check",
+                done: false,
+              },
+              {
+                n: 4,
                 icon: "M4 7h16M7 4v16M17 4v16M4 17h16",
                 title: "Emisión",
                 sub: "Cómo salen tus boletas y tus facturas",
                 done: proveedorBoletas !== "mock" && proveedorVivo.facturas !== "mock",
               },
               {
-                n: 4,
+                n: 5,
                 icon: "M4 7h16v12H4V7Z",
                 title: "Folios CAF",
                 sub: folioSub,
                 done: false,
               },
               {
-                n: 5,
+                n: 6,
                 icon: "M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z",
                 title: "Bot de Telegram",
                 sub: "Sube fotos por chat · Opcional",
                 done: false,
               },
               {
-                n: 6,
+                n: 7,
                 icon: "M3 7h18v10H3zM3 11h18",
                 title: "Facturación y uso",
                 sub: "Plan, uso y pagos",
                 done: false,
               },
               {
-                n: 7,
+                n: 8,
                 icon: "M12 3l7 4v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V7l7-4z",
                 title: "Acceso de soporte",
                 sub: "Tú autorizas, tú cortas",
                 done: false,
               },
               {
-                n: 8,
+                n: 9,
                 icon: "M9 7V3m6 4V3M7 7h10v6a5 5 0 0 1-10 0V7zM12 18v3",
                 title: "Conector MCP",
                 sub: "Tu IA conectada · Opcional",
                 done: false,
               },
               {
-                n: 9,
+                n: 10,
                 icon: "M9 8.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4ZM2.8 19c.5-3.3 3-5.2 6.2-5.2s5.7 1.9 6.2 5.2M17 12a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Zm-1.4 1.4c2.9-.3 5.1 1.3 5.6 4.3",
                 title: "Team",
                 sub: "Quién trabaja contigo · Business",
@@ -736,7 +744,7 @@ export default function EmpresaPopup({
                     s.n
                   )}
                 </div>
-                {s.n === 8 ? (
+                {s.n === 9 ? (
                   // Conector MCP: el glifo OFICIAL de MCP (mismo LogoMcp de los
                   // chips de la mesa), no el enchufe genérico. Hereda color/opacidad
                   // de .ep-step-icon vía currentColor.
@@ -843,8 +851,9 @@ export default function EmpresaPopup({
             <div className="ep-content">
               <div className="ep-content-inner">
                 {[
-                  { key: "emisor", content: <EmisorStep inicial={inicial} empresaId={empresaId} submitRef={submitRef} onIrAFacturacion={() => { void goToStep(5); }} semillaEmpresas={semilla?.empresasSelector ?? null} /> },
+                  { key: "emisor", content: <EmisorStep inicial={inicial} empresaId={empresaId} submitRef={submitRef} onIrAFacturacion={() => { void goToStep(6); }} semillaEmpresas={semilla?.empresasSelector ?? null} /> },
                   { key: "formatos", content: <EmpresaFormatoCartola empresaId={empresaId} /> },
+                  { key: "aprendi", content: <LoQueAprendi /> },
                   { key: "emision", content: <EmissionProviderConfig inicial={emisionConfig} devMode={devModeEfectivo} onProveedorChange={setProveedorVivo} /> },
                   { key: "folios", content: <CAFPanel cafs={cafs} proveedor={proveedorBoletas} /> },
                   { key: "telegram", content: <TelegramConfig /> },
@@ -870,7 +879,7 @@ export default function EmpresaPopup({
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                {step < 8 ? (
+                {step < 9 ? (
                   <button className="ep-footer-btn primary" onClick={() => { void goToStep(step + 1); }}>
                     Siguiente ›
                   </button>

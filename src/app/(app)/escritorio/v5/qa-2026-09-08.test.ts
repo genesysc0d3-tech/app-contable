@@ -15,11 +15,11 @@ describe("recorrido 2026-09-08", () => {
     expect(src).toMatch(/if \(vivo && \(r\.status === 204 \|\| r\.status === 404\)\) setLogoOk\(false\);/);
   });
 
-  it("el pie del wizard dice 'Siguiente' hasta el último de los 9 pasos", () => {
+  it("el pie del wizard dice 'Siguiente' hasta el último de los 10 pasos (Fase 3: + Lo que aprendí)", () => {
     const src = leer(V5 + "EmpresaPopup.tsx");
     const pasos = (src.match(/\{ key: "[a-z]+", content: </g) ?? []).length;
-    expect(pasos).toBe(9);
-    expect(src).toMatch(/\{step < 8 \? \(/);
+    expect(pasos).toBe(10);
+    expect(src).toMatch(/\{step < 9 \? \(/);
   });
 
   it("nada de 'App Contable' en la config de emisión ni en Folios", () => {

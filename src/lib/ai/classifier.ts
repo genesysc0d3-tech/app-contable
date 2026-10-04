@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { MovimientoExtraido, PropuestaExtraida } from "./types";
+import { CONFIANZA_MAX_A_PRUEBA, CONFIANZA_MAX_EN_DISPUTA, esEstadoRegla, type EstadoRegla } from "./regla-evidencia";
 
 /**
  * Deterministic rules-based classifier.
@@ -37,6 +38,19 @@ export interface ClasificacionRegla {
   tipo_dte: number | null;
   /** Desempate final del orden determinista (más antigua primero). */
   created_at?: string | null;
+  /**
+   * Estado con historial (Fase 3, regla-evidencia.ts). Sin valor = firme (las reglas
+   * de antes). Las globales son firmes siempre.
+   */
+  estado?: string | null;
+  /** Regla 39 confirmada por una persona sobre cartola P2P/forex (reemplaza la confianza 0.99). */
+  aprendida_bajo_marca?: boolean | null;
+}
+
+/** Estado EFECTIVO de una regla para clasificar: global → firme; sin estado → firme. */
+export function estadoEfectivo(r: Pick<ClasificacionRegla, "empresa_id" | "estado">): EstadoRegla {
+  if (!r.empresa_id) return "firme";
+  return esEstadoRegla(r.estado) ? r.estado : "firme";
 }
 
 /**
@@ -78,8 +92,13 @@ export interface ClassifierResult {
      * tipo_dte a persistir en la propuesta. Solo != null para reglas de
      * usuario que lo recordaron; las globales (seed) lo dejan null para no
      * cambiar su comportamiento (el gate sigue decidiendo por ellas).
+     * Una regla en_disputa tampoco estampa (null).
      */
     tipo_dte: number | null;
+    /** Estado efectivo de la regla (a_prueba → la fila nace pendiente, ver decidirEstadoInicial). */
+    regla_estado: EstadoRegla;
+    /** La regla 39 fue confirmada en una cartola P2P/forex: no se vuelve a preguntar. */
+    regla_bajo_marca: boolean;
   }>;
   noClasificados: Array<{
     movimiento_index: number;
@@ -108,6 +127,8 @@ export async function loadReglas(empresaId: string): Promise<ClasificacionRegla[
       .or(`empresa_id.eq.${empresaId},empresa_id.is.null`)
       .eq("activa", true)
       .order("prioridad", { ascending: true });
+    // (activa=false ya excluye deshechas y huérfanas: lo exige un CHECK de la base;
+    // classifyWithRules igual las salta si llegaran.)
     if (error || !data) return [];
     return ordenarReglas(data as ClasificacionRegla[]);
   } catch {
@@ -233,13 +254,23 @@ export function classifyWithRules(
   const noClasificados: ClassifierResult["noClasificados"] = [];
   // Orden determinista en código: el que llama puede pasar las reglas en cualquier
   // orden y gana siempre la misma.
-  const ordenadas = ordenarReglas(reglas);
+  // Una deshecha/huérfana nunca clasifica (la base ya las apaga; defensa en profundidad).
+  const ordenadas = ordenarReglas(reglas).filter((r) => {
+    const e = estadoEfectivo(r);
+    return e !== "deshecha" && e !== "huerfana";
+  });
 
   for (let i = 0; i < movimientos.length; i++) {
     const mov = movimientos[i];
     const matchingRule = ordenadas.find((r) => ruleMatches(mov, r));
     if (matchingRule) {
       const propuesta = buildPropuestaFromRule(mov, i, matchingRule);
+      const estado = estadoEfectivo(matchingRule);
+      // Fase 3: una regla NUEVA (a_prueba) todavía no se ganó el "listo" automático:
+      // la fila nace con el tipo pre-estampado pero bajo el umbral de auto-stage (0.85)
+      // → pendiente; "Poner listas" (≥0.8) la toma. En disputa: ni tipo ni bulk.
+      if (estado === "a_prueba") propuesta.confianza = Math.min(propuesta.confianza ?? 0, CONFIANZA_MAX_A_PRUEBA);
+      if (estado === "en_disputa") propuesta.confianza = Math.min(propuesta.confianza ?? 0, CONFIANZA_MAX_EN_DISPUTA);
       clasificados.push({
         movimiento_index: i,
         propuesta,
@@ -247,7 +278,9 @@ export function classifyWithRules(
         fuente: matchingRule.empresa_id ? "regla_usuario" : "regla_global",
         // Solo las reglas de usuario (empresa_id set) auto-pasan a listas con el
         // tipo recordado. Las globales dejan tipo_dte null → el gate decide.
-        tipo_dte: matchingRule.empresa_id ? (matchingRule.tipo_dte ?? null) : null,
+        tipo_dte: matchingRule.empresa_id && estado !== "en_disputa" ? (matchingRule.tipo_dte ?? null) : null,
+        regla_estado: estado,
+        regla_bajo_marca: Boolean(matchingRule.empresa_id) && matchingRule.aprendida_bajo_marca === true,
       });
     } else {
       noClasificados.push({ movimiento_index: i, movimiento: mov });
@@ -258,34 +291,17 @@ export function classifyWithRules(
 }
 
 /**
- * Increment the veces_aplicada counter for a set of rules. Best-effort —
- * a DB failure here is non-fatal and doesn't affect classification.
+ * Suma veces_aplicada (y last_used_at) de las reglas que clasificaron. ATÓMICO en la
+ * base (rpc incrementar_uso_reglas, migración 20261005120000): antes era leer-y-
+ * escribir por regla y dos cartolas en paralelo se pisaban la cuenta. Un id repetido N
+ * veces suma N. Best-effort: un fallo acá no afecta la clasificación.
  */
 export async function incrementRuleUsage(reglaIds: string[]): Promise<void> {
   if (reglaIds.length === 0) return;
   try {
     const sb = getServiceClient();
     if (!sb) return;
-    // Count usages per rule
-    const counts = new Map<string, number>();
-    for (const id of reglaIds) counts.set(id, (counts.get(id) ?? 0) + 1);
-    // Fire a single update per rule (cheap, no contention)
-    const now = new Date().toISOString();
-    for (const [id, count] of counts) {
-      const { data } = await sb
-        .from("clasificacion_reglas")
-        .select("veces_aplicada")
-        .eq("id", id)
-        .maybeSingle();
-      if (!data) continue;
-      await sb
-        .from("clasificacion_reglas")
-        .update({
-          veces_aplicada: (data.veces_aplicada ?? 0) + count,
-          last_used_at: now,
-        })
-        .eq("id", id);
-    }
+    await sb.rpc("incrementar_uso_reglas", { p_regla_ids: reglaIds });
   } catch {
     /* non-blocking */
   }
@@ -302,12 +318,20 @@ export async function incrementRuleUsage(reglaIds: string[]): Promise<void> {
  * lo pone la IA si lo identificó (en este carril ya leyó el documento entero; la
  * regla solo recorta la glosa), si no, el de la regla.
  */
+export type ReglaAplicada = {
+  regla_id: string;
+  fuente: "regla_usuario" | "regla_global";
+  tipo_dte: number | null;
+  regla_estado: EstadoRegla;
+  regla_bajo_marca: boolean;
+};
+
 export function reclasificarConReglas(
   movimientos: MovimientoExtraido[],
   propuestas: PropuestaExtraida[],
   reglas: ClasificacionRegla[],
-): { propuestas: PropuestaExtraida[]; reglaPorIndex: Map<number, { regla_id: string; fuente: "regla_usuario" | "regla_global"; tipo_dte: number | null }> } {
-  const reglaPorIndex = new Map<number, { regla_id: string; fuente: "regla_usuario" | "regla_global"; tipo_dte: number | null }>();
+): { propuestas: PropuestaExtraida[]; reglaPorIndex: Map<number, ReglaAplicada> } {
+  const reglaPorIndex = new Map<number, ReglaAplicada>();
   if (reglas.length === 0 || movimientos.length === 0) return { propuestas, reglaPorIndex };
   const { clasificados } = classifyWithRules(movimientos, reglas);
   if (clasificados.length === 0) return { propuestas, reglaPorIndex };
@@ -315,7 +339,10 @@ export function reclasificarConReglas(
   const out = propuestas.map((p) => {
     const c = porIndex.get(p.movimiento_index);
     if (!c) return p;
-    reglaPorIndex.set(p.movimiento_index, { regla_id: c.regla_id, fuente: c.fuente, tipo_dte: c.tipo_dte });
+    reglaPorIndex.set(p.movimiento_index, {
+      regla_id: c.regla_id, fuente: c.fuente, tipo_dte: c.tipo_dte,
+      regla_estado: c.regla_estado, regla_bajo_marca: c.regla_bajo_marca,
+    });
     return {
       ...c.propuesta,
       receptor_nombre: p.receptor_nombre ?? c.propuesta.receptor_nombre ?? null,

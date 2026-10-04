@@ -1,0 +1,185 @@
+/**
+ * Fase 3 — reglas con historial, la parte con base (doble de Supabase):
+ *  - corrección: UNA por regla y acción; baja de nivel, no pisa; deja soporte 'corrigio'.
+ *  - deshacer: apaga la regla sin borrarla; re-evalúa SIN IA solo pendiente/listo de esa
+ *    regla, salta lo emitido/en vuelo, sella check_detalle a ciegas.
+ *  - reevaluarSinRegla (pura): la próxima regla manda (con su estado); sin regla → Check.
+ */
+import { describe, expect, it } from "vitest";
+import { deshacerRegla, recalcularEstadoReglas, reevaluarSinRegla, registrarCorrecciones, FUENTE_REGLA_DESHECHA } from "./reglas-historial";
+import type { ClasificacionRegla } from "./classifier";
+
+type Llamada = { tabla: string; op: string; payload?: unknown; filtros: Record<string, unknown> };
+type Responder = (l: Llamada) => { data?: unknown; error?: unknown; count?: number } | undefined;
+
+function fakeSb(responder: Responder) {
+  const llamadas: Llamada[] = [];
+  const mk = (tabla: string, op = "select", payload?: unknown) => {
+    const l: Llamada = { tabla, op, payload, filtros: {} };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const q: any = {};
+    q.select = () => q;
+    for (const m of ["eq", "neq", "in", "is", "or", "order", "limit", "not"]) q[m] = (c: string, v: unknown) => { l.filtros[`${m}:${c}`] = v; return q; };
+    q.range = () => q;
+    q.update = (p: unknown) => { l.op = "update"; l.payload = p; return q; };
+    q.upsert = (p: unknown) => { l.op = "upsert"; l.payload = p; return q; };
+    q.insert = (p: unknown) => { l.op = "insert"; l.payload = p; return q; };
+    const res = () => { llamadas.push(l); return { data: null, error: null, count: 0, ...(responder(l) ?? {}) }; };
+    q.maybeSingle = () => Promise.resolve(res());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    q.then = (ok: any, ko: any) => Promise.resolve(res()).then(ok, ko);
+    return q;
+  };
+  const sb = {
+    from: (t: string) => mk(t),
+    rpc: (f: string, args: unknown) => mk(`rpc:${f}`, "rpc", args),
+  };
+  return { sb: sb as never, llamadas };
+}
+
+const reglaFila = (o: Record<string, unknown> = {}) => ({
+  id: "r1", empresa_id: "E1", estado: "firme", tipo_dte: 41, tipo_propuesto: "exenta",
+  veces_confirmada: 0, veces_corregida: 0, aprendida_bajo_marca: false, ...o,
+});
+
+describe("registrarCorrecciones", () => {
+  it("dos filas de la MISMA regla = UNA corrección; firme baja a prueba sin cambiar el tipo; soporte corrigio", async () => {
+    const { sb, llamadas } = fakeSb((l) => {
+      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila() };
+      if (l.tabla === "rpc:evidencia_reglas") return { data: [{ regla_id: "r1", confirmadas: 4, confirmadas_miradas: 1 }] };
+      if (l.op === "update") return { count: 1 };
+      return undefined;
+    });
+    const ef = await registrarCorrecciones(sb, {
+      empresaId: "E1", tipoNuevo: 39,
+      filas: [{ reglaId: "r1", documentoId: "D1" }, { reglaId: "r1", documentoId: "D1" }, { reglaId: null }],
+    });
+    expect(ef.get("r1")).toBe("baja_a_prueba");
+    const upd = llamadas.filter((l) => l.tabla === "clasificacion_reglas" && l.op === "update");
+    expect(upd).toHaveLength(1);
+    expect(upd[0].payload).toMatchObject({ estado: "a_prueba", veces_corregida: 1 });
+    expect(upd[0].payload).not.toHaveProperty("tipo_dte");
+    expect(upd[0].filtros).toMatchObject({ "eq:empresa_id": "E1", "eq:veces_corregida": 0 });
+    expect(llamadas.find((l) => l.tabla === "clasificacion_regla_soportes")?.payload).toMatchObject({ regla_id: "r1", documento_id: "D1", rol: "corrigio" });
+  });
+  it("a prueba sin confirmaciones → se da vuelta (tipo y tipo_propuesto nuevos)", async () => {
+    const { sb, llamadas } = fakeSb((l) => {
+      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila({ estado: "a_prueba" }) };
+      if (l.tabla === "rpc:evidencia_reglas") return { data: [{ regla_id: "r1", confirmadas: 0, confirmadas_miradas: 0 }] };
+      if (l.op === "update") return { count: 1 };
+      return undefined;
+    });
+    await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 39, filas: [{ reglaId: "r1" }] });
+    const upd = llamadas.find((l) => l.tabla === "clasificacion_reglas" && l.op === "update")!;
+    expect(upd.payload).toMatchObject({ estado: "a_prueba", tipo_dte: 39, tipo_propuesto: "boleta" });
+  });
+  it("mismo tipo que la regla, o regla de otra empresa / global (no aparece scopeada) → no escribe", async () => {
+    const mismo = fakeSb((l) => (l.tabla === "clasificacion_reglas" && l.op === "select" ? { data: reglaFila() } : undefined));
+    await registrarCorrecciones(mismo.sb, { empresaId: "E1", tipoNuevo: 41, filas: [{ reglaId: "r1" }] });
+    expect(mismo.llamadas.some((l) => l.op === "update")).toBe(false);
+    const ajena = fakeSb(() => undefined);
+    await registrarCorrecciones(ajena.sb, { empresaId: "E1", tipoNuevo: 39, filas: [{ reglaId: "rX" }] });
+    expect(ajena.llamadas.some((l) => l.op === "update")).toBe(false);
+  });
+  it("factura (33/34) no corrige reglas (hablan boleta 39/41)", async () => {
+    const { sb, llamadas } = fakeSb(() => undefined);
+    await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 33, filas: [{ reglaId: "r1" }] });
+    expect(llamadas).toHaveLength(0);
+  });
+});
+
+describe("recalcularEstadoReglas", () => {
+  it("a prueba con 2 cartolas (1 mirada) → firme; deja soportes confirmo; una firme sin evidencia no baja", async () => {
+    const { sb, llamadas } = fakeSb((l) => {
+      if (l.tabla === "rpc:evidencia_reglas") return { data: [
+        { regla_id: "r1", confirmadas: 2, confirmadas_miradas: 1, documentos_confirman: ["D1", "D2"] },
+        { regla_id: "r2", confirmadas: 0, confirmadas_miradas: 0, documentos_confirman: [] },
+      ] };
+      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: [reglaFila({ estado: "a_prueba" }), reglaFila({ id: "r2", estado: "firme" })] };
+      if (l.op === "update") return { count: 1 };
+      return undefined;
+    });
+    const r = await recalcularEstadoReglas(sb, "E1");
+    expect(r).toMatchObject({ revisadas: 2, cambiadas: 1 });
+    const upd = llamadas.filter((l) => l.tabla === "clasificacion_reglas" && l.op === "update");
+    expect(upd).toHaveLength(1);
+    expect(upd[0].payload).toMatchObject({ estado: "firme", veces_confirmada: 2 });
+    expect(upd[0].filtros).toMatchObject({ "eq:id": "r1", "eq:estado": "a_prueba" });
+    const sop = llamadas.find((l) => l.tabla === "clasificacion_regla_soportes");
+    expect(sop?.payload).toEqual([
+      { regla_id: "r1", documento_id: "D1", empresa_id: "E1", rol: "confirmo" },
+      { regla_id: "r1", documento_id: "D2", empresa_id: "E1", rol: "confirmo" },
+    ]);
+  });
+});
+
+describe("deshacerRegla", () => {
+  const propuestas = [
+    { id: "p1", movimiento_id: "m1", tipo_propuesto: "exenta", tipo_dte: 41, confianza: 0.95, total: 11900, mesa: "boleta" },
+    { id: "p2", movimiento_id: "m2", tipo_propuesto: "exenta", tipo_dte: 41, confianza: 0.95, total: 5000, mesa: "boleta" },
+  ];
+  const responder: Responder = (l) => {
+    if (l.tabla === "clasificacion_reglas" && l.op === "select" && l.filtros["eq:id"] === "r1") return { data: reglaFila() };
+    if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: [] }; // restantes: ninguna
+    if (l.tabla === "propuestas_ia" && l.op === "select" && l.filtros["eq:estado"] === "aprobado") return { count: 3 };
+    if (l.tabla === "propuestas_ia" && l.op === "select") return { data: propuestas };
+    if (l.tabla === "boletas_emitidas") return { data: [{ propuesta_id: "p2" }] }; // p2 ya emitida
+    if (l.tabla === "emision_jobs") return { data: [] };
+    if (l.tabla === "movimientos_raw") return { data: [{ id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", monto: 11900, fecha: "2026-10-01", tipo_flujo: "entrada", documento_id: "D1" }] };
+    if (l.tabla === "documentos_subidos") return { data: [{ id: "D1", tipo_operacion_hint: null }] };
+    if (l.tabla === "empresas") return { data: { tipo_contribuyente: "afecto" } };
+    if (l.op === "update") return { count: 1 };
+    return undefined;
+  };
+
+  it("apaga la regla (sin borrarla), solo mira pendiente/listo de ESA regla, salta lo emitido y sella a ciegas", async () => {
+    const { sb, llamadas } = fakeSb(responder);
+    const r = await deshacerRegla(sb, { empresaId: "E1", usuarioId: "U1", reglaId: "r1" });
+    expect(r).toMatchObject({ ok: true, reevaluadas: 1, sinRegla: 1, enEmitir: 3, intocables: 1, tipoDte: 41 });
+    expect(llamadas.some((l) => l.op === "delete")).toBe(false);
+    const apagar = llamadas.find((l) => l.tabla === "clasificacion_reglas" && l.op === "update")!;
+    expect(apagar.payload).toMatchObject({ activa: false, estado: "deshecha", deshecha_por: "U1" });
+    const leer = llamadas.find((l) => l.tabla === "propuestas_ia" && l.op === "select" && l.filtros["in:estado"])!;
+    expect(leer.filtros).toMatchObject({ "eq:empresa_id": "E1", "eq:regla_id": "r1", "in:estado": ["pendiente", "listo"] });
+    const escrituras = llamadas.filter((l) => l.tabla === "propuestas_ia" && l.op === "update");
+    expect(escrituras).toHaveLength(1);
+    expect(escrituras[0].filtros).toMatchObject({ "eq:id": "p1", "eq:regla_id": "r1", "in:estado": ["pendiente", "listo"] });
+    expect(escrituras[0].payload).toMatchObject({
+      regla_id: null, fuente_clasificacion: FUENTE_REGLA_DESHECHA, estado: "pendiente",
+      decision_canal: "check_detalle", decision_abierta: false, decision_por: "U1",
+    });
+  });
+  it("una regla de otra empresa no se encuentra → error, no escribe nada", async () => {
+    const { sb, llamadas } = fakeSb(() => undefined);
+    const r = await deshacerRegla(sb, { empresaId: "E1", usuarioId: "U1", reglaId: "rX" });
+    expect(r.error).toBeTruthy();
+    expect(llamadas.some((l) => l.op === "update")).toBe(false);
+  });
+});
+
+describe("reevaluarSinRegla (pura)", () => {
+  const mov = { descripcion: "TRANSFERENCIA DE JUAN PEREZ", monto: 11900, fecha: "2026-10-01", tipo_flujo: "entrada" as const };
+  const otra = (o: Partial<ClasificacionRegla>): ClasificacionRegla => ({
+    id: "r2", empresa_id: "E1", nombre: "x", patron: "JUAN PEREZ", patron_tipo: "contains", tipo_flujo_match: "entrada",
+    tipo_propuesto: "exenta", receptor_nombre_default: null, receptor_rut_default: null, confianza: 0.95, prioridad: 50, tipo_dte: 41, ...o,
+  });
+  const base = { mov, tipoActual: "exenta", confianzaActual: 0.95, total: 11900, tipoDteActual: 41, emp: { tipo_contribuyente: "afecto" }, docHint: null };
+
+  it("sin otra regla → pendiente, sin regla_id, fuente regla_deshecha, bajo el bulk si no hay tipo", () => {
+    const r = reevaluarSinRegla({ ...base, reglas: [] });
+    expect(r).toMatchObject({ regla_id: null, fuente_clasificacion: FUENTE_REGLA_DESHECHA, estado: "pendiente" });
+    expect(r.confianza).toBeLessThanOrEqual(r.tipo_dte == null ? 0.5 : 0.8);
+  });
+  it("otra regla FIRME calza → la toma y puede quedar lista", () => {
+    const r = reevaluarSinRegla({ ...base, reglas: [otra({ estado: "firme" })] });
+    expect(r).toMatchObject({ regla_id: "r2", tipo_dte: 41, estado: "listo", fuente_clasificacion: "regla_usuario" });
+  });
+  it("otra regla A PRUEBA calza → toma el tipo pero queda pendiente", () => {
+    const r = reevaluarSinRegla({ ...base, reglas: [otra({ estado: "a_prueba" })] });
+    expect(r).toMatchObject({ regla_id: "r2", tipo_dte: 41, estado: "pendiente" });
+  });
+  it("Afecta recalcula neto/IVA", () => {
+    const r = reevaluarSinRegla({ ...base, reglas: [otra({ estado: "firme", tipo_dte: 39, tipo_propuesto: "boleta" })] });
+    expect(r).toMatchObject({ tipo_dte: 39, monto_neto: 10000, iva: 1900 });
+  });
+});

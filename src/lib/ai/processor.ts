@@ -17,7 +17,7 @@ import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEm
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { esTipoValido } from "@/lib/sii/destino";
 import { clasificarBoleta, type DocumentoHint } from "../sii/clasificador-tipo";
-import { decidirTipoDtePersistido, decidirEstadoInicial, ajustarPorConflicto, CONFIANZA_REGLA_CONFIRMADA_EN_MARCA } from "./tipo-dte-persistido";
+import { decidirTipoDtePersistido, decidirEstadoInicial, ajustarPorConflicto } from "./tipo-dte-persistido";
 import { resumenPropuestasABorrar } from "../propuestas/resumen-borrado";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
@@ -43,6 +43,10 @@ type EnrichedPropuesta = PropuestaExtraida & {
   __regla_id?: string | null;
   /** tipo_dte recordado por una regla de usuario (39/41); null = el gate decide. */
   __tipo_dte?: number | null;
+  /** Estado de la regla que calzó (Fase 3): a_prueba/en_disputa → la fila nace pendiente. */
+  __regla_estado?: string | null;
+  /** La regla 39 fue confirmada por una persona sobre cartola P2P/forex (aprendida_bajo_marca). */
+  __regla_bajo_marca?: boolean;
 };
 
 const IA_MESA_MAX_CONFIANZA = 0.75; // Cap de la IA de la mesa (OpenCode) — nunca auto-aprueba
@@ -612,6 +616,8 @@ export async function procesarDocumento(
       regla_id: string;
       fuente: "regla_usuario" | "regla_global";
       tipo_dte: number | null;
+      regla_estado: string;
+      regla_bajo_marca: boolean;
     };
     const ruleClassifications = new Map<number, RuleClassification>();
     // Maps the position of each mov inside the flat forIA array back
@@ -654,6 +660,8 @@ export async function procesarDocumento(
           regla_id: c.regla_id,
           fuente: c.fuente,
           tipo_dte: c.tipo_dte,
+          regla_estado: c.regla_estado,
+          regla_bajo_marca: c.regla_bajo_marca,
         });
       }
 
@@ -902,6 +910,8 @@ export async function procesarDocumento(
           __fuente: rc.fuente,
           __regla_id: rc.regla_id,
           __tipo_dte: rc.tipo_dte,
+          __regla_estado: rc.regla_estado,
+          __regla_bajo_marca: rc.regla_bajo_marca,
         });
       }
 
@@ -1001,9 +1011,12 @@ export async function procesarDocumento(
           for (const p of reclasificadas) {
             const r = reglaPorIndex.get(p.movimiento_index);
             allPropuestas.push(r
-              ? { ...p, __fuente: r.fuente, __regla_id: r.regla_id, __tipo_dte: r.tipo_dte }
+              ? { ...p, __fuente: r.fuente, __regla_id: r.regla_id, __tipo_dte: r.tipo_dte,
+                  __regla_estado: r.regla_estado, __regla_bajo_marca: r.regla_bajo_marca }
               : (p as EnrichedPropuesta));
           }
+          // Uso ATÓMICO también en este carril (antes solo contaba el carril con parser).
+          void incrementRuleUsage([...reglaPorIndex.values()].map((r) => r.regla_id));
         }
       }
     }
@@ -1526,8 +1539,8 @@ export async function procesarDocumento(
             reglaTipoDte: enriched.__tipo_dte,
             emisorExento: exentoFinal || empExento,
             // Regla 39 ya confirmada por una persona sobre cartola P2P/forex (ver
-            // aprender-regla.ts): su confianza lo marca; no se re-pregunta.
-            reglaConfirmadaEnMarca: enriched.__regla_id != null && (confianza ?? 0) >= CONFIANZA_REGLA_CONFIRMADA_EN_MARCA,
+            // aprender-regla.ts): campo propio aprendida_bajo_marca; no se re-pregunta.
+            reglaConfirmadaEnMarca: enriched.__regla_id != null && enriched.__regla_bajo_marca === true,
           });
           const tipoDteAuto = decisionTipo.tipoDteAuto;
           const tipoDtePersist = decisionTipo.tipoDte;
@@ -1584,6 +1597,8 @@ export async function procesarDocumento(
               reglaId: enriched.__regla_id,
               tipoPropuesto: tipoNorm,
               conflictoMarcaCartola: decisionTipo.conflictoMarcaCartola,
+              // Fase 3: una regla a prueba (o en disputa) no deja la fila "lista" sola.
+              reglaAPrueba: enriched.__regla_estado === "a_prueba" || enriched.__regla_estado === "en_disputa",
             }),
             spread_compra: toNum(p.spread_compra),
             spread_venta: toNum(p.spread_venta),
