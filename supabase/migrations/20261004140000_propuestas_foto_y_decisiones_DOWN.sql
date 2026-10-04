@@ -6,7 +6,7 @@
 --
 -- DESTRUYE: el log propuesta_decisiones, las fotos orig_*, editado_* y el sello
 -- decision_* de propuestas_ia, y empresas.es_prueba. Por eso primero los COPIA a
--- tablas _respaldo_* (sin RLS de cara a la app: solo service_role/postgres).
+-- tablas _respaldo_*_<YYYYMMDD_HHMMSS> (RLS sin policies: solo service_role/postgres).
 -- Borrarlas a mano cuando ya no hagan falta.
 --
 -- Salida de emergencia más liviana (sin tocar el esquema):
@@ -14,29 +14,56 @@
 
 set lock_timeout = '5s';
 
--- 1. Respaldo de lo que se destruye.
-create table if not exists public._respaldo_propuesta_decisiones_20261004 as
-  table public.propuesta_decisiones;
+-- 1. Respaldo de lo que se destruye, con SUFIJO DE TIMESTAMP: un segundo DOWN
+--    (tras re-aplicar la migración) jamás pisa ni se salta el respaldo anterior.
+--    Si la tabla de respaldo ya existiera (dos DOWN en el mismo segundo), aborta.
+do $$
+declare
+  v_sufijo text := to_char(clock_timestamp(), 'YYYYMMDD_HH24MISS');
+  v_tabla text;
+begin
+  if to_regclass('public.propuesta_decisiones') is not null then
+    v_tabla := '_respaldo_propuesta_decisiones_' || v_sufijo;
+    if to_regclass('public.' || v_tabla) is not null then
+      raise exception 'RESPALDO_YA_EXISTE: %, no se destruye nada', v_tabla;
+    end if;
+    execute format('create table public.%I as table public.propuesta_decisiones', v_tabla);
+    execute format('alter table public.%I enable row level security', v_tabla);
+    execute format('revoke all on table public.%I from public, anon, authenticated', v_tabla);
+    raise notice 'respaldo: public.% (% filas)', v_tabla, (select count(*) from public.propuesta_decisiones);
+  end if;
 
-create table if not exists public._respaldo_propuestas_foto_20261004 as
-  select id, empresa_id,
-         orig_capturada_at, orig_tipo_propuesto, orig_tipo_dte, orig_tipo_dte_fuente,
-         orig_confianza, orig_fuente, orig_regla_id, orig_estado, orig_mesa,
-         orig_con_receptor, orig_documento_id, editado_at, editado_canal,
-         decision_canal, decision_por, decision_lote, decision_lote_n,
-         decision_abierta, decision_soporte
-  from public.propuestas_ia
-  where orig_capturada_at is not null or decision_canal is not null or editado_at is not null;
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'propuestas_ia' and column_name = 'orig_capturada_at') then
+    v_tabla := '_respaldo_propuestas_foto_' || v_sufijo;
+    if to_regclass('public.' || v_tabla) is not null then
+      raise exception 'RESPALDO_YA_EXISTE: %, no se destruye nada', v_tabla;
+    end if;
+    execute format($q$
+      create table public.%I as
+      select id, empresa_id,
+             orig_capturada_at, orig_tipo_propuesto, orig_tipo_dte, orig_tipo_dte_fuente,
+             orig_confianza, orig_fuente, orig_regla_id, orig_estado, orig_mesa,
+             orig_con_receptor, orig_documento_id, editado_at, editado_canal,
+             decision_canal, decision_por, decision_lote, decision_lote_n,
+             decision_abierta, decision_soporte
+      from public.propuestas_ia
+      where orig_capturada_at is not null or decision_canal is not null or editado_at is not null$q$, v_tabla);
+    execute format('alter table public.%I enable row level security', v_tabla);
+    execute format('revoke all on table public.%I from public, anon, authenticated', v_tabla);
+  end if;
 
-create table if not exists public._respaldo_empresas_es_prueba_20261004 as
-  select id, es_prueba from public.empresas where es_prueba;
-
-alter table public._respaldo_propuesta_decisiones_20261004 enable row level security;
-alter table public._respaldo_propuestas_foto_20261004 enable row level security;
-alter table public._respaldo_empresas_es_prueba_20261004 enable row level security;
-revoke all on table public._respaldo_propuesta_decisiones_20261004 from public, anon, authenticated;
-revoke all on table public._respaldo_propuestas_foto_20261004 from public, anon, authenticated;
-revoke all on table public._respaldo_empresas_es_prueba_20261004 from public, anon, authenticated;
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'empresas' and column_name = 'es_prueba') then
+    v_tabla := '_respaldo_empresas_es_prueba_' || v_sufijo;
+    if to_regclass('public.' || v_tabla) is not null then
+      raise exception 'RESPALDO_YA_EXISTE: %, no se destruye nada', v_tabla;
+    end if;
+    execute format('create table public.%I as select id, es_prueba from public.empresas where es_prueba', v_tabla);
+    execute format('alter table public.%I enable row level security', v_tabla);
+    execute format('revoke all on table public.%I from public, anon, authenticated', v_tabla);
+  end if;
+end $$;
 
 -- 2. Triggers y funciones.
 drop trigger if exists trg_propuestas_ia_log_borrado on public.propuestas_ia;

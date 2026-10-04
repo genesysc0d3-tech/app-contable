@@ -166,6 +166,36 @@ begin
   raise notice '[4b] OK: cambio de tipo → editado_at + log antes 41 / después 39 con la foto 41';
 end $$;
 
+-- [4c] escritura de la BASE por FK (ON DELETE SET NULL): borrar el cliente / la regla /
+--      la transacción NO es una decisión → canal 'sistema', sin editado_at.
+do $$
+declare v_id uuid; v_canal text; v_edit timestamptz; v_cli uuid := gen_random_uuid(); v_reg uuid := gen_random_uuid(); v_tx uuid := gen_random_uuid();
+begin
+  select p.id into v_id from public.propuestas_ia p join _t_ids t on t.movimiento_id = p.movimiento_id where t.n = 7;
+  insert into public.clientes (id, empresa_id) values (v_cli, '00000000-0000-4000-8000-0000000000e1');
+  insert into public.clasificacion_reglas (id) values (v_reg);
+  insert into public.transacciones (id) values (v_tx);
+  update public.propuestas_ia set cliente_id = v_cli, regla_id = v_reg, transaccion_id = v_tx,
+         decision_canal = 'check_detalle', decision_lote = gen_random_uuid(), decision_lote_n = 1
+   where id = v_id;
+  -- reset de la marca para medir solo el efecto de la FK
+  perform set_config('session_replication_role', 'replica', true);
+  update public.propuestas_ia set editado_at = null, editado_canal = null where id = v_id;
+  perform set_config('session_replication_role', 'origin', true);
+  delete from public.clientes where id = v_cli;
+  delete from public.clasificacion_reglas where id = v_reg;
+  delete from public.transacciones where id = v_tx;
+  select decision_canal, editado_at into v_canal, v_edit from public.propuestas_ia where id = v_id;
+  if v_canal is distinct from 'sistema' or v_edit is not null then
+    raise exception '[4c] FALLA FK set null: canal % editado_at %', v_canal, v_edit;
+  end if;
+  -- un update de la app SIN sello que además cambia otra cosa sigue siendo sin_sello
+  update public.propuestas_ia set cliente_id = null, estado = 'rechazado' where id = v_id;
+  select decision_canal into v_canal from public.propuestas_ia where id = v_id;
+  if v_canal <> 'sin_sello' then raise exception '[4c] FALLA: % (esperaba sin_sello)', v_canal; end if;
+  raise notice '[4c] OK: ON DELETE SET NULL (cliente/regla/transacción) → sistema sin editado_at; mezclado con otro cambio → sin_sello';
+end $$;
+
 -- [5] resumen_propuestas_a_borrar: solo conteos
 do $$
 declare r jsonb;

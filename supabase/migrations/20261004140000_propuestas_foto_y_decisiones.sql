@@ -187,6 +187,27 @@ begin
       using errcode = 'P0001';
   end if;
 
+  -- Escritura de la BASE por una FK (ON DELETE SET NULL de cliente_id / regla_id /
+  -- transaccion_id al borrar el cliente, la regla o la transacción): nadie decidió
+  -- nada. Si lo ÚNICO que cambió son esas columnas, y a null, es 'sistema' y no
+  -- marca editado. (to_jsonb: transaccion_id puede no existir en un esquema viejo.)
+  if new.decision_lote is not distinct from old.decision_lote
+     and to_jsonb(new) is distinct from to_jsonb(old)
+     and (to_jsonb(new) - array['cliente_id', 'regla_id', 'transaccion_id'])
+         = (to_jsonb(old) - array['cliente_id', 'regla_id', 'transaccion_id'])
+     and (new.cliente_id is null or new.cliente_id is not distinct from old.cliente_id)
+     and (new.regla_id is null or new.regla_id is not distinct from old.regla_id)
+     and ((to_jsonb(new) ->> 'transaccion_id') is null
+          or (to_jsonb(new) ->> 'transaccion_id') is not distinct from (to_jsonb(old) ->> 'transaccion_id')) then
+    new.decision_canal   := 'sistema';
+    new.decision_por     := null;
+    new.decision_lote    := null;
+    new.decision_lote_n  := null;
+    new.decision_abierta := null;
+    new.decision_soporte := null;
+    return new;  -- sin editado_at
+  end if;
+
   -- Nadie selló esta escritura (el lote no cambió) → sin_sello. decision_por queda
   -- con quien esté autenticado (null bajo service role).
   if new.decision_lote is not distinct from old.decision_lote then

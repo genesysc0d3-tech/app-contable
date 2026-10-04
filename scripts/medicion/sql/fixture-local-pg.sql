@@ -63,6 +63,8 @@ create table public.clientes (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references public.empresas(id) on delete cascade
 );
+create table public.clasificacion_reglas (id uuid primary key default gen_random_uuid());
+create table public.transacciones (id uuid primary key default gen_random_uuid());
 create table public.propuestas_ia (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references public.empresas(id) on delete cascade,
@@ -75,7 +77,8 @@ create table public.propuestas_ia (
   receptor_nombre text,
   receptor_rut text,
   cliente_id uuid references public.clientes(id) on delete set null,
-  regla_id uuid,
+  regla_id uuid references public.clasificacion_reglas(id) on delete set null,
+  transaccion_id uuid references public.transacciones(id) on delete set null,
   notas text,
   fuente_clasificacion text,
   estado text not null default 'pendiente',

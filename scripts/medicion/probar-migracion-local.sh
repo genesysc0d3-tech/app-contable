@@ -44,4 +44,10 @@ echo "== DOWN";                  "${P[@]}" -f "$DOWN"
 "${P[@]}" -At -c "select 'tablas de respaldo: ' || string_agg(tablename, ', ') from pg_tables where tablename like '\_respaldo\_%'"
 echo "== migración otra vez (idempotente)"; "${P[@]}" -f "$MIG"; "${P[@]}" -f "$MIG"
 echo "== prueba funcional otra vez"; PGOPTIONS="-c client_min_messages=notice" "${P[@]}" -f "$SQLDIR/prueba-migracion.sql" 2>&1 | grep -c "OK" | sed 's/^/  comprobaciones OK: /'
+echo "== segundo DOWN: no pisa el primer respaldo"
+sleep 1
+"${P[@]}" -f "$DOWN"
+N=$("${P[@]}" -At -c "select count(*) from pg_tables where tablename like '\_respaldo\_propuesta\_decisiones\_%'")
+[[ "$N" == "2" ]] || { echo "FALLA: esperaba 2 respaldos del log, hay $N"; exit 1; }
+echo "  respaldos del log tras dos DOWN: $N (OK)"
 echo "LISTO"
