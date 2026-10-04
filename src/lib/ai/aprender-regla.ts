@@ -248,13 +248,16 @@ export async function aprenderReglaDesdeResolucion(
     let reglaId: string | null = null;
     if (existente?.id) {
       let cambios: Record<string, unknown> | null = null;
-      if (existente.estado === "deshecha") {
-        // La persona la deshizo y ahora la vuelve a enseñar: renace A PRUEBA con lo que
-        // dice HOY (sus correcciones viejas eran contra el tipo viejo).
+      const apagada = existente.activa === false || existente.estado === "deshecha" || existente.estado === "huerfana";
+      if (apagada) {
+        // Apagada (la deshizo la persona, quedó huérfana o se desactivó): volver a
+        // enseñarla la REACTIVA, como siempre, pero A PRUEBA y con lo que dice HOY (sus
+        // correcciones y confirmaciones viejas eran de antes).
         cambios = {
           tipo_dte: args.tipoDte, tipo_propuesto: tipoProp, estado: "a_prueba", activa: true,
           nombre: nombreReglaAprendida(args.tipoDte), veces_acunada: (existente.veces_acunada ?? 0) + 1,
-          veces_corregida: 0, aprendida_bajo_marca: senalMarca, confianza: 0.95, deshecha_por: null,
+          veces_corregida: 0, veces_confirmada: 0, evidencia_desde: new Date().toISOString(),
+          aprendida_bajo_marca: senalMarca, confianza: 0.95, deshecha_por: null,
         };
       } else if (existente.tipo_dte == null || existente.tipo_dte === args.tipoDte) {
         // Misma enseñanza: suma acuñación (no uso). La señal de marca no se pisa.
@@ -295,14 +298,16 @@ export async function aprenderReglaDesdeResolucion(
         nacio_carril: args.canal ?? null,
         documento_origen_id: args.documentoId,
         aprendida_bajo_marca: senalMarca,
+        ligada_a_cartolas: true,
       }).select("id").maybeSingle();
       if (error) return { ...VACIO, patron };
       creada = true;
       reglaId = (nueva as { id?: string } | null)?.id ?? null;
     }
 
-    // Soporte: la cartola que la enseñó. Best-effort (la regla ya quedó).
-    if (reglaId && args.documentoId) {
+    // Soporte: la cartola que la enseñó — SOLO al nacer. Re-acuñar una regla existente
+    // NO la liga a esta cartola (borrar la cartola jamás debe apagar una regla vieja).
+    if (creada && reglaId && args.documentoId) {
       try {
         await sb.from("clasificacion_regla_soportes").upsert(
           {

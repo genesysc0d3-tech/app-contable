@@ -1,15 +1,14 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient } from "@supabase/supabase-js";
+import { getEmpresaAndService } from "@/lib/auth/contexto-empresa";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
-import { getDevSupportMode, getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { registrarCorrecciones } from "@/lib/ai/reglas-historial";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
-import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
+import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR, FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
 import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
@@ -44,56 +43,10 @@ async function hayPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[
   return (await contarPorDecidir(sb, empresaId, ids)) > 0;
 }
 
-/**
- * Fetches the current user's empresa_id (with auth) and returns a service-role
- * Supabase client. Service role bypasses RLS — every UPDATE must be scoped
- * with .eq("empresa_id", empresaId) for security.
- *
- * Why service role: RLS policies on propuestas_ia were silently dropping
- * UPDATE operations (returning success but 0 rows changed) in some cases,
- * causing the optimistic UI to "approve" things that never persisted.
- */
-async function getEmpresaAndService() {
-  const supportBlock = await getDevSupportWriteBlock();
-  if (supportBlock) return supportBlock;
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "No autenticado" } as const;
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id, rol")
-    .eq("id", user.id)
-    .single();
-  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" } as const;
-
-  // TODAS las acciones de este archivo MUTAN (aprobar/editar/rechazar/poner listo/
-  // crear cliente). Aprobar/editar propuestas es un acto tributario: 'viewer' queda
-  // fuera, igual que en las rutas de emisión (ROLES_EMISION). Gate único acá.
-  if (!ROLES_EMISION.has(String(usuario.rol))) {
-    return { error: "Tu rol no permite esta acción" } as const;
-  }
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return { error: "Backend mal configurado" } as const;
-
-  const sb = createServiceClient(url, key);
-  return { empresaId: usuario.empresa_id, userId: user.id, sb, soporte: await enIntervencionDeSoporte() } as const;
-}
-
-/** ¿La escritura la hace un operador en una intervención de soporte autorizada?
- *  (getDevSupportWriteBlock ya la dejó pasar). Va al sello: decision_soporte.
- *  Sin la cookie de soporte no consulta la base. null = no se pudo saber. */
-async function enIntervencionDeSoporte(): Promise<boolean | null> {
-  try {
-    const modo = await getDevSupportMode();
-    return modo?.ok === true;
-  } catch {
-    return null;
-  }
-}
+// Guard de acceso: src/lib/auth/contexto-empresa.ts (compartido con "Lo que aprendí").
+// Service role porque las policies de propuestas_ia botaban UPDATEs en silencio (0
+// filas) y la UI optimista "aprobaba" lo que nunca persistía: cada UPDATE de este
+// archivo va scopeado con .eq("empresa_id", empresaId).
 
 type Ctx = { userId: string; soporte: boolean | null };
 /** Un lote que llega como argumento (server action = endpoint público): solo un uuid. */
@@ -378,13 +331,13 @@ export async function cambiarTipoPropuestas(
     // movimiento_id para poder aprender la regla de contraparte (abajo).
     const { data: filas, error: leerError } = await ctx.sb
       .from("propuestas_ia")
-      .select("id, total, movimiento_id, regla_id")
+      .select("id, total, movimiento_id, regla_id, fuente_clasificacion")
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .in("estado", ["pendiente", "editado", "listo"]);
     if (leerError) return { error: leerError.message, count: cambiadas };
 
-    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null; regla_id: string | null }>) {
+    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null; regla_id: string | null; fuente_clasificacion?: string | null }>) {
       const { neto, iva } = derivarMontosDte(Number(fila.total ?? 0), afecta);
       const { error, count } = await ctx.sb
         .from("propuestas_ia")
@@ -395,7 +348,9 @@ export async function cambiarTipoPropuestas(
       if (error) return { error: error.message, count: cambiadas };
       if ((count ?? 0) > 0 && fila.movimiento_id) {
         movIdsCambiados.push(fila.movimiento_id);
-        if (fila.regla_id) reglaPorMov.set(fila.movimiento_id, fila.regla_id);
+        // Una fila «¿?» por conflicto regla↔marca P2P: elegir Exenta ahí es lo que la
+        // marca ya decía, no una corrección de la regla (no la baja de nivel).
+        if (fila.regla_id && fila.fuente_clasificacion !== FUENTE_CONFLICTO_MARCA) reglaPorMov.set(fila.movimiento_id, fila.regla_id);
       }
       cambiadas += count ?? 0;
     }
@@ -640,7 +595,7 @@ export async function editarPropuesta(
   if (campos.tipo_dte === 39 || campos.tipo_dte === 41) {
     const { data: p } = await ctx.sb
       .from("propuestas_ia")
-      .select("tipo_dte, movimiento_id, regla_id")
+      .select("tipo_dte, movimiento_id, regla_id, fuente_clasificacion")
       .eq("empresa_id", ctx.empresaId)
       .eq("id", propuestaId)
       .maybeSingle();
@@ -660,7 +615,8 @@ export async function editarPropuesta(
         };
       }
     }
-    const reglaId = (p as { regla_id?: string | null } | null)?.regla_id;
+    const pr = p as { regla_id?: string | null; fuente_clasificacion?: string | null } | null;
+    const reglaId = pr?.fuente_clasificacion === FUENTE_CONFLICTO_MARCA ? null : pr?.regla_id;
     if (reglaId) reglaPrevia = { reglaId, documentoId: previo?.documento_id ?? null };
   }
 

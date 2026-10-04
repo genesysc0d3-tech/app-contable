@@ -43,10 +43,10 @@ const reglaFila = (o: Record<string, unknown> = {}) => ({
 });
 
 describe("registrarCorrecciones", () => {
-  it("dos filas de la MISMA regla = UNA corrección; firme baja a prueba sin cambiar el tipo; soporte corrigio", async () => {
+  it("dos filas de la MISMA regla = UNA corrección; firme sin confirmaciones baja a prueba sin cambiar el tipo; reinicia la evidencia; soporte corrigio", async () => {
     const { sb, llamadas } = fakeSb((l) => {
       if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila() };
-      if (l.tabla === "rpc:evidencia_reglas") return { data: [{ regla_id: "r1", confirmadas: 4, confirmadas_miradas: 1 }] };
+      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas: 0, confirmadas_miradas: 0 }] };
       if (l.op === "update") return { count: 1 };
       return undefined;
     });
@@ -57,15 +57,29 @@ describe("registrarCorrecciones", () => {
     expect(ef.get("r1")).toBe("baja_a_prueba");
     const upd = llamadas.filter((l) => l.tabla === "clasificacion_reglas" && l.op === "update");
     expect(upd).toHaveLength(1);
-    expect(upd[0].payload).toMatchObject({ estado: "a_prueba", veces_corregida: 1 });
+    expect(upd[0].payload).toMatchObject({ estado: "a_prueba", veces_corregida: 1, veces_confirmada: 0 });
+    expect(typeof (upd[0].payload as Record<string, unknown>).evidencia_desde).toBe("string");
     expect(upd[0].payload).not.toHaveProperty("tipo_dte");
     expect(upd[0].filtros).toMatchObject({ "eq:empresa_id": "E1", "eq:veces_corregida": 0 });
     expect(llamadas.find((l) => l.tabla === "clasificacion_regla_soportes")?.payload).toMatchObject({ regla_id: "r1", documento_id: "D1", rol: "corrigio" });
   });
+  it("B1: firme CON confirmaciones (5 cartolas) → en_disputa, sin cambiar el tipo", async () => {
+    const { sb, llamadas } = fakeSb((l) => {
+      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila({ tipo_dte: 39, tipo_propuesto: "boleta" }) };
+      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas: 5, confirmadas_miradas: 2 }] };
+      if (l.op === "update") return { count: 1 };
+      return undefined;
+    });
+    const ef = await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 41, filas: [{ reglaId: "r1" }] });
+    expect(ef.get("r1")).toBe("en_disputa");
+    const upd = llamadas.find((l) => l.tabla === "clasificacion_reglas" && l.op === "update")!;
+    expect(upd.payload).toMatchObject({ estado: "en_disputa" });
+    expect(upd.payload).not.toHaveProperty("tipo_dte");
+  });
   it("a prueba sin confirmaciones → se da vuelta (tipo y tipo_propuesto nuevos)", async () => {
     const { sb, llamadas } = fakeSb((l) => {
       if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila({ estado: "a_prueba" }) };
-      if (l.tabla === "rpc:evidencia_reglas") return { data: [{ regla_id: "r1", confirmadas: 0, confirmadas_miradas: 0 }] };
+      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas: 0, confirmadas_miradas: 0 }] };
       if (l.op === "update") return { count: 1 };
       return undefined;
     });
@@ -91,7 +105,7 @@ describe("registrarCorrecciones", () => {
 describe("recalcularEstadoReglas", () => {
   it("a prueba con 2 cartolas (1 mirada) → firme; deja soportes confirmo; una firme sin evidencia no baja", async () => {
     const { sb, llamadas } = fakeSb((l) => {
-      if (l.tabla === "rpc:evidencia_reglas") return { data: [
+      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [
         { regla_id: "r1", confirmadas: 2, confirmadas_miradas: 1, documentos_confirman: ["D1", "D2"] },
         { regla_id: "r2", confirmadas: 0, confirmadas_miradas: 0, documentos_confirman: [] },
       ] };
@@ -165,10 +179,17 @@ describe("reevaluarSinRegla (pura)", () => {
   });
   const base = { mov, tipoActual: "exenta", confianzaActual: 0.95, total: 11900, tipoDteActual: 41, emp: { tipo_contribuyente: "afecto" }, docHint: null };
 
-  it("sin otra regla → pendiente, sin regla_id, fuente regla_deshecha, bajo el bulk si no hay tipo", () => {
+  it("M6: sin otra regla, una fila de regla Exenta NO hereda 'exenta': tipo decidido sin la regla, montos coherentes, bajo Poner listas", () => {
     const r = reevaluarSinRegla({ ...base, reglas: [] });
     expect(r).toMatchObject({ regla_id: null, fuente_clasificacion: FUENTE_REGLA_DESHECHA, estado: "pendiente" });
-    expect(r.confianza).toBeLessThanOrEqual(r.tipo_dte == null ? 0.5 : 0.8);
+    expect(r.confianza).toBeLessThan(0.8);
+    expect(r.tipo_propuesto).toBe(r.tipo_dte === 41 ? "exenta" : "boleta");
+    if (r.tipo_dte == null) expect(r).toMatchObject({ tipo_propuesto: "boleta", monto_neto: 11900, iva: 0 });
+  });
+  it("M6: empresa exenta sin regla → exenta por el emisor (no por herencia), igual bajo Poner listas", () => {
+    const r = reevaluarSinRegla({ ...base, reglas: [], emp: { tipo_contribuyente: "exento" } });
+    expect(r).toMatchObject({ tipo_dte: 41, tipo_propuesto: "exenta", monto_neto: 11900, iva: 0 });
+    expect(r.confianza).toBeLessThan(0.8);
   });
   it("otra regla FIRME calza → la toma y puede quedar lista", () => {
     const r = reevaluarSinRegla({ ...base, reglas: [otra({ estado: "firme" })] });

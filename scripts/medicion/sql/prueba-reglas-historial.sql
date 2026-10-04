@@ -41,8 +41,11 @@ begin
     if r.estado <> 'firme' then raise exception '[1] FALLA: % quedó %', r.nombre, r.estado; end if;
   end loop;
   select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000a2';
-  if not r.aprendida_bajo_marca or r.confianza <> 0.95 then
-    raise exception '[1] FALLA: la señal 0.99 no migró (bajo_marca=%, confianza=%)', r.aprendida_bajo_marca, r.confianza;
+  if not r.aprendida_bajo_marca or r.confianza <> 0.99 then
+    raise exception '[1] FALLA: la señal 0.99 no se marcó o se tocó la confianza (bajo_marca=%, confianza=%)', r.aprendida_bajo_marca, r.confianza;
+  end if;
+  if exists (select 1 from public.clasificacion_reglas where empresa_id is not null and ligada_a_cartolas) then
+    raise exception '[1] FALLA: una regla existente quedó ligada a cartolas (podría apagarse sola)';
   end if;
   if exists (select 1 from public.clasificacion_reglas where empresa_id = '00000000-0000-4000-8000-0000000000f1'
              and (nombre ilike '%juan%' or nombre ilike '%ana soto%' or nombre ilike '%pedro%')) then
@@ -54,7 +57,7 @@ begin
      or (select nombre from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000a4') <> 'Arriendo oficina' then
     raise exception '[1] FALLA: nombres inesperados';
   end if;
-  raise notice '[1] OK: existentes firmes, 0.99 → aprendida_bajo_marca (0.95), nombres sin tercero, la manual intacta';
+  raise notice '[1] OK: existentes firmes y NO ligadas, 0.99 marcada sin tocar la confianza, nombres sin tercero, la manual intacta';
 end $$;
 
 -- [2] las NUEVAS nacen a prueba; una global siempre firme (insert y update)
@@ -172,15 +175,21 @@ begin
   raise notice '[5] OK: 2 cartolas confirman (lote de 3 = 1; otro tipo, corregida y anulada no), 1 mirada, 4 aciertos, glosa del soporte (% ms)', round(ms, 1);
 end $$;
 
--- [6] última cartola borrada → huérfana (la fila NO se borra); con otra cartola viva, no
+-- [6] huérfanas: solo una regla NUEVA, no deshecha, sin filas vivas en otras cartolas;
+--     nunca se borra la fila ni el patrón
 do $$
 declare r record; n int;
 begin
-  insert into public.clasificacion_reglas (id, empresa_id, nombre, patron, patron_tipo, tipo_flujo_match, tipo_propuesto, tipo_dte, documento_origen_id)
+  insert into public.clasificacion_reglas (id, empresa_id, nombre, patron, patron_tipo, tipo_flujo_match, tipo_propuesto, tipo_dte)
   values ('00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Afecta',
-          '(^|[^a-zà-ÿ])rosa vera([^a-zà-ÿ]|$)', 'regex', 'entrada', 'boleta', 39, null),
+          '(^|[^a-zà-ÿ])rosa vera([^a-zà-ÿ]|$)', 'regex', 'entrada', 'boleta', 39),
          ('00000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
-          '(^|[^a-zà-ÿ])luis mora([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41, null);
+          '(^|[^a-zà-ÿ])luis mora([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41),
+         ('00000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
+          '(^|[^a-zà-ÿ])ana rios([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41),
+         ('00000000-0000-4000-8000-0000000000b5', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
+          '(^|[^a-zà-ÿ])eva luna([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41);
+  update public.clasificacion_reglas set estado = 'deshecha', activa = false where id = '00000000-0000-4000-8000-0000000000b5';
   perform pg_temp.ins('documentos_subidos', jsonb_build_object('id', '00000000-0000-4000-8000-0000000000c9',
           'empresa_id', '00000000-0000-4000-8000-0000000000f1', 'estado', 'procesado', 'tipo', 'cartola'));
   perform pg_temp.ins('movimientos_raw', jsonb_build_object('id', '00000000-0000-4000-8000-000000000901',
@@ -188,13 +197,19 @@ begin
           'descripcion', 'TRANSFERENCIA DE ROSA VERA', 'monto', 5000, 'tipo_flujo', 'entrada', 'fecha', current_date));
   update public.clasificacion_reglas set documento_origen_id = '00000000-0000-4000-8000-0000000000c9'
    where id = '00000000-0000-4000-8000-0000000000b2';
-  -- b2: sostenida solo por c9 (acuñó + corrigió). b3: por c9 y c2.
+  -- b4 clasifica una fila viva en OTRA cartola (c1)
+  update public.propuestas_ia set regla_id = '00000000-0000-4000-8000-0000000000b4', decision_canal = 'sistema', decision_lote = gen_random_uuid()
+   where id = '00000000-0000-4000-8000-000000010200';
+  -- b2: solo c9 (acuñó + corrigió). b3: c9 y c2. b4: solo c9 + fila viva en c1. b5 (deshecha): solo c9.
+  -- a1 (VIEJA): soportes en c9 (el bug B2: re-acuñar la ligaba a esta cartola).
   insert into public.clasificacion_regla_soportes (regla_id, documento_id, empresa_id, movimiento_id, rol) values
     ('00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-000000000901', 'acuno'),
     ('00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', null, 'corrigio'),
     ('00000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', null, 'acuno'),
-    ('00000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-0000000000c2', '00000000-0000-4000-8000-0000000000f1', null, 'confirmo');
-  -- unique (regla, documento, rol)
+    ('00000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-0000000000c2', '00000000-0000-4000-8000-0000000000f1', null, 'confirmo'),
+    ('00000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', null, 'acuno'),
+    ('00000000-0000-4000-8000-0000000000b5', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', null, 'acuno'),
+    ('00000000-0000-4000-8000-0000000000a1', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', null, 'acuno');
   insert into public.clasificacion_regla_soportes (regla_id, documento_id, empresa_id, rol)
   values ('00000000-0000-4000-8000-0000000000b2', '00000000-0000-4000-8000-0000000000c9', '00000000-0000-4000-8000-0000000000f1', 'acuno')
   on conflict do nothing;
@@ -206,16 +221,72 @@ begin
   select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000b2';
   if r.id is null then raise exception '[6] FALLA: la regla se BORRÓ (tabla sagrada)'; end if;
   if r.estado <> 'huerfana' or r.activa or r.nombre <> 'Contraparte de una cartola borrada · Afecta'
-     or r.patron <> '(?!)' || r.id::text or r.documento_origen_id is not null then
+     or r.patron <> '(^|[^a-zà-ÿ])rosa vera([^a-zà-ÿ]|$)' or r.documento_origen_id is not null then
     raise exception '[6] FALLA: huérfana mal: estado=% activa=% nombre=% patron=% origen=%', r.estado, r.activa, r.nombre, r.patron, r.documento_origen_id;
   end if;
-  if r.patron ilike '%rosa%' or r.nombre ilike '%rosa%' then raise exception '[6] FALLA: quedó el tercero'; end if;
   select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000b3';
   if r.estado <> 'a_prueba' or not r.activa then raise exception '[6] FALLA: b3 (otra cartola viva) quedó %', r.estado; end if;
-  -- una regla SIN soportes (las existentes) nunca se vuelve huérfana sola
+  select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000b4';
+  if r.estado <> 'a_prueba' or not r.activa then raise exception '[6] FALLA: b4 (filas vivas en otra cartola) quedó %', r.estado; end if;
+  select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000b5';
+  if r.estado <> 'deshecha' then raise exception '[6] FALLA: b5 (deshecha) quedó %', r.estado; end if;
   select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000a1';
-  if r.estado <> 'firme' then raise exception '[6] FALLA: a1 cambió a %', r.estado; end if;
-  raise notice '[6] OK: borrar la última cartola → huérfana apagada, sin tercero, centinela; la fila sigue; b3 y a1 intactas';
+  if r.estado <> 'firme' or not r.activa or r.patron <> '(^|[^a-zà-ÿ])juan perez([^a-zà-ÿ]|$)' then
+    raise exception '[6] FALLA: la VIEJA a1 cambió (estado=% activa=%)', r.estado, r.activa;
+  end if;
+  raise notice '[6] OK: borrar la última cartola → solo la nueva sin otras filas queda huérfana (apagada, sin tercero en el nombre, patrón intacto); otra cartola, filas vivas, deshecha y vieja: intactas';
+end $$;
+
+-- [9] B1 en la base: regla 39 con 5 cartolas emitidas; tras una corrección (el código
+--     pone evidencia_desde = ahora) esas 5 confirmaciones viejas ya no cuentan
+do $$
+declare e record; v_regla uuid := '00000000-0000-4000-8000-0000000000b6';
+begin
+  insert into public.clasificacion_reglas (id, empresa_id, nombre, patron, patron_tipo, tipo_flujo_match, tipo_propuesto, tipo_dte, estado)
+  values (v_regla, '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Afecta',
+          '(^|[^a-zà-ÿ])hugo paz([^a-zà-ÿ]|$)', 'regex', 'entrada', 'boleta', 39, 'firme');
+  for d in 11..15 loop
+    perform pg_temp.ins('documentos_subidos', jsonb_build_object('id', '00000000-0000-4000-8000-0000000000' || d,
+            'empresa_id', '00000000-0000-4000-8000-0000000000f1', 'estado', 'procesado', 'tipo', 'cartola'));
+    perform pg_temp.ins('movimientos_raw', jsonb_build_object('id', '00000000-0000-4000-8000-0000000009' || d,
+            'empresa_id', '00000000-0000-4000-8000-0000000000f1', 'documento_id', '00000000-0000-4000-8000-0000000000' || d,
+            'descripcion', 'TRANSFERENCIA DE HUGO PAZ', 'monto', 5000, 'tipo_flujo', 'entrada', 'fecha', current_date));
+    insert into public.propuestas_ia (id, empresa_id, movimiento_id, tipo_propuesto, tipo_dte, confianza, total, fuente_clasificacion, estado, regla_id, orig_tipo_dte_fuente, created_at)
+    values (('00000000-0000-4000-8000-000000009' || d || '0')::uuid, '00000000-0000-4000-8000-0000000000f1',
+            ('00000000-0000-4000-8000-0000000009' || d)::uuid, 'boleta', 39, 0.95, 5000, 'regla_usuario', 'aprobado', v_regla, 'regla',
+            now() - interval '10 days');
+    perform pg_temp.ins('boletas_emitidas', jsonb_build_object('empresa_id', '00000000-0000-4000-8000-0000000000f1',
+            'propuesta_id', '00000000-0000-4000-8000-000000009' || d || '0', 'tipo_dte', 39, 'estado', 'aceptado', 'folio', 100 + d,
+            'emision_proveedor', 'mock', 'emision_sandbox', false, 'monto_total', 5000, 'monto_neto', 4202, 'iva', 798));
+  end loop;
+  select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
+  if e.confirmadas <> 5 then raise exception '[9] FALLA: antes de corregir esperaba 5, hay %', e.confirmadas; end if;
+  update public.clasificacion_reglas set estado = 'en_disputa', veces_corregida = 1, evidencia_desde = now() where id = v_regla;
+  select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
+  if e.confirmadas <> 0 or e.glosa is null then raise exception '[9] FALLA: tras corregir confirmadas=% glosa=%', e.confirmadas, e.glosa; end if;
+  if jsonb_array_length(public.evidencia_reglas_lote('00000000-0000-4000-8000-0000000000f1')) <>
+     (select count(*) from public.clasificacion_reglas where empresa_id = '00000000-0000-4000-8000-0000000000f1') then
+    raise exception '[9] FALLA: evidencia_reglas_lote no trae una entrada por regla';
+  end if;
+  raise notice '[9] OK: 5 cartolas emitidas confirman; tras la corrección cuentan 0 (la glosa sigue); el lote jsonb trae todas las reglas';
+end $$;
+
+-- [10] escala E1: 500 reglas VIEJAS; ligarlas por error a una cartola (bug B2) y borrar
+--      esa cartola NO apaga ninguna; tampoco borrar 5 cartolas más con sus filas
+do $$
+declare n int; t0 timestamptz;
+begin
+  insert into public.clasificacion_regla_soportes (regla_id, documento_id, empresa_id, rol)
+  select r.id, '00000000-0000-4000-a000-000000000001', r.empresa_id, s.rol
+    from public.clasificacion_reglas r cross join (values ('acuno'), ('confirmo')) s(rol)
+   where r.id::text like '00000000-0000-4000-9000-%';
+  t0 := clock_timestamp();
+  delete from public.documentos_subidos where id in (select ('00000000-0000-4000-a000-0000000000' || lpad(d::text, 2, '0'))::uuid from generate_series(1, 6) d);
+  select count(*) into n from public.clasificacion_reglas
+   where id::text like '00000000-0000-4000-9000-%' and (not activa or estado <> 'firme' or patron not like '(^|[^a-zà-ÿ])persona n%');
+  if n <> 0 then raise exception '[10] FALLA: % reglas viejas cambiaron al borrar cartolas', n; end if;
+  raise notice '[10] OK: 500 reglas viejas, 6 cartolas borradas (1.000 soportes de por medio): 0 apagadas (% ms)',
+    round(extract(epoch from clock_timestamp() - t0) * 1000);
 end $$;
 
 -- [7] privilegios: la clienta solo LEE sus soportes; las funciones son del service role

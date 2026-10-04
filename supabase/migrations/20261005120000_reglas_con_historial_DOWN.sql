@@ -10,8 +10,8 @@
 -- service_role/postgres). Borrar los respaldos a mano cuando ya no hagan falta.
 --
 -- La señal aprendida_bajo_marca vuelve a la confianza 0.99 (lo que lee el código de la
--- Fase 2). Las reglas deshechas / huérfanas siguen apagadas (activa=false) y sin el
--- nombre del tercero: eso no se "des-hace".
+-- Fase 2; las existentes nunca la perdieron). Las reglas deshechas / huérfanas siguen
+-- apagadas (activa=false) y sin el nombre del tercero: eso no se "des-hace".
 
 set lock_timeout = '5s';
 
@@ -30,7 +30,7 @@ begin
       create table public.%I as
       select id, empresa_id, estado, veces_acunada, veces_confirmada, veces_corregida,
              nacio_hint, nacio_carril, documento_origen_id, estado_cambiado_at, deshecha_por,
-             aprendida_bajo_marca, confianza
+             aprendida_bajo_marca, evidencia_desde, ligada_a_cartolas, confianza
       from public.clasificacion_reglas$q$, v_tabla);
     execute format('alter table public.%I enable row level security', v_tabla);
     execute format('revoke all on table public.%I from public, anon, authenticated', v_tabla);
@@ -61,7 +61,9 @@ drop trigger if exists trg_clasificacion_reglas_global_firme on public.clasifica
 drop function if exists public.clasificacion_regla_soportes_al_borrar();
 drop function if exists public.clasificacion_reglas_global_firme();
 drop function if exists public.incrementar_uso_reglas(uuid[]);
+drop function if exists public.evidencia_reglas_lote(uuid, uuid[]);
 drop function if exists public.evidencia_reglas(uuid, uuid[]);
+drop index if exists public.idx_propuestas_ia_regla;
 
 -- Soportes (respaldados arriba).
 drop table if exists public.clasificacion_regla_soportes;
@@ -82,6 +84,8 @@ alter table public.clasificacion_reglas
   drop column if exists documento_origen_id,
   drop column if exists estado_cambiado_at,
   drop column if exists deshecha_por,
-  drop column if exists aprendida_bajo_marca;
+  drop column if exists aprendida_bajo_marca,
+  drop column if exists evidencia_desde,
+  drop column if exists ligada_a_cartolas;
 
 reset lock_timeout;

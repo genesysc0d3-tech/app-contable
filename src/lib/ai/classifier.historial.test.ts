@@ -46,6 +46,11 @@ describe("clasificador × estado de la regla", () => {
     expect(c.regla_bajo_marca).toBe(true);
     expect(c.propuesta.confianza).toBe(0.95);
   });
+  it("M3: una regla 39 con la confianza 0.99 de la Fase 2 (sin el campo nuevo) sigue confirmada en la marca", () => {
+    const c = classifyWithRules([mov("TRANSFERENCIA DE JUAN PEREZ")], [regla({ tipo_dte: 39, tipo_propuesto: "boleta", confianza: 0.99 })]).clasificados[0];
+    expect(c.regla_bajo_marca).toBe(true);
+    expect(c.propuesta.confianza).toBe(0.99);
+  });
   it("una global marcada a_prueba por error igual se trata como firme", () => {
     const c = classifyWithRules([mov("TRANSFERENCIA DE JUAN PEREZ")], [regla({ empresa_id: null, estado: "a_prueba", confianza: 0.9 })]).clasificados[0];
     expect(c.regla_estado).toBe("firme");

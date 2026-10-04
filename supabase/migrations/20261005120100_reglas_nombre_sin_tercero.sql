@@ -4,6 +4,10 @@
 -- toca; "Lo que aprendí" muestra la contraparte desde la evidencia viva (glosas de las
 -- cartolas que la sostienen), no desde el nombre.
 --
+-- ORDEN: correr DESPUÉS del deploy del código de la Fase 3 (y de 20261005120000). El
+-- código viejo no lee el nombre, pero así la ventana entre migración y deploy no mezcla
+-- nombres nuevos con reglas acuñadas por el código viejo ("Auto: …").
+--
 -- Solo UPDATE del nombre. clasificacion_reglas es SAGRADA: no se borra nada.
 -- Sin respaldo de los nombres viejos A PROPÓSITO (guardarlos sería guardar al tercero):
 -- el _DOWN los rearma desde el patrón.

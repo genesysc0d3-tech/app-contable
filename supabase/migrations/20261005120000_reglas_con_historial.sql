@@ -9,16 +9,29 @@
 --     prueba. Las globales (empresa_id null) siempre 'firme' (trigger + CHECK).
 -- (b) aprendida_bajo_marca reemplaza la señal "confianza 0.99" de la Fase 2 (regla 39
 --     confirmada por una persona sobre una cartola P2P/forex). Las filas con esa señal
---     se migran: aprendida_bajo_marca=true y confianza vuelve a 0.95.
+--     se MARCAN (aprendida_bajo_marca=true) y su confianza 0.99 NO se toca: el código
+--     viejo (ventana entre esta migración y el deploy) sigue leyendo 0.99, y el nuevo
+--     también la reconoce por la confianza.
 -- (c) clasificacion_regla_soportes: qué cartolas sostienen cada regla (acuñó /
 --     confirmó / corrigió). RLS por empresa (solo lectura para la clienta; escribe el
 --     service role). Borrar la cartola cascada su soporte.
--- (d) Trigger: si se borra el ÚLTIMO soporte de una regla de usuario → 'huerfana',
---     activa=false, nombre sin tercero y patrón centinela que no calza con nada (el
---     patrón llevaba el nombre del tercero). No borra la fila.
+-- (d) Trigger: si se borra el ÚLTIMO soporte de una regla NACIDA CON HISTORIAL
+--     (ligada_a_cartolas: las existentes quedan en false y NUNCA se apagan solas), que
+--     no esté deshecha y que no clasifique filas vivas en OTRAS cartolas → 'huerfana':
+--     activa=false y nombre sin tercero. El PATRÓN SE CONSERVA (sacar el tercero del
+--     patrón es la Fase 2 de privacidad, HMAC). No borra la fila.
 -- (e) incrementar_uso_reglas(uuid[]): uso atómico (reemplaza leer-y-escribir).
 -- (f) evidencia_reglas(empresa[, reglas]): SOLO LECTURA. Confirmaciones por
---     documento, si alguna fue mirada, aciertos por fila y una glosa de muestra.
+--     documento POSTERIORES a la última corrección (evidencia_desde), si alguna fue
+--     mirada, aciertos por fila y una glosa de muestra. evidencia_reglas_lote: lo
+--     mismo en UN jsonb (una ejecución por apertura, sin el tope de 1.000 filas).
+-- (g) Índice propuestas_ia(regla_id): lo usan la evidencia, el trigger y Deshacer.
+--     Normal (no CONCURRENTLY: va en la transacción de la migración); propuestas_ia
+--     tiene ~6.000 filas (línea base 2026-10-04) → milisegundos de lock.
+--
+-- ORDEN DE DEPLOY: (1) esta migración (aditiva; el código viejo sigue igual: las
+-- existentes quedan firmes y con su confianza); (2) deploy del código de la Fase 3;
+-- (3) DESPUÉS, 20261005120100_reglas_nombre_sin_tercero.sql (nombres).
 --
 -- Lock: ADD COLUMN con default constante = metadata. lock_timeout para no hacer cola.
 -- Rollback: 20261005120000_reglas_con_historial_DOWN.sql (respalda antes de destruir).
@@ -36,10 +49,17 @@ alter table public.clasificacion_reglas
   add column if not exists documento_origen_id  uuid,
   add column if not exists estado_cambiado_at   timestamptz,
   add column if not exists deshecha_por         uuid,
-  add column if not exists aprendida_bajo_marca boolean not null default false;
+  add column if not exists aprendida_bajo_marca boolean not null default false,
+  add column if not exists evidencia_desde      timestamptz,
+  add column if not exists ligada_a_cartolas    boolean not null default false;
 
--- Desde ahora, una regla nueva nace a prueba (las de arriba ya quedaron firmes).
+-- Desde ahora, una regla nueva nace a prueba y ligada a sus cartolas (las de arriba ya
+-- quedaron firmes y NO ligadas: el trigger de huérfanas jamás las toca).
 alter table public.clasificacion_reglas alter column estado set default 'a_prueba';
+alter table public.clasificacion_reglas alter column ligada_a_cartolas set default true;
+
+-- (g) índice para "filas de esta regla" (evidencia, trigger de huérfanas, Deshacer).
+create index if not exists idx_propuestas_ia_regla on public.propuestas_ia (regla_id) where regla_id is not null;
 
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'clasificacion_reglas_documento_origen_fkey') then
@@ -77,12 +97,16 @@ comment on column public.clasificacion_reglas.veces_corregida is
   'Acciones en que una persona cambió el tipo de una fila que esta regla clasificó (una por regla y acción).';
 comment on column public.clasificacion_reglas.nacio_carril is
   'Canal de la decisión que la acuñó (check_fila/check_detalle/check_lote).';
+comment on column public.clasificacion_reglas.evidencia_desde is
+  'Solo cuentan confirmaciones de filas nacidas DESPUÉS de esto (la última corrección). NULL = toda la historia.';
+comment on column public.clasificacion_reglas.ligada_a_cartolas is
+  'Nació con historial (Fase 3): si se borra la última cartola que la sostiene queda huérfana. Las existentes antes de la migración = false (nunca se apagan solas).';
 comment on column public.clasificacion_reglas.aprendida_bajo_marca is
   'Regla 39 confirmada por una persona sobre una cartola marcada P2P/forex: no se vuelve a preguntar. Reemplaza la señal confianza 0.99 de la Fase 2.';
 
--- (b) la señal 0.99 de la Fase 2 pasa a su campo propio.
+-- (b) la señal 0.99 de la Fase 2 se marca en su campo propio (la confianza se queda).
 update public.clasificacion_reglas
-   set aprendida_bajo_marca = true, confianza = 0.95
+   set aprendida_bajo_marca = true
  where empresa_id is not null and tipo_dte = 39 and confianza >= 0.99 and not aprendida_bajo_marca;
 
 -- Globales siempre firmes, venga de donde venga el insert/update (seeds futuros incluidos).
@@ -136,7 +160,7 @@ create policy "soportes: la empresa lee los suyos" on public.clasificacion_regla
 comment on table public.clasificacion_regla_soportes is
   'Qué cartolas sostienen cada regla aprendida (acuno/confirmo/corrigio). Borrar la última → la regla queda huerfana (trigger). Fase 3 del clasificador.';
 
--- ── (d) última cartola borrada → huérfana (no se borra la fila) ─────────────────
+-- ── (d) última cartola borrada → huérfana (no se borra la fila ni el patrón) ────
 create or replace function public.clasificacion_regla_soportes_al_borrar()
 returns trigger
 language plpgsql
@@ -145,7 +169,9 @@ set search_path = public, pg_temp
 as $$
 begin
   -- AFTER ROW: corre al final de la sentencia, cuando ya se fueron todos los
-  -- soportes que esa sentencia borraba (cascada de la cartola incluida).
+  -- soportes que esa sentencia borraba (cascada de la cartola incluida). Las filas de
+  -- la cartola que se borra pueden seguir ahí (orden de cascadas no garantizado): por
+  -- eso se excluyen por documento, no por existencia.
   update public.clasificacion_reglas r
      set estado = 'huerfana',
          activa = false,
@@ -154,16 +180,18 @@ begin
            when r.tipo_dte in (39, 33) then 'Contraparte de una cartola borrada · Afecta'
            else 'Contraparte de una cartola borrada'
          end,
-         -- Centinela: lookahead vacío = nunca calza (JS). Único por regla.
-         patron = '(?!)' || r.id::text,
-         patron_tipo = 'regex',
-         receptor_nombre_default = null,
-         receptor_rut_default = null,
          estado_cambiado_at = now()
    where r.id = old.regla_id
      and r.empresa_id is not null
-     and r.estado <> 'huerfana'
-     and not exists (select 1 from public.clasificacion_regla_soportes s where s.regla_id = old.regla_id);
+     and r.ligada_a_cartolas
+     and r.estado not in ('huerfana', 'deshecha')
+     and not exists (select 1 from public.clasificacion_regla_soportes s where s.regla_id = old.regla_id)
+     and not exists (
+       select 1 from public.propuestas_ia p
+         join public.movimientos_raw m on m.id = p.movimiento_id
+        where p.regla_id = old.regla_id
+          and m.documento_id is distinct from old.documento_id
+     );
   return null;
 end
 $$;
@@ -215,7 +243,7 @@ security invoker
 set search_path = public, pg_temp
 as $$
   with r as (
-    select cr.id, cr.tipo_dte
+    select cr.id, cr.tipo_dte, cr.evidencia_desde
       from public.clasificacion_reglas cr
      where cr.empresa_id = p_empresa_id
        and (p_regla_ids is null or cr.id = any(p_regla_ids))
@@ -227,6 +255,9 @@ as $$
       join r on r.id = pr.regla_id
       join public.movimientos_raw m on m.id = pr.movimiento_id
      where pr.empresa_id = p_empresa_id
+       -- solo filas nacidas después de la última corrección (B1: las confirmaciones
+       -- viejas eran del tipo corregido y no pueden re-promover la regla)
+       and pr.created_at > coalesce(r.evidencia_desde, '-infinity'::timestamptz)
   ),
   ok as (
     select p.id, p.regla_id, p.documento_id,
@@ -267,10 +298,13 @@ as $$
      where s.empresa_id = p_empresa_id
      order by s.regla_id, s.created_at desc
   ),
-  glosa_propuesta as (
-    select distinct on (p.regla_id) p.regla_id, p.descripcion
-      from p
-     order by p.regla_id, p.created_at desc
+  glosa_propuesta as (  -- la glosa no depende de la ventana de evidencia
+    select distinct on (pr.regla_id) pr.regla_id, m.descripcion
+      from public.propuestas_ia pr
+      join r on r.id = pr.regla_id
+      join public.movimientos_raw m on m.id = pr.movimiento_id
+     where pr.empresa_id = p_empresa_id
+     order by pr.regla_id, pr.created_at desc
   )
   select r.id,
          coalesce((select count(*) from docs where docs.regla_id = r.id), 0)::int,
@@ -283,11 +317,25 @@ as $$
     from r;
 $$;
 
+-- Lo mismo en UN valor (jsonb): una ejecución por apertura de "Lo que aprendí", sin
+-- paginar ni re-ejecutar (PostgREST corta los conjuntos en 1.000 filas, no un escalar).
+create or replace function public.evidencia_reglas_lote(p_empresa_id uuid, p_regla_ids uuid[] default null)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]'::jsonb) from public.evidencia_reglas(p_empresa_id, p_regla_ids) e;
+$$;
+
 revoke all on function public.clasificacion_reglas_global_firme() from public, anon, authenticated;
 revoke all on function public.clasificacion_regla_soportes_al_borrar() from public, anon, authenticated;
 revoke all on function public.incrementar_uso_reglas(uuid[]) from public, anon, authenticated;
 revoke all on function public.evidencia_reglas(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.incrementar_uso_reglas(uuid[]) to service_role;
 grant execute on function public.evidencia_reglas(uuid, uuid[]) to service_role;
+revoke all on function public.evidencia_reglas_lote(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.evidencia_reglas_lote(uuid, uuid[]) to service_role;
 
 reset lock_timeout;

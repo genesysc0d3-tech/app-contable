@@ -48,9 +48,20 @@ describe("regla-evidencia: a_prueba → firme por cartolas distintas", () => {
 });
 
 describe("regla-evidencia: corrección baja de nivel, no pisa", () => {
-  it("firme → a_prueba sin cambiar el tipo", () => {
-    expect(aplicarCorreccion(regla({ estado: "firme" }), { tipoNuevo: 39, confirmadas: 5 }))
+  it("firme SIN confirmaciones → a_prueba sin cambiar el tipo", () => {
+    expect(aplicarCorreccion(regla({ estado: "firme" }), { tipoNuevo: 39, confirmadas: 0 }))
       .toMatchObject({ efecto: "baja_a_prueba", estado: "a_prueba", tipo_dte: 41, veces_corregida: 1 });
+  });
+  it("B1: firme 39 con 5 cartolas, corregida a 41 → en_disputa; las 5 confirmaciones viejas no la re-promueven", () => {
+    const r39 = regla({ estado: "firme", tipo_dte: 39, veces_confirmada: 5 });
+    const una = aplicarCorreccion(r39, { tipoNuevo: 41, confirmadas: 5 });
+    expect(una).toMatchObject({ efecto: "en_disputa", estado: "en_disputa", tipo_dte: 39 });
+    const tras = regla({ estado: una.estado, tipo_dte: una.tipo_dte, veces_corregida: una.veces_corregida });
+    expect(recalcularEstado(tras, { confirmadas: 5, confirmadasMiradas: 5 }).estado).toBe("en_disputa");
+    const dos = aplicarCorreccion(tras, { tipoNuevo: 41, confirmadas: 0 });
+    expect(dos.estado).toBe("en_disputa");
+    expect(recalcularEstado(regla({ estado: dos.estado, tipo_dte: 39, veces_corregida: dos.veces_corregida }), { confirmadas: 9, confirmadasMiradas: 9 }).estado)
+      .toBe("en_disputa");
   });
   it("a_prueba sin confirmaciones → se da vuelta al tipo nuevo (y apaga la señal de marca)", () => {
     expect(aplicarCorreccion(regla({ tipo_dte: 39, aprendida_bajo_marca: true }), { tipoNuevo: 41, confirmadas: 0 }))

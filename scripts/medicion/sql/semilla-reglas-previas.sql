@@ -47,4 +47,30 @@ values
    'ARRIENDO OF', 'contains', 'entrada', 'exenta', 41, 0.95, 50, 0),
   ('00000000-0000-4000-8000-00000000a0a9', null, 'Global de prueba',
    'zz-global-prueba', 'contains', 'entrada', 'boleta', null, 0.8, 100, 0);
+
+-- Escala tipo E1 (línea base: 553 reglas, ~1.600 abonos): 500 reglas VIEJAS (algunas 39,
+-- algunas con la señal 0.99 de la Fase 2), 20 cartolas × 100 movimientos, 2.000
+-- propuestas clasificadas por esas reglas. Sirven para comprobar que la migración no
+-- cambia NADA de las existentes y que borrar una cartola no apaga ninguna.
+insert into public.clasificacion_reglas (id, empresa_id, nombre, patron, patron_tipo, tipo_flujo_match, tipo_propuesto, tipo_dte, confianza, prioridad, veces_aplicada)
+select ('00000000-0000-4000-9000-' || lpad(g::text, 12, '0'))::uuid, '00000000-0000-4000-8000-0000000000f1',
+       'Auto: PERSONA N' || g || case when g % 10 = 0 then ' → Afecta' else ' → Exenta' end,
+       '(^|[^a-zà-ÿ])persona n' || g || '([^a-zà-ÿ]|$)', 'regex', 'entrada',
+       case when g % 10 = 0 then 'boleta' else 'exenta' end, case when g % 10 = 0 then 39 else 41 end,
+       case when g % 50 = 0 then 0.99 else 0.95 end, 50, g
+  from generate_series(1, 500) g;
+\o /dev/null
+select pg_temp.ins('documentos_subidos', jsonb_build_object('id', '00000000-0000-4000-a000-0000000000' || lpad(d::text, 2, '0'),
+         'empresa_id', '00000000-0000-4000-8000-0000000000f1', 'estado', 'procesado', 'tipo', 'cartola'))
+  from generate_series(1, 20) d;
+select pg_temp.ins('movimientos_raw', jsonb_build_object('id', '00000000-0000-4000-b000-0000000' || lpad(d::text, 2, '0') || lpad(k::text, 3, '0'),
+         'empresa_id', '00000000-0000-4000-8000-0000000000f1', 'documento_id', '00000000-0000-4000-a000-0000000000' || lpad(d::text, 2, '0'),
+         'descripcion', 'TRANSFERENCIA DE PERSONA N' || ((d * 100 + k) % 500 + 1), 'monto', 1000 + k, 'tipo_flujo', 'entrada', 'fecha', current_date))
+  from generate_series(1, 20) d, generate_series(1, 100) k;
+\o
+insert into public.propuestas_ia (empresa_id, movimiento_id, tipo_propuesto, tipo_dte, confianza, total, fuente_clasificacion, estado, regla_id)
+select '00000000-0000-4000-8000-0000000000f1', ('00000000-0000-4000-b000-0000000' || lpad(d::text, 2, '0') || lpad(k::text, 3, '0'))::uuid,
+       'exenta', 41, 0.95, 1000 + k, 'regla_usuario', 'aprobado',
+       ('00000000-0000-4000-9000-' || lpad(((d * 100 + k) % 500 + 1)::text, 12, '0'))::uuid
+  from generate_series(1, 20) d, generate_series(1, 100) k;
 commit;

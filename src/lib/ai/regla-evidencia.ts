@@ -15,6 +15,8 @@
  * anulada, no sandbox) del MISMO tipo_dte de la regla, de una propuesta que la regla
  * clasificó y que ninguna persona corrigió. Un lote de 300 filas de la misma cartola = 1.
  * La cuenta la hace la base (evidencia_reglas); acá solo se decide qué hacer con ella.
+ * Solo cuentan las confirmaciones POSTERIORES a la última corrección (evidencia_desde):
+ * las viejas eran del tipo que la persona acaba de corregir y no pueden re-promoverla.
  *
  * DECISIÓN DEL FUNDADOR (línea base 2026-10-04): las reglas que existían antes de esta
  * fase quedan 'firme' (sin backfill que las degrade). "A prueba" es solo para las nuevas.
@@ -119,6 +121,7 @@ export function recalcularEstado(r: ReglaConHistorial, ev: EvidenciaRegla): Reca
 export type EfectoCorreccion = "ninguno" | "baja_a_prueba" | "se_da_vuelta" | "en_disputa" | "suma";
 
 export interface ResultadoCorreccion {
+  /** Toda corrección efectiva reinicia la ventana de evidencia (evidencia_desde = ahora). */
   efecto: EfectoCorreccion;
   estado: EstadoRegla;
   tipo_dte: number | null;
@@ -131,7 +134,10 @@ export interface ResultadoCorreccion {
  * regla y acción, no por fila). La corrección BAJA de nivel; no pisa el tipo de una
  * regla con historial:
  *  - mismo tipo que la regla, regla global, deshecha o huérfana → nada.
- *  - firme → a_prueba (el tipo NO cambia).
+ *  - firme SIN confirmaciones → a_prueba (el tipo NO cambia).
+ *  - firme CON confirmaciones → en_disputa (sin tipo: el clasificador no lo estampa).
+ *    Antes bajaba a a_prueba con el tipo viejo y las confirmaciones viejas la volvían
+ *    a firme sola (revisión adversarial 2026-10-04, B1).
  *  - a_prueba sin confirmaciones → se da vuelta al tipo nuevo (sigue a prueba).
  *  - a_prueba con ≥1 confirmación → en_disputa.
  *  - en_disputa → sigue en disputa (suma la corrección).
@@ -155,7 +161,7 @@ export function aplicarCorreccion(
 
   const confirmadas = Math.max(0, Math.floor(c.confirmadas || 0));
   const corregidas = (r.veces_corregida ?? 0) + 1;
-  if (enDisputaPorCorrecciones(corregidas, confirmadas) || antes === "en_disputa" || (antes === "a_prueba" && confirmadas >= 1)) {
+  if (enDisputaPorCorrecciones(corregidas, confirmadas) || antes === "en_disputa" || confirmadas >= 1) {
     return { ...base, efecto: antes === "en_disputa" ? "suma" : "en_disputa", estado: "en_disputa", veces_corregida: corregidas };
   }
   if (antes === "firme") {

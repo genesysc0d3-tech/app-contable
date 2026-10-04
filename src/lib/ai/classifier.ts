@@ -47,6 +47,17 @@ export interface ClasificacionRegla {
   aprendida_bajo_marca?: boolean | null;
 }
 
+/**
+ * ¿Regla 39 confirmada por una persona sobre cartola P2P/forex? Campo propio
+ * (aprendida_bajo_marca) o, por compatibilidad, la señal de la Fase 2 (confianza ≥ 0.99):
+ * la migración la marca sin tocar la confianza y el código viejo pudo acuñar más en la
+ * ventana entre la migración y el deploy.
+ */
+export function esReglaBajoMarca(r: Pick<ClasificacionRegla, "empresa_id" | "tipo_dte" | "confianza" | "aprendida_bajo_marca">): boolean {
+  if (!r.empresa_id) return false;
+  return r.aprendida_bajo_marca === true || (r.tipo_dte === 39 && Number(r.confianza) >= 0.99);
+}
+
 /** Estado EFECTIVO de una regla para clasificar: global → firme; sin estado → firme. */
 export function estadoEfectivo(r: Pick<ClasificacionRegla, "empresa_id" | "estado">): EstadoRegla {
   if (!r.empresa_id) return "firme";
@@ -280,7 +291,7 @@ export function classifyWithRules(
         // tipo recordado. Las globales dejan tipo_dte null → el gate decide.
         tipo_dte: matchingRule.empresa_id && estado !== "en_disputa" ? (matchingRule.tipo_dte ?? null) : null,
         regla_estado: estado,
-        regla_bajo_marca: Boolean(matchingRule.empresa_id) && matchingRule.aprendida_bajo_marca === true,
+        regla_bajo_marca: esReglaBajoMarca(matchingRule),
       });
     } else {
       noClasificados.push({ movimiento_index: i, movimiento: mov });

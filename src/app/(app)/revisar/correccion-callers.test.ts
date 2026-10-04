@@ -106,6 +106,18 @@ describe("Fase 3 — correcciones desde Check", () => {
     expect(aprenderSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ canal: "check_lote", movimientoId: "m1" }));
   });
 
+  it("una fila «¿?» por conflicto con la marca P2P: elegir Exenta NO corrige la regla", async () => {
+    RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
+    RESP["propuestas_ia"] = { select: { data: [{ id: "p1", total: 1000, movimiento_id: "m1", regla_id: "r39", fuente_clasificacion: "conflicto_marca_cartola" }] }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: [{ id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" }] } };
+    await cambiarTipoPropuestas(["p1"], "exenta", "boleta", "check_fila");
+    expect(corregirSpy).not.toHaveBeenCalled();
+    RESP["propuestas_ia"] = { select: { data: { tipo_dte: null, movimiento_id: "m1", regla_id: "r39", fuente_clasificacion: "conflicto_marca_cartola" } }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: { descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" } } };
+    await editarPropuesta("p1", { tipo_dte: 41 });
+    expect(corregirSpy).not.toHaveBeenCalled();
+  });
+
   it("sin reglas detrás → no corrige", async () => {
     RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
     RESP["propuestas_ia"] = { select: { data: [{ id: "p1", total: 1000, movimiento_id: "m1", regla_id: null }] }, update: { error: null, count: 1 } };

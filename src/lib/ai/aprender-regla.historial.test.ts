@@ -51,7 +51,7 @@ describe("acuñar una regla NUEVA", () => {
     expect(ins).toMatchObject({
       estado: "a_prueba", nombre: "Contraparte aprendida · Exenta", veces_acunada: 1,
       nacio_hint: "ventas_servicios", nacio_carril: "check_detalle", documento_origen_id: "D1",
-      tipo_dte: 41, confianza: 0.95, aprendida_bajo_marca: false,
+      tipo_dte: 41, confianza: 0.95, aprendida_bajo_marca: false, ligada_a_cartolas: true,
     });
     expect(String(ins.nombre)).not.toMatch(/juan|perez/i);
     expect(ins).not.toHaveProperty("veces_aplicada");
@@ -83,6 +83,20 @@ describe("re-acuñar una regla EXISTENTE (dedup)", () => {
     expect(upd).not.toHaveProperty("tipo_dte");
     expect(upd).not.toHaveProperty("estado");
   });
+  it("B2: re-acuñar una regla existente NO la liga a esta cartola (sin soporte)", async () => {
+    const previa = { id: "r1", tipo_dte: 41, estado: "firme", activa: true, veces_acunada: 2, aprendida_bajo_marca: false };
+    const { sb, ops } = fakeSb({ previa });
+    await aprenderReglaDesdeResolucion(sb, { ...base, tipoDte: 41 });
+    expect(ops.some((x) => x.tabla === "clasificacion_regla_soportes")).toBe(false);
+  });
+  it("M4: una regla existente APAGADA (activa=false, no deshecha) se reactiva al volver a enseñarla", async () => {
+    const previa = { id: "r1", tipo_dte: 41, estado: "firme", activa: false, veces_acunada: 1, aprendida_bajo_marca: false };
+    const { sb, ops } = fakeSb({ previa });
+    const r = await aprenderReglaDesdeResolucion(sb, { ...base, tipoDte: 41 });
+    expect(r.actualizada).toBe(true);
+    const upd = ops.find((x) => x.tabla === "clasificacion_reglas" && x.op === "update")!.payload!;
+    expect(upd).toMatchObject({ activa: true, estado: "a_prueba", tipo_dte: 41 });
+  });
   it("tipo DISTINTO: NO pisa el tipo de la regla (eso es una corrección, no un acuñar)", async () => {
     const previa = { id: "r1", tipo_dte: 41, estado: "firme", activa: true, veces_acunada: 2, aprendida_bajo_marca: false };
     const { sb, ops } = fakeSb({ previa });
@@ -97,5 +111,6 @@ describe("re-acuñar una regla EXISTENTE (dedup)", () => {
     await aprenderReglaDesdeResolucion(sb, { ...base, tipoDte: 39 });
     const upd = ops.find((x) => x.tabla === "clasificacion_reglas" && x.op === "update")!.payload!;
     expect(upd).toMatchObject({ estado: "a_prueba", activa: true, tipo_dte: 39, nombre: "Contraparte aprendida · Afecta", veces_acunada: 2 });
+    expect(ops.some((x) => x.tabla === "clasificacion_regla_soportes")).toBe(false);
   });
 });

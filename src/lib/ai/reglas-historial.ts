@@ -20,7 +20,6 @@ import {
   recalcularEstado,
   type EfectoCorreccion,
   type ReglaConHistorial,
-  CONFIANZA_MAX_A_PRUEBA,
 } from "./regla-evidencia";
 import { classifyWithRules, type ClasificacionRegla } from "./classifier";
 import { decidirTipoDtePersistido, decidirEstadoInicial, CONFIANZA_MAX_POR_DECIDIR } from "./tipo-dte-persistido";
@@ -52,18 +51,19 @@ export interface EvidenciaFila {
 const COLS_REGLA = "id, empresa_id, estado, tipo_dte, tipo_propuesto, veces_confirmada, veces_corregida, aprendida_bajo_marca";
 type ReglaFila = ReglaConHistorial & { id: string; tipo_propuesto?: string | null };
 
-/** Evidencia viva (rpc de solo lectura). Pagina: PostgREST corta en 1.000 filas. */
+/**
+ * Evidencia viva (solo lectura). UNA ejecución: la rpc devuelve un jsonb con todas las
+ * reglas pedidas (sin el tope de 1.000 filas de PostgREST ni re-ejecutar por página).
+ */
 export async function leerEvidencia(sb: SB, empresaId: string, reglaIds?: string[]): Promise<Map<string, EvidenciaFila> | null> {
+  const { data, error } = await (sb.rpc as unknown as (f: string, a: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+    "evidencia_reglas_lote",
+    { p_empresa_id: empresaId, p_regla_ids: reglaIds ?? null },
+  );
+  if (error || !Array.isArray(data)) return null;
   const out = new Map<string, EvidenciaFila>();
-  const PAG = 1000;
-  for (let desde = 0; ; desde += PAG) {
-    const { data, error } = await (sb.rpc as unknown as (f: string, a: Record<string, unknown>) => {
-      range: (a: number, b: number) => Promise<{ data: EvidenciaFila[] | null; error: unknown }>;
-    })("evidencia_reglas", { p_empresa_id: empresaId, p_regla_ids: reglaIds ?? null }).range(desde, desde + PAG - 1);
-    if (error || !data) return desde === 0 ? null : out;
-    for (const e of data) out.set(e.regla_id, e);
-    if (data.length < PAG) return out;
-  }
+  for (const e of data as EvidenciaFila[]) out.set(e.regla_id, e);
+  return out;
 }
 
 // ── Corrección ──────────────────────────────────────────────────────────────────
@@ -121,7 +121,10 @@ async function registrarCorreccion(
     const cambios: Record<string, unknown> = {
       estado: res.estado,
       veces_corregida: res.veces_corregida,
-      veces_confirmada: confirmadas,
+      // La ventana de evidencia vuelve a empezar: lo confirmado ANTES de esta corrección
+      // era del tipo corregido y no puede re-promoverla (B1).
+      veces_confirmada: 0,
+      evidencia_desde: new Date().toISOString(),
       aprendida_bajo_marca: res.aprendida_bajo_marca,
     };
     if (res.tipo_dte !== regla.tipo_dte) {
@@ -169,9 +172,10 @@ export async function recalcularEstadoReglas(
    * soloEstado: escribe solo las reglas que CAMBIAN de estado (al abrir la pantalla:
    * pocas o ninguna). Sin él (cron nocturno) también refresca veces_confirmada.
    */
-  opts: { soloEstado?: boolean } = {},
+  opts: { soloEstado?: boolean; evidencia?: Map<string, EvidenciaFila> | null } = {},
 ): Promise<ResultadoRecalculo> {
-  const ev = await leerEvidencia(sb, empresaId);
+  // Quien ya leyó la evidencia (la pantalla) la pasa: una sola ejecución por apertura.
+  const ev = opts.evidencia ?? (await leerEvidencia(sb, empresaId));
   if (!ev) return { revisadas: 0, cambiadas: 0, error: "evidencia_no_disponible" };
   const reglas: ReglaFila[] = [];
   for (let desde = 0; ; desde += 1000) {
@@ -271,7 +275,9 @@ export interface ReevaluacionResultado {
 export function reevaluarSinRegla(i: ReevaluacionInput): ReevaluacionResultado {
   const mov: MovimientoExtraido = { ...i.mov, origen: "otro" } as MovimientoExtraido;
   const match = classifyWithRules([mov], i.reglas).clasificados[0] ?? null;
-  const tipoBase = match ? String(match.propuesta.tipo_propuesto) : i.tipoActual;
+  // Sin otra regla, el tipo que traía la fila ('exenta'/'boleta') era DE la regla
+  // deshecha: no se hereda. Se decide desde una venta genérica (glosa, marca, emisor).
+  const tipoBase = match ? String(match.propuesta.tipo_propuesto) : "boleta";
   const docHint = hintValido(i.docHint);
   const clasif = clasificarBoleta(
     { descripcion: i.mov.descripcion ?? "", monto: Number(i.total ?? i.mov.monto ?? 0), fecha: i.mov.fecha ?? "", receptor_nombre: null },
@@ -285,7 +291,7 @@ export function reevaluarSinRegla(i: ReevaluacionInput): ReevaluacionResultado {
   );
   const empTipos = i.emp as Parameters<typeof normalizarTipoPorEmisor>[1];
   const exento = carrilEsExento(empTipos, "boleta") || esVentaExentaEmisor(tipoBase, empTipos);
-  const tipoNorm = normalizarTipoPorEmisor(tipoBase, empTipos);
+  const tipoNormRegla = normalizarTipoPorEmisor(tipoBase, empTipos);
   const decision = decidirTipoDtePersistido({
     tipoFlujo: i.mov.tipo_flujo,
     tipoBase,
@@ -310,28 +316,36 @@ export function reevaluarSinRegla(i: ReevaluacionInput): ReevaluacionResultado {
     estado = decidirEstadoInicial({
       confianza,
       reglaId: match.regla_id,
-      tipoPropuesto: tipoNorm,
+      tipoPropuesto: tipoNormRegla,
       conflictoMarcaCartola: decision.conflictoMarcaCartola,
       reglaAPrueba: match.regla_estado === "a_prueba" || match.regla_estado === "en_disputa",
     });
   } else {
-    // Ninguna regla la toma: vuelve a Check. Con tipo determinista (hint/exenta) queda
-    // bulk-elegible (0.8, como al nacer); sin tipo, bajo el bulk: la decide la persona.
-    confianza = Math.min(i.confianzaActual ?? 0, tipoDte != null ? CONFIANZA_MAX_A_PRUEBA : CONFIANZA_MAX_POR_DECIDIR);
+    // Ninguna regla la toma: vuelve a Check y la decide la persona. Bajo el umbral de
+    // "Poner listas" (0.8) aunque el auto haya sugerido un tipo: una regla deshecha no
+    // puede convertirse en un lote a ciegas.
+    confianza = Math.min(i.confianzaActual ?? 0, CONFIANZA_MAX_POR_DECIDIR);
     fuente = FUENTE_REGLA_DESHECHA;
     estado = "pendiente";
   }
+  // tipo_propuesto coherente con el tipo_dte decidido (sin regla: 41 → exenta, si no la
+  // venta genérica), normalizado al emisor.
+  const tipoPropuesto = match
+    ? tipoNormRegla
+    : normalizarTipoPorEmisor(tipoDte === 41 ? "exenta" : "boleta", empTipos);
   const total = Number(i.total ?? 0);
-  const montos = tipoDte === 39 ? derivarMontosDte(total, true) : tipoDte === 41 ? derivarMontosDte(total, false) : null;
+  // Montos coherentes: con tipo, el reparto del DTE; sin tipo, todo neto y sin IVA
+  // (lo que trae una fila por decidir; se recalcula al elegir el tipo en Check).
+  const montos = tipoDte === 39 ? derivarMontosDte(total, true) : derivarMontosDte(total, false);
   return {
-    tipo_propuesto: tipoNorm,
+    tipo_propuesto: tipoPropuesto,
     tipo_dte: tipoDte,
     regla_id: match?.regla_id ?? null,
     fuente_clasificacion: fuente,
     confianza,
     estado,
-    monto_neto: montos ? montos.neto : null,
-    iva: montos ? montos.iva : null,
+    monto_neto: montos.neto,
+    iva: montos.iva,
   };
 }
 
@@ -466,7 +480,8 @@ export async function deshacerRegla(
       fuente_clasificacion: res.fuente_clasificacion,
       confianza: res.confianza,
       estado: res.estado,
-      ...(res.monto_neto != null ? { monto_neto: res.monto_neto, iva: res.iva } : {}),
+      monto_neto: res.monto_neto,
+      iva: res.iva,
     };
     const { count, error } = await sb
       .from("propuestas_ia")
