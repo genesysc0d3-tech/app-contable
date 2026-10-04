@@ -88,6 +88,34 @@ describe("claveContraparte", () => {
     // ...pero la persona detrás de la palabra genérica sí se reconoce
     expect(claveContraparte("TRANSF BANCO ESTADO DE JUAN PEREZ")?.clave).toBe("nombre:JUAN PEREZ");
   });
+  it("CENSO de glosas reales de bancos chilenos: ninguna es una persona (vuelta 2)", () => {
+    const reales = [
+      "ABONO TEF OTROS BANCOS", "TRANSF RECIBIDA OTROS BANCOS", "DEP.EFECTIVO CAJA VECINA", "TRANSF. DESDE CUENTARUT",
+      "DEPOSITO CAJERO AUTOMATICO", "DEPOSITO DOCUMENTOS", "TEF ENTRANTE", "RECIBISTE DINERO", "DINERO RECIBIDO",
+      "ABONO CUENTA CORRIENTE FALABELLA", "RENDIMIENTOS", "INTERESES GANADOS", "OTROS ABONOS", "MISMO BANCO",
+      "TRANS RECIBIDA", "NOMINA", "PAGO NOMINA", "PENSION", "ANTICIPO", "BONO INVIERNO", "APORTE FAMILIAR",
+      "TRANSFERENCIA RECIBIDA", "TRANSFERENCIA ELECTRONICA RECIBIDA", "TEF RECIBIDA BANCO ESTADO", "TEF DESDE BANCO DE CHILE",
+      "ABONO TRANSFERENCIA SANTANDER", "TRASPASO DESDE CUENTA VISTA", "TRASPASO DE FONDOS MISMO BANCO", "DEPOSITO EN EFECTIVO",
+      "DEP EFECTIVO SUCURSAL", "DEPOSITO CHEQUE OTROS BANCOS", "DEPOSITO DOCUMENTOS OTROS BANCOS", "ABONO DEPOSITO CAJA VECINA",
+      "TRANSF ENTRANTE BCI", "TRANSF ENTRANTE ITAU", "TEF RECIBIDA SCOTIABANK", "ABONO BICE", "TRANSFERENCIA SECURITY",
+      "ABONO RIPLEY", "TRANSF BANCO INTERNACIONAL", "TRANSF CONSORCIO", "PAGO BONO GOBIERNO", "BONO IFE", "PAGO PENSION",
+      "ANTICIPO NOMINA", "APORTE FAMILIAR PERMANENTE", "BONO INVIERNO GOBIERNO", "INTERESES GANADOS CUENTA", "RENDIMIENTOS FONDOS MUTUOS",
+      "ABONO INTERESES", "DINERO RECIBIDO OTROS BANCOS", "RECIBISTE DINERO DE OTRO BANCO", "TRANSFERENCIA DE MAMA",
+      "TRANSF A PAPA", "TRANSF HIJO", "TRANSFERENCIA HIJA", "TRANSF DE MAMÁ", "COMPRA DIVISAS", "VENTA DIVISAS",
+      "DEPOSITO CUENTARUT", "ABONO CUENTARUT", "TRANSF DESDE CUENTA CORRIENTE", "TRANSF MISMO TITULAR", "ABONO NACIONALES",
+      "TEF OTRO BANCO", "TRANSFERENCIA INTERBANCARIA", "ABONO EN LINEA", "TRANSFERENCIA DE FONDOS", "ABONO AUTOMATICO",
+      "DEPOSITO CAJERO", "TRANSFERENCIA DE CAMILA",
+    ];
+    expect(reales.length).toBeGreaterThanOrEqual(70);
+    const personas = reales.filter((g) => { const c = claveContraparte(g); return c && c.tipo !== "canal"; });
+    expect(personas).toEqual([]);
+  });
+  it("una persona necesita ≥2 palabras de nombre (una sola → una por una)", () => {
+    expect(claveContraparte("TRANSFERENCIA DE CAMILA")).toBeNull();
+    expect(claveContraparte("ABONO TEF OTROS BANCOS JUAN PEREZ")).toMatchObject({ clave: "nombre:JUAN PEREZ" });
+    // RUT sin nombre: se agrupa por RUT pero no trae patrón (no acuña regla)
+    expect(claveContraparte("TEF 12.345.678-5 CAMILA")).toMatchObject({ tipo: "rut", patron: null });
+  });
   it("sin nadie reconocible → null", () => {
     expect(claveContraparte("TRANSFERENCIA 0012345")).toBeNull();
     expect(claveContraparte("")).toBeNull();
@@ -107,6 +135,22 @@ describe("cuenta propia y empresas", () => {
     expect(pareceCuentaPropia("TEF MARIA JOSE SOTO", "Maria Jose Soto Rojas EIRL")).toBe(false);
     expect(pareceCuentaPropia("TRANSF DE PEDRO SOTO", "Soto SpA")).toBe(false); // un token suelto nunca
     expect(pareceCuentaPropia("TRANSF DE ANDES", "Comercial Los Andes SpA")).toBe(false);
+    // Vuelta 2: una palabra distintiva JUNTO a una genérica de la razón social
+    expect(pareceCuentaPropia("TRANSF COMERCIAL ROJAS", "Comercial Rojas SpA")).toBe(true);
+    expect(pareceCuentaPropia("TRANSFERENCIA DE CAMILA ROJAS", "Comercial Rojas SpA")).toBe(false);
+    expect(pareceCuentaPropia("TEF INVERSIONES LAGOS", "Inversiones Lagos Ltda")).toBe(true);
+    expect(pareceCuentaPropia("TEF INV LAGOS", "Inversiones Lagos Ltda")).toBe(true);
+    expect(pareceCuentaPropia("TEF PEDRO LAGOS", "Inversiones Lagos Ltda")).toBe(false);
+    expect(pareceCuentaPropia("TRANSFERENCIA PROPIA", "X SpA")).toBe(true);
+    expect(pareceCuentaPropia("TRASPASO PROPIO", "X SpA")).toBe(true);
+    // el RUT de la empresa en la glosa
+    const rut = `76123456-${dvRut("76123456")}`;
+    expect(pareceCuentaPropia(`TEF DESDE 76.123.456-${dvRut("76123456")}`, "Lo que sea SpA", rut)).toBe(true);
+    expect(pareceCuentaPropia("TEF DESDE 12.345.678-5", "Lo que sea SpA", rut)).toBe(false);
+    // persona natural truncada por el banco
+    expect(pareceCuentaPropia("TRANSF JUAN PEREZ S", "Juan Perez Soto")).toBe(true);
+    expect(pareceCuentaPropia("TRANSF JUAN PEREZ", "Juan Perez Soto")).toBe(false);
+    expect(pareceCuentaPropia("TRANSF JUAN PEREZ R", "Juan Perez Soto")).toBe(false);
   });
   it("forma jurídica en la glosa", () => {
     expect(pareceEmpresa("TRANSF DE AGRICOLA SUR SPA")).toBe(true);

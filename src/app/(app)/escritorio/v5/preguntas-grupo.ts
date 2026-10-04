@@ -126,6 +126,8 @@ export interface ContextoPreguntas {
   /** documentos_subidos.tipo_operacion_hint (p2p_cripto / forex_divisas = exenta por ley). */
   marca: string | null | undefined;
   razonSocial: string | null | undefined;
+  /** RUT de la empresa: su aparición en la glosa = plata movida entre sus cuentas. */
+  rutEmpresa?: string | null;
   /** Otras filas de la mesa (cualquier cartola): de ahí sale "la otra vez no era venta". */
   historial?: FilaPregunta[];
 }
@@ -176,10 +178,10 @@ function claveDe(f: FilaPregunta) {
 }
 
 /** ¿En qué tarjeta cae esta fila? null = suelta (no se reconoce a nadie). */
-export function kindDeFila(f: FilaPregunta, razonSocial: string | null | undefined, noVentaAntes: ReadonlySet<string>): KindTarjeta | null {
+export function kindDeFila(f: FilaPregunta, razonSocial: string | null | undefined, noVentaAntes: ReadonlySet<string>, rutEmpresa?: string | null): KindTarjeta | null {
   if (f.tipo_flujo === "salida") return "salidas";
   if (f.tipo_flujo !== "entrada") return null;
-  if (pareceCuentaPropia(f.descripcion, razonSocial)) return "propia";
+  if (pareceCuentaPropia(f.descripcion, razonSocial, rutEmpresa)) return "propia";
   // Lo que el sistema clasificó como NO venta (sueldo, honorarios, donación, interés,
   // gasto…) o cuya glosa lo dice: nunca entra a una tarjeta que vende.
   if (detectaNoBoletar(f.descripcion) || destino(f.tipo_propuesto) === "no_es_venta") return "no_venta_probable";
@@ -304,7 +306,7 @@ export function armarPreguntas(filas: FilaPregunta[], ctx: ContextoPreguntas): R
   const porKind = new Map<KindTarjeta, FilaPregunta[]>();
   let sueltas = 0;
   for (const f of preguntables) {
-    const k = kindDeFila(f, ctx.razonSocial, noVentaAntes);
+    const k = kindDeFila(f, ctx.razonSocial, noVentaAntes, ctx.rutEmpresa);
     if (!k) { sueltas++; continue; }
     porKind.set(k, [...(porKind.get(k) ?? []), f]);
   }

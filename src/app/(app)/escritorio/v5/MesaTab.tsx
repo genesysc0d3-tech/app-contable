@@ -53,7 +53,7 @@ function esCartolaBancaria(doc: DocRow): boolean {
 //  - Telegram (1 tx)  → tarjeta de propuesta editable (compacta) + comprobante
 //  - Boleta única     → resumen read-only ("Emitida · en Boletas")
 //  - Cartola MassDTE  → configs globales (Mapear/Tipo/Glosa) + sus propuestas
-export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empresaTipo, empresaRazon = null }: {
+export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empresaTipo, empresaRazon = null, empresaRut = null }: {
   mesa: MesaDateDependent;
   clientes: ClienteResumen[];
   empresaId: string;
@@ -61,6 +61,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   empresaTipo: string | null;
   /** Razón social: el Check agrupado reconoce las transferencias desde la propia empresa. */
   empresaRazon?: string | null;
+  empresaRut?: string | null;
 }) {
   const reload = useMesaReload() ?? (() => {});
   const [selDocId, setSelDocId] = useState<string | null>(null);
@@ -247,9 +248,10 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
       carril: empresaTipo,
       marca: selDoc.tipo_operacion_hint ?? null,
       razonSocial: empresaRazon,
+      rutEmpresa: empresaRut,
       historial: (mesa.propuestas as Propuesta[]).map((p) => filaDePropuesta(p, aMediasIds)),
     }).tarjetas.length;
-  }, [selDoc, selProps, aMediasIds, mesa.mesaActiva, mesa.propuestasTruncadas, mesa.propuestas, empresaTipo, empresaRazon]);
+  }, [selDoc, selProps, aMediasIds, mesa.mesaActiva, mesa.propuestasTruncadas, mesa.propuestas, empresaTipo, empresaRazon, empresaRut]);
   // Abrir Editar: si hay preguntas, parte en Preguntas; si no, en la grilla.
   const abrirEditar = (docId: string) => { setEditarScreen(preguntasSel > 0 ? "preguntas" : "editar"); setEditarCartolaId(docId); };
 
@@ -546,6 +548,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                   carril={empresaTipo}
                   marca={selDoc.tipo_operacion_hint ?? null}
                   razonSocial={empresaRazon}
+                  rutEmpresa={empresaRut}
                   aMediasIds={aMediasIds}
                   onAction={reload}
                   onUnaPorUna={() => setEditarScreen("editar")}

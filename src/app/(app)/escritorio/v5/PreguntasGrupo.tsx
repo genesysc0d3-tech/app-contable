@@ -70,7 +70,7 @@ const CSS = `
 `;
 
 export default function PreguntasGrupo({
-  propuestas, historial, documentoId, truncada, carril, marca, razonSocial, aMediasIds, onAction, onUnaPorUna,
+  propuestas, historial, documentoId, truncada, carril, marca, razonSocial, rutEmpresa = null, aMediasIds, onAction, onUnaPorUna,
 }: {
   propuestas: PropuestaParaPreguntas[];
   /** Todas las filas de la mesa (otras cartolas): de ahí sale "¿Sigue igual?". */
@@ -80,6 +80,7 @@ export default function PreguntasGrupo({
   carril: string | null;
   marca: string | null;
   razonSocial: string | null;
+  rutEmpresa?: string | null;
   aMediasIds: ReadonlySet<string>;
   onAction: () => void;
   onUnaPorUna: () => void;
@@ -91,8 +92,8 @@ export default function PreguntasGrupo({
   const yaRespondidas = respondidas.base === propuestas ? respondidas.ids : null;
   const res = useMemo(() => armarPreguntas(
     propuestas.filter((p) => !yaRespondidas?.has(p.id)).map((p) => filaDePropuesta(p, aMediasIds)),
-    { mesa: "boleta", truncada, carril, marca, razonSocial, historial: historial.map((p) => filaDePropuesta(p, aMediasIds)) },
-  ), [propuestas, yaRespondidas, historial, aMediasIds, truncada, carril, marca, razonSocial]);
+    { mesa: "boleta", truncada, carril, marca, razonSocial, rutEmpresa, historial: historial.map((p) => filaDePropuesta(p, aMediasIds)) },
+  ), [propuestas, yaRespondidas, historial, aMediasIds, truncada, carril, marca, razonSocial, rutEmpresa]);
   const [fases, setFases] = useState<Record<string, Fase>>({});
   const [hechas, setHechas] = useState<Hecha[]>([]);
   const faseDe = (id: string): Fase => fases[id] ?? { fase: "pregunta" };
@@ -361,6 +362,9 @@ function ListaPersonas({ t, f, onFase, onListo }: {
   const lista = q ? t.personas.filter((p) => p.etiqueta.toLowerCase().includes(q)) : t.personas;
   const ventaDe = (p: Persona) => f.venta[p.clave] ?? t.ventaPorDefecto;
   const nVenta = t.personas.filter(ventaDe).length;
+  // Con filas cambiadas una por una ("Ver sus N"), el contador cuenta movimientos, no personas.
+  const mixtas = Object.keys(f.filas).length > 0;
+  const nFilasVenta = t.personas.reduce((s, p) => s + p.ids.filter((id) => f.filas[id] ?? ventaDe(p)).length, 0);
   const set = (patch: Partial<Extract<Fase, { fase: "lista_personas" }>>) => onFase({ ...f, ...patch });
   const quien = t.kind === "canal" ? "pagos" : "personas";
   return (
@@ -416,7 +420,11 @@ function ListaPersonas({ t, f, onFase, onListo }: {
         {lista.length === 0 && <div className="pg-sub" style={{ padding: 10 }}>Nadie con ese nombre.</div>}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span className="pg-sub" style={{ marginTop: 0 }}>{nVenta} de {t.personas.length} {quien} {nVenta === 1 ? "es venta" : "son venta"}</span>
+        <span className="pg-sub" style={{ marginTop: 0 }}>
+          {mixtas
+            ? <>{nFilasVenta} de {t.ids.length} movimientos {nFilasVenta === 1 ? "es venta" : "son venta"}</>
+            : <>{nVenta} de {t.personas.length} {quien} {nVenta === 1 ? "es venta" : "son venta"}</>}
+        </span>
         <span className="pg-btns" style={{ marginLeft: "auto", flex: "1 1 260px", maxWidth: 360 }}>
           <button className="pg-btn" onClick={() => onFase(null)}>Volver</button>
           <button className="pg-btn pg-pri" onClick={() => onListo(f)}>Listo</button>

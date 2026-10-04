@@ -214,17 +214,28 @@ const RUIDO_AGRUPAR = new Set<string>([
   "internacional", "consorcio", "bancoestado", "edwards", "corpbanca", "coopeuch",
   "bono", "bonos", "ife", "gobierno", "tesoreria", "subsidio",
   "hijo", "hija", "mama", "papa", "mami", "papi",
-  "divisas", "divisa", "compra", "abono", "deposito", "depositos",
+  "divisas", "divisa", "compra", "abono", "abonos", "deposito", "depositos", "dep",
+  // Vuelta 2 (glosas reales de bancos chilenos): medios, canales y conceptos, no personas.
+  "bancos", "banco", "otros", "otro", "otras", "vecina", "caja", "cuentarut", "automatico", "cajero",
+  "documentos", "documento", "entrante", "entrantes", "dinero", "recibiste", "recibido", "recibida",
+  "corriente", "rendimientos", "rendimiento", "ganados", "ganado", "intereses", "interes", "nacionales",
+  "nacional", "mismo", "misma", "propia", "propio", "trans", "transf", "tef", "nomina", "pension",
+  "anticipo", "aporte", "familiar", "invierno", "transferencia", "transferencias", "electronica",
 ]);
 
-/** Patrón para AGRUPAR: el de la regla menos RUIDO_AGRUPAR, con la misma exigencia de especificidad. */
+/**
+ * Nombre de persona para AGRUPAR: el patrón de la regla menos RUIDO_AGRUPAR. Exige ≥2
+ * palabras con forma de nombre propio (letras, ≥2 c/u): "JUAN PEREZ" sí; "CAMILA" sola,
+ * "OTROS BANCOS" o "CAJA VECINA" no → esa fila no forma persona (se mira una por una) y
+ * nunca acuña regla desde un grupo.
+ */
+export const MIN_TOKENS_NOMBRE = 2;
 function patronParaAgrupar(patron: string | null): string | null {
   if (!patron) return null;
-  const tokens = patron.split(" ").filter((t) => !RUIDO_AGRUPAR.has(deAccent(t).toLowerCase()));
-  if (tokens.length === 0) return null;
-  const especifico = tokens.length >= 2 || tokens[0].length >= 5;
+  const tokens = patron.split(" ").filter((t) => /^\p{L}{2,}$/u.test(t) && !RUIDO_AGRUPAR.has(deAccent(t).toLowerCase()));
+  if (tokens.length < MIN_TOKENS_NOMBRE) return null;
   const out = tokens.join(" ");
-  return especifico && deAccent(out).replace(/[^A-Z]/g, "").length >= 5 ? out : null;
+  return deAccent(out).replace(/[^A-Z]/g, "").length >= 5 ? out : null;
 }
 
 function titulo(s: string): string {
@@ -278,14 +289,39 @@ function tokensLetras(s: string | null | undefined): string[] {
  * nunca basta (una clienta "Soto" no es la empresa "Maria Soto EIRL"). También la frase
  * explícita "cuenta propia" / "entre cuentas".
  */
-export function pareceCuentaPropia(descripcion: string | null | undefined, razonSocial: string | null | undefined): boolean {
+export function pareceCuentaPropia(
+  descripcion: string | null | undefined,
+  razonSocial: string | null | undefined,
+  rutEmpresa?: string | null,
+): boolean {
   const g = deAccent(String(descripcion ?? "")).toUpperCase();
-  if (/\b(CUENTA PROPIA|CTA PROPIA|ENTRE CUENTAS|MISMA CUENTA|MISMO TITULAR)\b/.test(g)) return true;
-  const propias = tokensLetras(razonSocial).filter((t) => t.length >= 2 && !GENERICAS_EMPRESA.has(t.toLowerCase()));
-  if (propias.length < 2 || propias.join("").length < 5) return false;
-  const enGlosa = new Set(tokensLetras(descripcion));
-  return propias.every((t) => enGlosa.has(t));
+  if (/\b(CUENTA PROPIA|CTA PROPIA|ENTRE CUENTAS|MISMA CUENTA|MISMO TITULAR|TRANSF(ERENCIA)?\.? PROPIA|TRASPASO PROPIO|TRASPASO ENTRE CUENTAS)\b/.test(g)) return true;
+  // El RUT de la propia empresa en la glosa.
+  const rut = normalizarRut(rutEmpresa);
+  if (rut && rutEnGlosa(descripcion) === rut) return true;
+  const razon = tokensLetras(razonSocial);
+  const propias = razon.filter((t) => t.length >= 2 && !GENERICAS_EMPRESA.has(t.toLowerCase()));
+  const glosa = tokensLetras(descripcion);
+  const enGlosa = new Set(glosa);
+  if (propias.length >= 2 && propias.join("").length >= 5) {
+    if (propias.every((t) => enGlosa.has(t))) return true;
+    // Persona natural truncada por el banco: "JUAN PEREZ S" = Juan Perez Soto.
+    const ultima = propias[propias.length - 1];
+    if (propias.length >= 3 && propias.slice(0, -1).every((t) => enGlosa.has(t)) && glosa.some((t) => ultima.startsWith(t))) return true;
+    return false;
+  }
+  // Una sola palabra distintiva ("Comercial Rojas SpA", "Inversiones Lagos Ltda"): cuenta si
+  // va JUNTO a una palabra genérica de la razón social ("COMERCIAL ROJAS", "INV LAGOS").
+  // La tarjeta "propia" no rechaza de un toque: mejor un falso positivo que esconder ventas.
+  if (propias.length === 1 && propias[0].length >= 4 && enGlosa.has(propias[0])) {
+    const genericas = razon.filter((t) => GENERICAS_EMPRESA.has(t.toLowerCase()) && !FORMA_O_CONECTOR.has(t.toLowerCase()));
+    return genericas.some((gen) => glosa.some((t) => t === gen || (t.length >= 3 && gen.startsWith(t))));
+  }
+  return false;
 }
+
+/** Forma jurídica y conectores de una razón social: no sirven para reconocerla. */
+const FORMA_O_CONECTOR = new Set<string>(["spa", "ltda", "limitada", "sa", "eirl", "y", "de", "del", "la", "el", "los", "las", "cia"]);
 
 /** ¿La glosa trae una forma jurídica (SPA, LTDA, S.A., EIRL)? → probablemente una empresa. */
 export function pareceEmpresa(descripcion: string | null | undefined): boolean {

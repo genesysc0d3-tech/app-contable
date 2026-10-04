@@ -16,6 +16,7 @@ const id = (k: number) => `00000000-0000-4000-8000-${String(k).padStart(12, "0")
 
 let db: Record<string, Row[]>;
 let seq = 0;
+let nUpdates = 0;
 
 function fakeSb() {
   return {
@@ -56,7 +57,8 @@ function fakeSb() {
                 });
               }
             }
-            return Promise.resolve({ error: null, count: filas.length }).then(ok);
+            nUpdates++;
+            return Promise.resolve({ error: null, count: filas.length, data: filas.map((r) => ({ id: r.id })) }).then(ok);
           }
           const data = single ? filas[0] ?? null : rango ? filas.slice(rango[0], rango[1] + 1) : filas;
           return Promise.resolve({ error: null, data, count: filas.length }).then(ok);
@@ -83,6 +85,7 @@ const ctx = { empresaId: E, userId: U, soporte: null };
 
 beforeEach(() => {
   seq = 0;
+  nUpdates = 0;
   emitidas = new Set();
   db = {
     propuestas_ia: [], movimientos_raw: [], propuesta_decisiones: [], clasificacion_reglas: [],
@@ -223,11 +226,20 @@ describe("reglas", () => {
     await responder([{ ids: Array.from({ length: k }, (_, i) => id(i + 1)), venta: true }]);
     expect(aprender).not.toHaveBeenCalled();
   });
-  it("glosas genéricas no crean regla aunque se repitan", async () => {
-    propuesta(1, "DEPOSITO EFECTIVO", { tipo_dte: 41 });
-    propuesta(2, "DEPOSITO EFECTIVO", { tipo_dte: 41 });
-    await responder([{ ids: [id(1), id(2)], venta: true }]);
+  it("glosas genéricas de bancos no crean regla aunque se repitan y se toquen a mano", async () => {
+    const glosas = ["DEPOSITO EFECTIVO", "ABONO TEF OTROS BANCOS", "TRANSF RECIBIDA OTROS BANCOS", "DEP.EFECTIVO CAJA VECINA",
+      "TRANSF. DESDE CUENTARUT", "TEF ENTRANTE", "RECIBISTE DINERO", "ABONO CUENTA CORRIENTE FALABELLA", "TRANSFERENCIA DE CAMILA"];
+    let k = 0;
+    for (const g of glosas) { propuesta(++k, g, { tipo_dte: 41 }); propuesta(++k, g, { tipo_dte: 41 }); }
+    await responder([{ ids: Array.from({ length: k }, (_, i) => id(i + 1)), venta: true, tocada: true }]);
     expect(aprender).not.toHaveBeenCalled();
+  });
+  it("las ventas se escriben agrupadas (mismo tipo y monto = un UPDATE), no fila por fila", async () => {
+    for (let k = 1; k <= 30; k++) propuesta(k, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41, total: k <= 20 ? 10000 : 5000 });
+    const r = await responder([{ ids: Array.from({ length: 30 }, (_, i) => id(i + 1)), venta: true }]);
+    expect(r.ventas).toBe(30);
+    expect(nUpdates).toBe(2);
+    expect(fila(25)).toMatchObject({ estado: "listo", monto_neto: 5000, iva: 0 });
   });
   it("las plataformas no crean regla", async () => {
     propuesta(1, "ABONO MERCADOPAGO", { tipo_dte: 41 });
@@ -252,9 +264,20 @@ describe("Deshacer", () => {
     const r = await responder([{ ids: [id(1), id(2)], venta: true }], null, DOC, g);
     expect(r.grupoId).toBe(g);
     const r2 = await responder([{ ids: [id(1), id(2)], venta: true }], null, DOC, g); // reintento
-    expect(r2.ventas).toBe(0);
+    // lo ya hecho cuenta como hecho: no "quedan para mirar"
+    expect(r2).toMatchObject({ ventas: 2, quedan: 0 });
+    expect(db.propuesta_decisiones.filter((e) => e.lote_id === g)).toHaveLength(2);
     expect(validarRespuesta({ documentoId: DOC, items: [{ ids: [id(1)], venta: true }], grupoId: "x" })).toHaveProperty("error");
     expect((await deshacerRespuestaGrupo(fakeSb() as never, ctx, g, deps)).devueltas).toBe(2);
+  });
+  it("un grupoId ya usado en OTRA cartola se rechaza", async () => {
+    const g = id(778);
+    propuesta(1, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });
+    propuesta(2, "TRANSFERENCIA DE ANA ROJAS", { tipo_dte: 41 }, { documento_id: OTRO_DOC });
+    await responder([{ ids: [id(2)], venta: false }], null, OTRO_DOC, g);
+    const r = await responder([{ ids: [id(1)], venta: false }], null, DOC, g);
+    expect(r.error).toMatch(/otra cartola/);
+    expect(fila(1).estado).toBe("pendiente");
   });
   it("tras recargar: la última respuesta deshacible de la cartola (un deshacer no cuenta)", async () => {
     for (const k of [1, 2, 3]) propuesta(k, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });

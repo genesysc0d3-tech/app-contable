@@ -1,4 +1,8 @@
 import { Suspense } from "react";
+
+// Las server actions de Check corren en esta ruta (responder una pregunta en grupo de
+// cientos de filas incluida): tope explícito en vez del default de la plataforma.
+export const maxDuration = 60;
 import { notFound } from "next/navigation";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -456,6 +460,7 @@ export default async function V5Page({ searchParams }: {
           empresaId={empresaId}
           empresaGiro={usuario.empresas.giro}
           empresaRazon={usuario.empresas.razon_social}
+          empresaRut={usuario.empresas.rut}
           emisorFaltan={faltanDelEmisor(usuario.empresas)}
           empresaTipo={mesaParam === "factura" ? tipoFacturas : tipoBoletas}
           clientes={clData.data ?? []}

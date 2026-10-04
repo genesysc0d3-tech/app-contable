@@ -100,7 +100,7 @@ const vacio = (error?: string): ResultadoGrupo => ({ ...(error ? { error } : {})
 
 type Fila = {
   id: string; estado: string | null; mesa: string | null; tipo_propuesto: string | null; tipo_dte: number | null;
-  fuente_clasificacion: string | null; total: number | null; movimiento_id: string | null;
+  fuente_clasificacion: string | null; total: number | null; movimiento_id: string | null; decision_lote: string | null;
 };
 type Mov = { id: string; documento_id: string | null; descripcion: string | null; tipo_flujo: string | null };
 
@@ -152,7 +152,7 @@ async function leerFilas(sb: SbMin, empresaId: string, ids: string[]): Promise<{
   for (let i = 0; i < ids.length; i += TROZO) {
     const { data, error } = await sb
       .from("propuestas_ia")
-      .select("id, estado, mesa, tipo_propuesto, tipo_dte, fuente_clasificacion, total, movimiento_id")
+      .select("id, estado, mesa, tipo_propuesto, tipo_dte, fuente_clasificacion, total, movimiento_id, decision_lote")
       .eq("empresa_id", empresaId)
       .in("id", ids.slice(i, i + TROZO));
     if (error) return { error: "No pudimos leer esas filas. Intenta de nuevo." };
@@ -217,6 +217,17 @@ export async function ejecutarRespuestaGrupo(
   const intocables = new Set(sep.intocables.keys());
 
   const grupoId = r.grupoId ?? nuevoLote();
+  // Un grupoId que ya se usó en OTRA cartola no se reusa (Deshacer mezclaría dos respuestas).
+  if (r.grupoId) {
+    const { data: otro } = await sb
+      .from("propuesta_decisiones")
+      .select("propuesta_id")
+      .eq("empresa_id", ctx.empresaId)
+      .eq("lote_id", r.grupoId)
+      .neq("documento_id", r.documentoId)
+      .range(0, 0);
+    if ((otro ?? []).length > 0) return vacio("Esa respuesta ya se usó en otra cartola. Recarga e intenta de nuevo.");
+  }
   const loteN = ids.length;
   const selloDe = (abierta: boolean) => sello("check_grupo", { usuarioId: ctx.userId, loteN, lote: grupoId, abierta, soporte: ctx.soporte });
 
@@ -224,10 +235,19 @@ export async function ejecutarRespuestaGrupo(
   let noVentas = 0;
   const vendidas: Array<{ fila: Fila; mov: Mov; tipo: 39 | 41; tocada: boolean }> = [];
   const noVenta: { mirada: string[]; ciega: string[] } = { mirada: [], ciega: [] };
+  // Ventas agrupadas por lo que escribe el UPDATE: mismo tipo + mismo total + mismo
+  // "tocada" = misma fila de valores → UN .in() por grupo (no un UPDATE por fila).
+  const porValores = new Map<string, { tipo: 39 | 41; total: number; tocada: boolean; tipoPropuesto: string; filas: Fila[] }>();
 
   for (const f of filas) {
     const d = decision.get(f.id)!;
     const mov = movs.get(f.movimiento_id!)!;
+    // Reintento con el mismo grupo: lo que ya quedó hecho cuenta como hecho, no "queda".
+    if (f.decision_lote === grupoId) {
+      if (f.estado === "listo") ventas++;
+      else if (f.estado === "rechazado") noVentas++;
+      continue;
+    }
     if (intocables.has(f.id)) continue;
     if (!(ESTADOS_TOCABLES as readonly string[]).includes(f.estado ?? "")) continue; // nunca aprobado
     if (destinoPropuesta(f) === "preguntar") continue; // «¿?»: una por una
@@ -237,17 +257,33 @@ export async function ejecutarRespuestaGrupo(
     if (destinoPropuesta(f) !== "boleta") continue; // no-venta clasificada o factura: una por una
     const tipo = tipoDeVenta(f, { carril, p2p, iva: r.iva });
     if (tipo == null) continue;
-    const afecta = tipo === 39;
-    const { neto, iva } = derivarMontosDte(Number(f.total ?? 0), afecta);
-    const tipoPropuesto = tipo === 41 && esExentoPorNaturaleza(f.tipo_propuesto) ? f.tipo_propuesto! : afecta ? "boleta" : "exenta";
-    const { error, count } = await sb
-      .from("propuestas_ia")
-      .update({ tipo_propuesto: tipoPropuesto, tipo_dte: tipo, monto_neto: neto, iva, estado: "listo", ...selloDe(d.tocada) }, { count: "exact" })
-      .eq("empresa_id", ctx.empresaId)
-      .eq("id", f.id)
-      .in("estado", [...ESTADOS_TOCABLES]);
-    if (error) return { error: "Se guardó una parte. Intenta de nuevo con lo que falta.", grupoId, ventas, noVentas, quedan: ids.length - ventas - noVentas, reglas: 0 };
-    if ((count ?? 0) > 0) { ventas++; vendidas.push({ fila: f, mov, tipo, tocada: d.tocada }); }
+    const total = Math.round(Number(f.total ?? 0));
+    const tipoPropuesto = tipo === 41 && esExentoPorNaturaleza(f.tipo_propuesto) ? f.tipo_propuesto! : tipo === 39 ? "boleta" : "exenta";
+    const k = `${tipo}|${total}|${d.tocada}|${tipoPropuesto}`;
+    const g = porValores.get(k) ?? { tipo, total, tocada: d.tocada, tipoPropuesto, filas: [] };
+    g.filas.push(f);
+    porValores.set(k, g);
+  }
+
+  for (const g of porValores.values()) {
+    const { neto, iva } = derivarMontosDte(g.total, g.tipo === 39);
+    for (let i = 0; i < g.filas.length; i += TROZO) {
+      const trozo = g.filas.slice(i, i + TROZO);
+      const { data, error } = await sb
+        .from("propuestas_ia")
+        .update({ tipo_propuesto: g.tipoPropuesto, tipo_dte: g.tipo, monto_neto: neto, iva, estado: "listo", ...selloDe(g.tocada) }, { count: "exact" })
+        .eq("empresa_id", ctx.empresaId)
+        .in("id", trozo.map((f) => f.id))
+        .in("estado", [...ESTADOS_TOCABLES])
+        .select("id");
+      if (error) return { error: "Se guardó una parte. Intenta de nuevo con lo que falta.", grupoId, ventas, noVentas, quedan: Math.max(0, ids.length - ventas - noVentas), reglas: 0 };
+      const hechos = new Set(((data ?? []) as Array<{ id: string }>).map((x) => x.id));
+      for (const f of trozo) {
+        if (!hechos.has(f.id)) continue;
+        ventas++;
+        vendidas.push({ fila: f, mov: movs.get(f.movimiento_id!)!, tipo: g.tipo, tocada: g.tocada });
+      }
+    }
   }
 
   for (const [abierta, lista] of [[true, noVenta.mirada], [false, noVenta.ciega]] as const) {
@@ -258,7 +294,7 @@ export async function ejecutarRespuestaGrupo(
         .eq("empresa_id", ctx.empresaId)
         .in("id", lista.slice(i, i + TROZO))
         .in("estado", [...ESTADOS_TOCABLES]);
-      if (error) return { error: "Se guardó una parte. Intenta de nuevo con lo que falta.", grupoId, ventas, noVentas, quedan: ids.length - ventas - noVentas, reglas: 0 };
+      if (error) return { error: "Se guardó una parte. Intenta de nuevo con lo que falta.", grupoId, ventas, noVentas, quedan: Math.max(0, ids.length - ventas - noVentas), reglas: 0 };
       noVentas += count ?? 0;
     }
   }
