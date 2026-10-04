@@ -33,6 +33,7 @@ begin
   end if;
 end $$;
 
+drop function if exists public.responder_grupo_ventas(uuid, uuid, uuid, integer, uuid, boolean, jsonb);
 drop index if exists public.idx_clasificacion_reglas_nacio_lote;
 alter table public.clasificacion_reglas drop column if exists nacio_lote;
 

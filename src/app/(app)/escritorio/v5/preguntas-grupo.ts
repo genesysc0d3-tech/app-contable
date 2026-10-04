@@ -201,7 +201,7 @@ function textos(kind: KindTarjeta, n: number, personas: Persona[], p2p: boolean)
     case "propia":
       return {
         titulo: `${plural(n, "transferencia", "transferencias")} desde tus propias cuentas`,
-        pregunta: "Parece plata tuya que moviste entre cuentas. Márcalas persona por persona.",
+        pregunta: "Parece plata tuya que moviste entre cuentas. Marca las que son tuyas.",
         // Sin respuesta de un toque: un apellido parecido no puede esconder ventas.
         respuestas: [{ accion: "algunas", texto: "Revisar persona por persona" }, { accion: "mirar", texto: "Prefiero mirarlas" }],
         ventaPorDefecto: false,
@@ -284,6 +284,15 @@ export function noAbreLista(t: Pick<Tarjeta, "kind" | "personas">): boolean {
   return (t.kind === "ventas" || t.kind === "canal") && t.personas.length > MAX_PERSONAS_NO_DE_UN_TOQUE;
 }
 
+/** Más filas que esto con montos dispares (máx ≥ 3× mín) = no es una persona de verdad. */
+export const MAX_FILAS_PERSONA = 20;
+export function esPersonaSospechosa(montos: number[]): boolean {
+  if (montos.length <= MAX_FILAS_PERSONA) return false;
+  const pos = montos.filter((m) => m > 0);
+  if (pos.length === 0) return false;
+  return Math.max(...pos) >= 3 * Math.min(...pos);
+}
+
 /** Respuestas que terminan en VENTA (para saber si hace falta la pregunta del IVA). */
 export function tarjetaPuedeVender(kind: KindTarjeta): boolean {
   return kind === "ventas" || kind === "canal" || kind === "sigue_igual";
@@ -313,7 +322,21 @@ export function armarPreguntas(filas: FilaPregunta[], ctx: ContextoPreguntas): R
 
   const tarjetas: Tarjeta[] = [];
   for (const kind of ORDEN_RIESGO) {
-    const rows = porKind.get(kind) ?? [];
+    let rows = porKind.get(kind) ?? [];
+    if (rows.length === 0) continue;
+    // Una "persona" que aparece más de 20 veces con montos dispares no es una persona: es
+    // una glosa genérica que se coló (un banco, un programa). Esas filas, una por una.
+    if (kind !== "canal") {
+      const porClave = new Map<string, FilaPregunta[]>();
+      for (const f of rows) { const k = claveDe(f)?.clave; if (k) porClave.set(k, [...(porClave.get(k) ?? []), f]); }
+      const sospechosas = new Set<string>();
+      for (const [k, fs] of porClave) if (esPersonaSospechosa(fs.map((f) => Number(f.total ?? 0)))) sospechosas.add(k);
+      if (sospechosas.size > 0) {
+        const fuera = rows.filter((f) => sospechosas.has(claveDe(f)?.clave ?? ""));
+        sueltas += fuera.length;
+        rows = rows.filter((f) => !sospechosas.has(claveDe(f)?.clave ?? ""));
+      }
+    }
     if (rows.length === 0) continue;
     if (rows.length < MIN_FILAS_TARJETA) { sueltas += rows.length; continue; }
     const porPersona = new Map<string, Persona>();

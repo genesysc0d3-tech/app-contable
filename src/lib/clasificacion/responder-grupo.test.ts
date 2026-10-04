@@ -17,9 +17,42 @@ const id = (k: number) => `00000000-0000-4000-8000-${String(k).padStart(12, "0")
 let db: Record<string, Row[]>;
 let seq = 0;
 let nUpdates = 0;
+let nRpc = 0;
+
+function logCambio(antes: Row, r: Row) {
+  if (["estado", "tipo_propuesto", "tipo_dte"].some((k) => antes[k] !== r[k])) {
+    db.propuesta_decisiones.push({
+      id: ++seq, empresa_id: r.empresa_id, propuesta_id: r.id, accion: "cambio", canal: r.decision_canal,
+      lote_id: r.decision_lote, lote_n: r.decision_lote_n, abierta: r.decision_abierta,
+      antes_estado: antes.estado, despues_estado: r.estado, antes_tipo_propuesto: antes.tipo_propuesto,
+      antes_tipo_dte: antes.tipo_dte, despues_tipo_dte: r.tipo_dte,
+      documento_id: db.movimientos_raw.find((m) => m.id === r.movimiento_id)?.documento_id ?? null,
+    });
+  }
+}
+
+/** Emula public.responder_grupo_ventas (la prueba SQL real está en prueba-check-agrupado.sql). */
+function rpcVentas(a: Record<string, unknown>) {
+  nRpc++;
+  const out: Array<{ id: string }> = [];
+  for (const f of a.p_filas as Row[]) {
+    const r = db.propuestas_ia.find((x) => x.id === f.id && x.empresa_id === a.p_empresa_id);
+    const m = r && db.movimientos_raw.find((x) => x.id === r.movimiento_id);
+    if (!r || !m || m.documento_id !== a.p_documento_id || m.tipo_flujo !== "entrada") continue;
+    if (!["pendiente", "editado"].includes(String(r.estado)) || r.decision_lote === a.p_lote) continue;
+    if (Math.round(Number(r.total)) !== Math.round(Number(f.total))) continue;
+    const antes = { ...r };
+    Object.assign(r, { tipo_propuesto: f.tipo_propuesto, tipo_dte: f.tipo_dte, monto_neto: f.monto_neto, iva: f.iva, estado: "listo",
+      decision_canal: "check_grupo", decision_lote: a.p_lote, decision_lote_n: a.p_lote_n, decision_abierta: f.tocada === true });
+    logCambio(antes, r);
+    out.push({ id: String(r.id) });
+  }
+  return { data: out, error: null };
+}
 
 function fakeSb() {
   return {
+    rpc: async (fn: string, a: Record<string, unknown>) => (fn === "responder_grupo_ventas" ? rpcVentas(a) : { data: null, error: { message: "rpc" } }),
     from(tabla: string) {
       const filtros: Array<(r: Row) => boolean> = [];
       let op: "select" | "update" = "select";
@@ -86,6 +119,7 @@ const ctx = { empresaId: E, userId: U, soporte: null };
 beforeEach(() => {
   seq = 0;
   nUpdates = 0;
+  nRpc = 0;
   emitidas = new Set();
   db = {
     propuestas_ia: [], movimientos_raw: [], propuesta_decisiones: [], clasificacion_reglas: [],
@@ -210,11 +244,24 @@ describe("sello", () => {
 });
 
 describe("reglas", () => {
-  it("una por contraparte con ≥2 filas; la persona de 1 fila no crea regla; sin propagar", async () => {
-    propuesta(1, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });
-    propuesta(2, "TRANSF DE JUAN PEREZ", { tipo_dte: 41 });
+  it("un 'Sí' de GRUPO nunca crea reglas (aunque sean personas claras con varias filas)", async () => {
+    propuesta(1, "TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
+    propuesta(2, "TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
     propuesta(3, "TRANSFERENCIA DE ANA ROJAS", { tipo_dte: 41 });
-    const r = await responder([{ ids: [id(1), id(2), id(3)], venta: true }]);
+    propuesta(4, "TRANSFERENCIA DE ANA ROJAS", { tipo_dte: 41 });
+    const r = await responder([{ ids: [1, 2, 3, 4].map(id), venta: true }]);
+    expect(r.ventas).toBe(4);
+    expect(aprender).not.toHaveBeenCalled();
+    expect(r.reglas).toBe(0);
+  });
+  it("solo la persona TOCADA A MANO con RUT válido y nombre (≥2 filas) enseña; sin propagar", async () => {
+    propuesta(1, "TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
+    propuesta(2, "TRANSFERENCIA DE 12.345.678-5 JUAN PEREZ", { tipo_dte: 41 });
+    propuesta(3, "TRANSFERENCIA DE ANA ROJAS", { tipo_dte: 41 }); // tocada, sin RUT → no
+    propuesta(4, "TRANSFERENCIA DE ANA ROJAS", { tipo_dte: 41 });
+    propuesta(5, "TEF 11.111.111-1 CAMILA", { tipo_dte: 41 }); // RUT sin nombre → no
+    propuesta(6, "TEF 11.111.111-1 CAMILA", { tipo_dte: 41 });
+    const r = await responder([{ ids: [1, 2, 3, 4, 5, 6].map(id), venta: true, tocada: true }]);
     expect(aprender).toHaveBeenCalledTimes(1);
     expect(aprender.mock.calls[0][1]).toMatchObject({ tipoDte: 41, canal: "check_grupo", propagar: false, nacioLote: r.grupoId, documentoId: DOC });
     expect(r.reglas).toBe(1);
@@ -234,11 +281,12 @@ describe("reglas", () => {
     await responder([{ ids: Array.from({ length: k }, (_, i) => id(i + 1)), venta: true, tocada: true }]);
     expect(aprender).not.toHaveBeenCalled();
   });
-  it("las ventas se escriben agrupadas (mismo tipo y monto = un UPDATE), no fila por fila", async () => {
+  it("las ventas se escriben en UNA llamada a la base (RPC), no fila por fila", async () => {
     for (let k = 1; k <= 30; k++) propuesta(k, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41, total: k <= 20 ? 10000 : 5000 });
     const r = await responder([{ ids: Array.from({ length: 30 }, (_, i) => id(i + 1)), venta: true }]);
     expect(r.ventas).toBe(30);
-    expect(nUpdates).toBe(2);
+    expect(nRpc).toBe(1);
+    expect(nUpdates).toBe(0);
     expect(fila(25)).toMatchObject({ estado: "listo", monto_neto: 5000, iva: 0 });
   });
   it("las plataformas no crean regla", async () => {
@@ -269,6 +317,12 @@ describe("Deshacer", () => {
     expect(db.propuesta_decisiones.filter((e) => e.lote_id === g)).toHaveLength(2);
     expect(validarRespuesta({ documentoId: DOC, items: [{ ids: [id(1)], venta: true }], grupoId: "x" })).toHaveProperty("error");
     expect((await deshacerRespuestaGrupo(fakeSb() as never, ctx, g, deps)).devueltas).toBe(2);
+  });
+  it("un grupoId con eventos sin cartola (documento_id null) también se rechaza", async () => {
+    const g = id(779);
+    db.propuesta_decisiones.push({ id: ++seq, empresa_id: E, propuesta_id: id(50), lote_id: g, canal: "check_grupo", accion: "cambio", abierta: false, documento_id: null });
+    propuesta(1, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });
+    expect((await responder([{ ids: [id(1)], venta: false }], null, DOC, g)).error).toMatch(/otra cartola/);
   });
   it("un grupoId ya usado en OTRA cartola se rechaza", async () => {
     const g = id(778);

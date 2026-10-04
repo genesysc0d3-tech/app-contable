@@ -10,8 +10,14 @@
 --     "Deshacer" de una respuesta apaga SOLO las reglas que nacieron en ella.
 -- (c) evidencia_reglas: una decisión check_grupo con abierta=true cuenta como MIRADA
 --     (umbral firme 2 en vez de 3); check_grupo que cambia el tipo_dte es una decisión
---     humana (esa fila no confirma a la regla). Espejo de esDecisionMirada
---     (src/lib/ai/regla-evidencia.ts). Mismo cuerpo que 20261005120000 + esas 2 líneas.
+--     humana; y un check_grupo A CIEGAS (abierta=false: "Sí" a toda la tarjeta) no
+--     confirma la regla. Espejo de esDecisionMirada (src/lib/ai/regla-evidencia.ts).
+--     Mismo cuerpo que 20261005120000 + esas 3 condiciones.
+-- (d) responder_grupo_ventas(): escribe las VENTAS de una respuesta en grupo en UNA
+--     llamada (UPDATE … FROM jsonb), repitiendo en SQL los candados de la acción:
+--     empresa, documento, mesa boleta, solo pendiente/editado, sin boleta vigente ni job
+--     de emisión vivo, tipo 39/41, y montos que cuadran con el total de la fila. Sella
+--     en la misma escritura (check_grupo). Solo service_role.
 --
 -- Lock: CHECK NOT VALID (no escanea), ADD COLUMN nullable sin default (metadata).
 -- Rollback: 20261006120000_check_agrupado_DOWN.sql.
@@ -102,6 +108,11 @@ as $$
                 and d.canal in ('check_fila', 'check_detalle', 'check_lote', 'check_grupo', 'mcp', 'telegram')
                 and d.antes_tipo_dte is distinct from d.despues_tipo_dte
            )
+       -- Fase 4: un "Sí" a toda una tarjeta (check_grupo a ciegas) no confirma reglas
+       and not exists (
+             select 1 from public.propuesta_decisiones d
+              where d.propuesta_id = p.id and d.canal = 'check_grupo' and d.abierta is false
+           )
        -- una hermana que la PROPAGACIÓN ligó a la regla (misma cartola que la enseñó, a
        -- ciegas) no es evidencia independiente
        and not exists (
@@ -146,5 +157,57 @@ $$;
 
 revoke all on function public.evidencia_reglas(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.evidencia_reglas(uuid, uuid[]) to service_role;
+
+-- ── (d) ventas de una respuesta en grupo, en una llamada ──────────────────────────
+create or replace function public.responder_grupo_ventas(
+  p_empresa_id uuid,
+  p_documento_id uuid,
+  p_lote uuid,
+  p_lote_n integer,
+  p_usuario uuid,
+  p_soporte boolean,
+  p_filas jsonb
+)
+returns table (id uuid)
+language sql
+security definer
+set search_path = public, pg_temp
+as $$
+  update public.propuestas_ia p
+     set tipo_propuesto   = f.tipo_propuesto,
+         tipo_dte         = f.tipo_dte,
+         monto_neto       = f.monto_neto,
+         iva              = f.iva,
+         estado           = 'listo',
+         decision_canal   = 'check_grupo',
+         decision_por     = p_usuario,
+         decision_lote    = p_lote,
+         decision_lote_n  = greatest(1, p_lote_n),
+         decision_abierta = coalesce(f.tocada, false),
+         decision_soporte = p_soporte
+    from jsonb_to_recordset(p_filas) as f(id uuid, tipo_propuesto text, tipo_dte integer, monto_neto numeric, iva numeric, total numeric, tocada boolean),
+         public.movimientos_raw m
+   where p.id = f.id
+     and p.empresa_id = p_empresa_id
+     and m.id = p.movimiento_id
+     and m.empresa_id = p_empresa_id
+     and m.documento_id = p_documento_id
+     and m.tipo_flujo = 'entrada'
+     and coalesce(p.mesa, 'boleta') = 'boleta'
+     and p.estado in ('pendiente', 'editado')
+     and p.decision_lote is distinct from p_lote
+     and f.tipo_dte in (39, 41)
+     and f.tipo_propuesto in ('boleta', 'exenta', 'transferencia_p2p', 'compraventa_crypto', 'operacion_forex')
+     and round(coalesce(p.total, 0)) = round(f.total)
+     and f.monto_neto + f.iva = round(f.total)
+     and (f.tipo_dte = 39 or f.iva = 0)
+     and not exists (select 1 from public.boletas_emitidas b
+                      where b.propuesta_id = p.id and b.estado is distinct from 'anulada')
+     and not exists (select 1 from public.emision_jobs j
+                      where j.propuesta_id = p.id and j.estado in ('revision_pendiente', 'created', 'running'))
+  returning p.id;
+$$;
+revoke all on function public.responder_grupo_ventas(uuid, uuid, uuid, integer, uuid, boolean, jsonb) from public, anon, authenticated;
+grant execute on function public.responder_grupo_ventas(uuid, uuid, uuid, integer, uuid, boolean, jsonb) to service_role;
 
 reset lock_timeout;

@@ -221,18 +221,26 @@ const RUIDO_AGRUPAR = new Set<string>([
   "corriente", "rendimientos", "rendimiento", "ganados", "ganado", "intereses", "interes", "nacionales",
   "nacional", "mismo", "misma", "propia", "propio", "trans", "transf", "tef", "nomina", "pension",
   "anticipo", "aporte", "familiar", "invierno", "transferencia", "transferencias", "electronica",
+  // Vuelta 3: abreviaturas y conceptos de previsión/seguros que traen las glosas.
+  "trf", "trx", "rec", "recib", "bcos", "bco", "interb", "transfer", "cod", "en", "afp", "isapre", "pgu",
+  "compin", "subsidio", "licencia", "rescate", "vencimiento", "plazo", "seguro", "seguros", "cesantia",
+  "credito", "social", "aguinaldo", "tapp", "andes", "caja", "ips", "fonasa", "previred", "mutual",
 ]);
 
 /**
- * Nombre de persona para AGRUPAR: el patrón de la regla menos RUIDO_AGRUPAR. Exige ≥2
- * palabras con forma de nombre propio (letras, ≥2 c/u): "JUAN PEREZ" sí; "CAMILA" sola,
- * "OTROS BANCOS" o "CAJA VECINA" no → esa fila no forma persona (se mira una por una) y
- * nunca acuña regla desde un grupo.
+ * Nombre de persona para AGRUPAR, desde la glosa: fuera RUIDO y RUIDO_AGRUPAR ANTES de
+ * cortar a 4 palabras (si no, "TRF REC BCOS MARIA JOSE GONZALEZ" y "…MARIA JOSE PEREZ"
+ * compartían clave). Exige ≥2 palabras con forma de nombre propio: "CAMILA" sola, "OTROS
+ * BANCOS" o "CAJA VECINA" no forman persona (se miran una por una).
  */
 export const MIN_TOKENS_NOMBRE = 2;
-function patronParaAgrupar(patron: string | null): string | null {
-  if (!patron) return null;
-  const tokens = patron.split(" ").filter((t) => /^\p{L}{2,}$/u.test(t) && !RUIDO_AGRUPAR.has(deAccent(t).toLowerCase()));
+function nombreParaAgrupar(descripcion: string | null | undefined): string | null {
+  const tokens = String(descripcion ?? "")
+    .toUpperCase()
+    .replace(/[^A-ZÁÉÍÓÚÜÑ\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && !RUIDO.has(deAccent(t).toLowerCase()) && !RUIDO_AGRUPAR.has(deAccent(t).toLowerCase()))
+    .slice(0, 4);
   if (tokens.length < MIN_TOKENS_NOMBRE) return null;
   const out = tokens.join(" ");
   return deAccent(out).replace(/[^A-Z]/g, "").length >= 5 ? out : null;
@@ -256,7 +264,7 @@ export function claveContraparte(
   const patron = extra?.patron ?? null;
   const canal = plataformaEnGlosa(descripcion);
   if (canal) return { clave: `canal:${canal.clave}`, tipo: "canal", etiqueta: canal.nombre, patron };
-  const nombre = patronParaAgrupar(patron);
+  const nombre = nombreParaAgrupar(descripcion);
   const rut = rutEnGlosa(descripcion) ?? normalizarRut(receptorRut);
   if (rut) return { clave: `rut:${rut}`, tipo: "rut", etiqueta: nombre ? titulo(nombre) : rut, patron: nombre ? patron : null };
   if (nombre) return { clave: `nombre:${deAccent(nombre).toUpperCase()}`, tipo: "nombre", etiqueta: titulo(nombre), patron };
@@ -269,7 +277,7 @@ export function claveContraparte(
 const GENERICAS_EMPRESA = new Set<string>([
   "inversiones", "inversion", "comercial", "comercializadora", "empresa", "empresas",
   "asesorias", "asesoria", "consultora", "consultores", "importadora", "exportadora",
-  "distribuidora", "chile", "chilena", "grupo", "global", "sociedad", "servicios",
+  "distribuidora", "grupo", "sociedad", "servicios",
   "inmobiliaria", "constructora", "ingenieria", "transportes", "tecnologia", "spa",
   "ltda", "limitada", "sa", "eirl", "y", "de", "del", "la", "el", "los", "las", "cia",
 ]);
@@ -300,7 +308,7 @@ export function pareceCuentaPropia(
   const rut = normalizarRut(rutEmpresa);
   if (rut && rutEnGlosa(descripcion) === rut) return true;
   const razon = tokensLetras(razonSocial);
-  const propias = razon.filter((t) => t.length >= 2 && !GENERICAS_EMPRESA.has(t.toLowerCase()));
+  const propias = razon.filter((t) => t.length >= 2 && !GENERICAS_EMPRESA.has(t.toLowerCase()) && !NEUTRAS_EMPRESA.has(t.toLowerCase()));
   const glosa = tokensLetras(descripcion);
   const enGlosa = new Set(glosa);
   if (propias.length >= 2 && propias.join("").length >= 5) {
@@ -315,10 +323,21 @@ export function pareceCuentaPropia(
   // La tarjeta "propia" no rechaza de un toque: mejor un falso positivo que esconder ventas.
   if (propias.length === 1 && propias[0].length >= 4 && enGlosa.has(propias[0])) {
     const genericas = razon.filter((t) => GENERICAS_EMPRESA.has(t.toLowerCase()) && !FORMA_O_CONECTOR.has(t.toLowerCase()));
-    return genericas.some((gen) => glosa.some((t) => t === gen || (t.length >= 3 && gen.startsWith(t))));
+    // Palabra completa, o abreviatura de ≥5 letras exactas ("INVERS" = INVERSIONES); nunca "INV".
+    return genericas.some((gen) => glosa.some((t) => t === gen || (t.length >= 5 && gen.startsWith(t))));
   }
   return false;
 }
+
+/**
+ * Palabras de razón social que también son bancos, plataformas o el país: no cuentan ni
+ * como distintivas ni como compañera genérica ("BANCO CHILE ROJAS" no es "Chile Rojas SpA").
+ */
+const NEUTRAS_EMPRESA = new Set<string>([
+  "chile", "chilena", "chileno", "global", "estado", "santander", "bci", "itau", "scotiabank", "bice",
+  "security", "falabella", "ripley", "internacional", "consorcio", "banco", "mercado", "pago", "flow",
+  "khipu", "tenpo", "mach", "andes",
+]);
 
 /** Forma jurídica y conectores de una razón social: no sirven para reconocerla. */
 const FORMA_O_CONECTOR = new Set<string>(["spa", "ltda", "limitada", "sa", "eirl", "y", "de", "del", "la", "el", "los", "las", "cia"]);

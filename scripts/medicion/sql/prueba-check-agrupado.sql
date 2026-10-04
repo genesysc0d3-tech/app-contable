@@ -92,12 +92,12 @@ select pg_temp.ins('boletas_emitidas', jsonb_build_object('empresa_id', '0000000
 -- [2] evidencia: check_grupo abierta = mirada; ciega no; la que cambió el tipo en grupo no confirma
 do $$
 declare e record; esperadas_miradas int := case when current_setting('prueba.fase') = 'up' then 1 else 0 end;
-        esperadas int := case when current_setting('prueba.fase') = 'up' then 2 else 3 end;
+        esperadas int := case when current_setting('prueba.fase') = 'up' then 1 else 3 end;
 begin
   select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f9', array['00000000-0000-4000-8000-0000000009b1']::uuid[]);
   if e.confirmadas <> esperadas then raise exception '[2/%] FALLA: confirmadas=% (esperaba %)', current_setting('prueba.fase'), e.confirmadas, esperadas; end if;
   if e.confirmadas_miradas <> esperadas_miradas then raise exception '[2/%] FALLA: miradas=% (esperaba %)', current_setting('prueba.fase'), e.confirmadas_miradas, esperadas_miradas; end if;
-  raise notice '[2/%] OK: confirmadas=%, miradas=% (check_grupo tocado = mirado; check_grupo que puso el tipo no confirma)', current_setting('prueba.fase'), e.confirmadas, e.confirmadas_miradas;
+  raise notice '[2/%] OK: confirmadas=%, miradas=% (check_grupo tocado = mirado; a ciegas o que puso el tipo no confirma)', current_setting('prueba.fase'), e.confirmadas, e.confirmadas_miradas;
 end $$;
 
 -- [3] nacio_lote (solo con la migración)
@@ -111,5 +111,39 @@ begin
   else
     raise notice '[3] OK: nacio_lote fuera tras el DOWN';
   end if;
+end $$;
+-- [4] responder_grupo_ventas: una llamada, mismos candados que la acción
+do $$
+declare n int; l uuid := gen_random_uuid(); r record;
+begin
+  if current_setting('prueba.fase') <> 'up' then raise notice '[4] (sin la función tras el DOWN)'; return; end if;
+  perform pg_temp.ins('movimientos_raw', jsonb_build_object('id', '00000000-0000-4000-8000-0000000009a' || k,
+         'empresa_id', '00000000-0000-4000-8000-0000000000f9', 'documento_id', '00000000-0000-4000-8000-0000000009c1',
+         'descripcion', 'TRANSFERENCIA DE NORA PAZ', 'monto', 11900, 'tipo_flujo', case when k = 4 then 'salida' else 'entrada' end, 'fecha', current_date))
+    from generate_series(1, 4) k;
+  insert into public.propuestas_ia (id, empresa_id, movimiento_id, tipo_propuesto, tipo_dte, confianza, total, fuente_clasificacion, estado, orig_tipo_dte_fuente)
+  select ('00000000-0000-4000-8000-000000000a' || k || '1')::uuid, '00000000-0000-4000-8000-0000000000f9',
+         ('00000000-0000-4000-8000-0000000009a' || k)::uuid, 'exenta', null, 0.5, 11900, 'ia_opencode',
+         case when k = 3 then 'aprobado' else 'pendiente' end, 'auto_sin_tipo'
+    from generate_series(1, 4) k;
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c1', l, 5,
+    null, null, jsonb_build_array(
+      jsonb_build_object('id', '00000000-0000-4000-8000-000000000a11', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', true),
+      jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 99999, 'tocada', false),
+      jsonb_build_object('id', '00000000-0000-4000-8000-000000000a31', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', false),
+      jsonb_build_object('id', '00000000-0000-4000-8000-000000000a41', 'tipo_propuesto', 'boleta', 'tipo_dte', 39, 'monto_neto', 10000, 'iva', 1900, 'total', 11900, 'tocada', false)));
+  if n <> 1 then raise exception '[4] FALLA: vendió % filas (esperaba 1: monto que no cuadra, aprobada y salida fuera)', n; end if;
+  select * into r from public.propuestas_ia where id = '00000000-0000-4000-8000-000000000a11';
+  if r.estado <> 'listo' or r.tipo_dte <> 39 or r.decision_canal <> 'check_grupo' or r.decision_lote <> l or r.decision_abierta is not true then
+    raise exception '[4] FALLA: fila vendida mal sellada (estado=% canal=% abierta=%)', r.estado, r.decision_canal, r.decision_abierta;
+  end if;
+  -- otra cartola: nada
+  select count(*) into n from public.responder_grupo_ventas('00000000-0000-4000-8000-0000000000f9', '00000000-0000-4000-8000-0000000009c2', gen_random_uuid(), 1,
+    null, null, jsonb_build_array(jsonb_build_object('id', '00000000-0000-4000-8000-000000000a21', 'tipo_propuesto', 'exenta', 'tipo_dte', 41, 'monto_neto', 11900, 'iva', 0, 'total', 11900, 'tocada', false)));
+  if n <> 0 then raise exception '[4] FALLA: vendió una fila de otra cartola'; end if;
+  if has_function_privilege('authenticated', 'public.responder_grupo_ventas(uuid, uuid, uuid, integer, uuid, boolean, jsonb)', 'execute') then
+    raise exception '[4] FALLA: authenticated puede ejecutar la RPC';
+  end if;
+  raise notice '[4] OK: RPC vende 1 de 4 (monto distinto, aprobada, salida y otra cartola fuera), sella check_grupo, solo service_role';
 end $$;
 rollback;

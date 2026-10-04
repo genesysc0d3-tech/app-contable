@@ -130,7 +130,7 @@ export default function PreguntasGrupo({
       if (r.noVentas > 0) partes.push(`${r.noVentas} sin boleta`);
       let texto = partes.length > 0 ? `${partes.join(" y ")}.` : "No cambió nada.";
       if (r.quedan > 0) texto += ` ${r.quedan === 1 ? "1 queda" : `${r.quedan} quedan`} para mirar una por una.`;
-      if (r.reglas > 0) texto += ` La próxima vez ${r.reglas === 1 ? "esa persona va" : "esas personas van"} directo.`;
+      if (r.reglas > 0) texto += ` Aprendí ${r.reglas === 1 ? "a 1 persona que marcaste" : `a ${r.reglas} personas que marcaste`}: la próxima vez te la propongo.`;
       if (r.error) toast(r.error, "error");
       setHechas((prev) => [{ id: `${t.id}-${Date.now()}`, titulo: t.titulo, texto, grupoId: r.grupoId ?? grupoId, estado: "hecha" }, ...prev.filter((h) => h.grupoId !== grupoId)]);
       setRespondidas((prev) => ({ base: propuestas, ids: new Set([...(prev.base === propuestas ? prev.ids : []), ...items.flatMap((i) => i.ids)]) }));
@@ -176,7 +176,8 @@ export default function PreguntasGrupo({
     if (accion === "mirar") { onUnaPorUna(); return; }
     if (accion === "algunas") {
       const venta: Record<string, boolean> = {};
-      for (const p of t.personas) venta[p.clave] = p.antesNoVenta ? false : t.ventaPorDefecto;
+      // Cuenta propia: cada persona parte SIN decidir (nada se rechaza por defecto).
+      if (t.kind !== "propia") for (const p of t.personas) venta[p.clave] = p.antesNoVenta ? false : t.ventaPorDefecto;
       poner(t.id, { fase: "lista_personas", venta, filas: {}, tocadas: [], abiertas: [], buscar: "" });
       return;
     }
@@ -367,10 +368,14 @@ function ListaPersonas({ t, f, onFase, onListo }: {
   const nFilasVenta = t.personas.reduce((s, p) => s + p.ids.filter((id) => f.filas[id] ?? ventaDe(p)).length, 0);
   const set = (patch: Partial<Extract<Fase, { fase: "lista_personas" }>>) => onFase({ ...f, ...patch });
   const quien = t.kind === "canal" ? "pagos" : "personas";
+  const propia = t.kind === "propia";
+  const faltan = propia ? t.personas.filter((p) => f.venta[p.clave] === undefined).length : 0;
+  const elegir = (p: Persona, venta: boolean) =>
+    set({ venta: { ...f.venta, [p.clave]: venta }, tocadas: f.tocadas.includes(p.clave) ? f.tocadas : [...f.tocadas, p.clave] });
   return (
     <>
       <div className="pg-preg" style={{ fontSize: 13.5 }}>
-        {t.ventaPorDefecto && !f.marcar ? "Desmarca las que NO fueron venta." : "Marca las que SÍ fueron venta."}
+        {propia ? "Marca las que son tuyas." : t.ventaPorDefecto && !f.marcar ? "Desmarca las que NO fueron venta." : "Marca las que SÍ fueron venta."}
       </div>
       {t.personas.length > 15 && (
         <input className="pg-in" type="search" placeholder="Buscar por nombre" value={f.buscar} onChange={(e) => set({ buscar: e.target.value })} aria-label="Buscar persona" />
@@ -387,14 +392,19 @@ function ListaPersonas({ t, f, onFase, onListo }: {
                   <div className="pg-sub" style={{ marginTop: 1 }}>
                     {p.ids.length === 1 ? "1 movimiento" : `${p.ids.length} movimientos`} · {fmt(p.total)}
                     {p.antesNoVenta && <> · <span style={{ color: "var(--amber)" }}>la otra vez no era venta</span></>}
-                    {p.ids.length > 1 && (
+                    {p.ids.length > 1 && !propia && (
                       <> · <button className="pg-link" style={{ fontSize: 11 }} onClick={() => set({ abiertas: abierta ? f.abiertas.filter((c) => c !== p.clave) : [...f.abiertas, p.clave] })}>
                         {abierta ? "Ocultar" : `Ver sus ${p.ids.length}`}
                       </button></>
                     )}
                   </div>
                 </div>
-                <Interruptor
+                {propia ? (
+                  <span role="radiogroup" aria-label={`¿${p.etiqueta} es tuya?`} style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
+                    <button type="button" role="radio" aria-checked={f.venta[p.clave] === false} className="pg-sw" style={{ minWidth: 0 }} onClick={() => elegir(p, false)}>Es mía</button>
+                    <button type="button" role="radio" aria-checked={f.venta[p.clave] === true} className="pg-sw" style={{ minWidth: 0 }} onClick={() => elegir(p, true)}>Me compró</button>
+                  </span>
+                ) : <Interruptor
                   on={venta}
                   onClick={() => {
                     // Cambiar a la persona entera borra lo que hubiera elegido fila por fila.
@@ -402,7 +412,7 @@ function ListaPersonas({ t, f, onFase, onListo }: {
                     for (const id of p.ids) delete filas[id];
                     set({ venta: { ...f.venta, [p.clave]: !venta }, filas, tocadas: f.tocadas.includes(p.clave) ? f.tocadas : [...f.tocadas, p.clave] });
                   }}
-                />
+                />}
               </div>
               {abierta && p.filas.map((m) => {
                 const vf = f.filas[m.id] ?? venta;
@@ -421,13 +431,13 @@ function ListaPersonas({ t, f, onFase, onListo }: {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span className="pg-sub" style={{ marginTop: 0 }}>
-          {mixtas
+          {propia ? (faltan > 0 ? <>Te {faltan === 1 ? "falta 1" : `faltan ${faltan}`} por marcar</> : <>Listas todas</>) : mixtas
             ? <>{nFilasVenta} de {t.ids.length} movimientos {nFilasVenta === 1 ? "es venta" : "son venta"}</>
             : <>{nVenta} de {t.personas.length} {quien} {nVenta === 1 ? "es venta" : "son venta"}</>}
         </span>
         <span className="pg-btns" style={{ marginLeft: "auto", flex: "1 1 260px", maxWidth: 360 }}>
           <button className="pg-btn" onClick={() => onFase(null)}>Volver</button>
-          <button className="pg-btn pg-pri" onClick={() => onListo(f)}>Listo</button>
+          <button className="pg-btn pg-pri" disabled={faltan > 0} onClick={() => onListo(f)}>Listo</button>
         </span>
       </div>
     </>

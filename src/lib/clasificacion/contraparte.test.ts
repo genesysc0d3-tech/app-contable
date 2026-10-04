@@ -110,6 +110,16 @@ describe("claveContraparte", () => {
     const personas = reales.filter((g) => { const c = claveContraparte(g); return c && c.tipo !== "canal"; });
     expect(personas).toEqual([]);
   });
+  it("vuelta 3: el ruido sale ANTES del corte a 4 palabras (no se juntan dos personas)", () => {
+    const a = claveContraparte("TRF REC BCOS MARIA JOSE GONZALEZ");
+    const b = claveContraparte("TRF REC BCOS MARIA JOSE PEREZ");
+    expect(a?.clave).toBe("nombre:MARIA JOSE GONZALEZ");
+    expect(b?.clave).toBe("nombre:MARIA JOSE PEREZ");
+    for (const g of ["TRF REC BCOS", "INTERB TRANSFER COD", "PAGO AFP", "DEVOLUCION ISAPRE", "PAGO PGU", "SUBSIDIO COMPIN LICENCIA",
+      "RESCATE SEGURO", "VENCIMIENTO DEP PLAZO", "SEGURO CESANTIA", "CREDITO SOCIAL", "AGUINALDO", "TAPP CAJA LOS ANDES", "ABONO EN CUENTA"]) {
+      expect(claveContraparte(g), g).toBeNull();
+    }
+  });
   it("una persona necesita ≥2 palabras de nombre (una sola → una por una)", () => {
     expect(claveContraparte("TRANSFERENCIA DE CAMILA")).toBeNull();
     expect(claveContraparte("ABONO TEF OTROS BANCOS JUAN PEREZ")).toMatchObject({ clave: "nombre:JUAN PEREZ" });
@@ -139,7 +149,11 @@ describe("cuenta propia y empresas", () => {
     expect(pareceCuentaPropia("TRANSF COMERCIAL ROJAS", "Comercial Rojas SpA")).toBe(true);
     expect(pareceCuentaPropia("TRANSFERENCIA DE CAMILA ROJAS", "Comercial Rojas SpA")).toBe(false);
     expect(pareceCuentaPropia("TEF INVERSIONES LAGOS", "Inversiones Lagos Ltda")).toBe(true);
-    expect(pareceCuentaPropia("TEF INV LAGOS", "Inversiones Lagos Ltda")).toBe(true);
+    expect(pareceCuentaPropia("TEF INVERS LAGOS", "Inversiones Lagos Ltda")).toBe(true);
+    // vuelta 3: ni prefijos de 3 letras ni bancos/país como compañera
+    expect(pareceCuentaPropia("TEF INV LAGOS", "Inversiones Lagos Ltda")).toBe(false);
+    expect(pareceCuentaPropia("TRANSF BANCO CHILE ROJAS", "Chile Rojas SpA")).toBe(false);
+    expect(pareceCuentaPropia("TRANSF GLOBAL ROJAS", "Global Rojas SpA")).toBe(false);
     expect(pareceCuentaPropia("TEF PEDRO LAGOS", "Inversiones Lagos Ltda")).toBe(false);
     expect(pareceCuentaPropia("TRANSFERENCIA PROPIA", "X SpA")).toBe(true);
     expect(pareceCuentaPropia("TRASPASO PROPIO", "X SpA")).toBe(true);

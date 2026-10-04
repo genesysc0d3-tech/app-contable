@@ -14,15 +14,18 @@
  *    (detectaNoBoletar);
  *  - emisor exento en boletas o marca P2P/forex de la cartola (leída ACÁ, no del
  *    navegador) → 41, sin excepción;
- *  - venta = tipo + montos + 'listo' en UNA escritura; no venta = 'rechazado'.
+ *  - venta = tipo + montos + 'listo' en UNA llamada (RPC responder_grupo_ventas, que
+ *    repite los candados en SQL); no venta = 'rechazado'.
  *
  * Sello: canal 'check_grupo', lote = UN uuid por respuesta (el "grupoId" con que se
  * deshace), lote_n = tamaño de la respuesta, abierta=true solo en lo tocado a mano.
  *
- * Reglas: una por contraparte con ≥2 filas de venta en la respuesta (a_prueba, sin
- * propagar: lo que no estaba en la pregunta no se decide a sus espaldas). "No es venta"
- * NO crea regla ni rechaza nada en el futuro: la próxima vez esa persona sale en "¿Sigue
- * igual?" (lo arma el motor del navegador con la historia de la mesa).
+ * Reglas: una respuesta de GRUPO no crea reglas (la lista de glosas genéricas de bancos
+ * nunca cierra). Única excepción: la persona que la clienta TOCÓ A MANO en "Algunas", con
+ * RUT válido y nombre, y ≥2 ventas (a_prueba, sin propagar). El "Sí" a toda la tarjeta
+ * se sella a ciegas y tampoco cuenta como confirmación de una regla (evidencia_reglas).
+ * "No es venta" no crea regla ni rechaza nada en el futuro: la próxima vez esa persona
+ * sale en "¿Sigue igual?" (lo arma el motor del navegador con la historia de la mesa).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { clasificarIntocables as clasificarIntocablesReal } from "@/lib/emission/propuestas-intocables";
@@ -32,7 +35,7 @@ import { carrilEsExento, tipoDelCarril } from "@/lib/sii/tipo-por-carril";
 import { destinoPropuesta, esAfectoPorTipo, esExentoPorNaturaleza } from "@/lib/sii/destino";
 import { detectaNoBoletar } from "@/lib/sii/clasificador-tipo";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
-import { claveContraparte, extraerPatronContraparte } from "./contraparte";
+import { claveContraparte } from "./contraparte";
 import { nuevoLote, sello } from "@/lib/propuestas/sello";
 
 const TROZO = 50;
@@ -40,8 +43,6 @@ const TROZO = 50;
 export const MAX_FILAS_RESPUESTA = 2000;
 /** Una respuesta en grupo solo decide filas con juicio pendiente (no re-decide una lista). */
 const ESTADOS_TOCABLES = ["pendiente", "editado"] as const;
-/** Un "Sí" a ciegas sobre más personas que esto no enseña reglas (solo lo tocado a mano). */
-export const MAX_PERSONAS_REGLA_CIEGA = 5;
 const MARCAS_EXENTAS = new Set(["p2p_cripto", "forex_divisas"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -219,14 +220,16 @@ export async function ejecutarRespuestaGrupo(
   const grupoId = r.grupoId ?? nuevoLote();
   // Un grupoId que ya se usó en OTRA cartola no se reusa (Deshacer mezclaría dos respuestas).
   if (r.grupoId) {
-    const { data: otro } = await sb
+    // (documento_id null también es "otra": un evento sin cartola no es de esta respuesta)
+    const { data: usados } = await sb
       .from("propuesta_decisiones")
-      .select("propuesta_id")
+      .select("documento_id")
       .eq("empresa_id", ctx.empresaId)
       .eq("lote_id", r.grupoId)
-      .neq("documento_id", r.documentoId)
-      .range(0, 0);
-    if ((otro ?? []).length > 0) return vacio("Esa respuesta ya se usó en otra cartola. Recarga e intenta de nuevo.");
+      .range(0, 199);
+    if (((usados ?? []) as Array<{ documento_id: string | null }>).some((e) => e.documento_id !== r.documentoId)) {
+      return vacio("Esa respuesta ya se usó en otra cartola. Recarga e intenta de nuevo.");
+    }
   }
   const loteN = ids.length;
   const selloDe = (abierta: boolean) => sello("check_grupo", { usuarioId: ctx.userId, loteN, lote: grupoId, abierta, soporte: ctx.soporte });
@@ -235,9 +238,8 @@ export async function ejecutarRespuestaGrupo(
   let noVentas = 0;
   const vendidas: Array<{ fila: Fila; mov: Mov; tipo: 39 | 41; tocada: boolean }> = [];
   const noVenta: { mirada: string[]; ciega: string[] } = { mirada: [], ciega: [] };
-  // Ventas agrupadas por lo que escribe el UPDATE: mismo tipo + mismo total + mismo
-  // "tocada" = misma fila de valores → UN .in() por grupo (no un UPDATE por fila).
-  const porValores = new Map<string, { tipo: 39 | 41; total: number; tocada: boolean; tipoPropuesto: string; filas: Fila[] }>();
+  // Ventas: UNA llamada a la base (RPC) con fila → valores; la base repite los candados.
+  const aVender: Array<{ fila: Fila; mov: Mov; tipo: 39 | 41; tocada: boolean; tipoPropuesto: string; neto: number; iva: number; total: number }> = [];
 
   for (const f of filas) {
     const d = decision.get(f.id)!;
@@ -257,32 +259,31 @@ export async function ejecutarRespuestaGrupo(
     if (destinoPropuesta(f) !== "boleta") continue; // no-venta clasificada o factura: una por una
     const tipo = tipoDeVenta(f, { carril, p2p, iva: r.iva });
     if (tipo == null) continue;
-    const total = Math.round(Number(f.total ?? 0));
+    const total = Number(f.total ?? 0);
     const tipoPropuesto = tipo === 41 && esExentoPorNaturaleza(f.tipo_propuesto) ? f.tipo_propuesto! : tipo === 39 ? "boleta" : "exenta";
-    const k = `${tipo}|${total}|${d.tocada}|${tipoPropuesto}`;
-    const g = porValores.get(k) ?? { tipo, total, tocada: d.tocada, tipoPropuesto, filas: [] };
-    g.filas.push(f);
-    porValores.set(k, g);
+    const { neto, iva } = derivarMontosDte(total, tipo === 39);
+    aVender.push({ fila: f, mov, tipo, tocada: d.tocada, tipoPropuesto, neto, iva, total });
   }
 
-  for (const g of porValores.values()) {
-    const { neto, iva } = derivarMontosDte(g.total, g.tipo === 39);
-    for (let i = 0; i < g.filas.length; i += TROZO) {
-      const trozo = g.filas.slice(i, i + TROZO);
-      const { data, error } = await sb
-        .from("propuestas_ia")
-        .update({ tipo_propuesto: g.tipoPropuesto, tipo_dte: g.tipo, monto_neto: neto, iva, estado: "listo", ...selloDe(g.tocada) }, { count: "exact" })
-        .eq("empresa_id", ctx.empresaId)
-        .in("id", trozo.map((f) => f.id))
-        .in("estado", [...ESTADOS_TOCABLES])
-        .select("id");
-      if (error) return { error: "Se guardó una parte. Intenta de nuevo con lo que falta.", grupoId, ventas, noVentas, quedan: Math.max(0, ids.length - ventas - noVentas), reglas: 0 };
-      const hechos = new Set(((data ?? []) as Array<{ id: string }>).map((x) => x.id));
-      for (const f of trozo) {
-        if (!hechos.has(f.id)) continue;
-        ventas++;
-        vendidas.push({ fila: f, mov: movs.get(f.movimiento_id!)!, tipo: g.tipo, tocada: g.tocada });
-      }
+  if (aVender.length > 0) {
+    const { data, error } = await (sb.rpc as unknown as (f: string, a: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+      "responder_grupo_ventas",
+      {
+        p_empresa_id: ctx.empresaId,
+        p_documento_id: r.documentoId,
+        p_lote: grupoId,
+        p_lote_n: loteN,
+        p_usuario: ctx.userId,
+        p_soporte: ctx.soporte,
+        p_filas: aVender.map((x) => ({ id: x.fila.id, tipo_propuesto: x.tipoPropuesto, tipo_dte: x.tipo, monto_neto: x.neto, iva: x.iva, total: x.total, tocada: x.tocada })),
+      },
+    );
+    if (error) return { error: "No se pudo guardar tu respuesta. Intenta de nuevo.", grupoId, ventas, noVentas, quedan: Math.max(0, ids.length - ventas - noVentas), reglas: 0 };
+    const hechos = new Set(((data ?? []) as Array<{ id: string } | string>).map((x) => (typeof x === "string" ? x : x.id)));
+    for (const x of aVender) {
+      if (!hechos.has(x.fila.id)) continue;
+      ventas++;
+      vendidas.push({ fila: x.fila, mov: x.mov, tipo: x.tipo, tocada: x.tocada });
     }
   }
 
@@ -299,23 +300,16 @@ export async function ejecutarRespuestaGrupo(
     }
   }
 
-  // Reglas: una por contraparte (nombre/RUT, no plataformas) con ≥2 ventas en la
-  // respuesta y un solo tipo. Best-effort: lo decidido ya quedó guardado.
+  // Reglas: solo la persona TOCADA A MANO con RUT válido y nombre (ver cabecera), ≥2
+  // ventas y un solo tipo. Best-effort: lo decidido ya quedó guardado.
   let reglas = 0;
   try {
-    // Un "Sí" a ciegas sobre muchas personas no enseña: solo cuentan las tocadas a mano.
-    const personasCiegas = new Set(vendidas.filter((x) => !x.tocada).map((x) => claveContraparte(x.mov.descripcion)?.clave ?? `?${x.fila.id}`));
-    const ciegasEnsenan = personasCiegas.size <= MAX_PERSONAS_REGLA_CIEGA;
     const porPatron = new Map<string, Array<{ fila: Fila; mov: Mov; tipo: 39 | 41; tocada: boolean }>>();
     for (const x of vendidas) {
-      if (!x.tocada && !ciegasEnsenan) continue;
-      // Solo personas reconocibles (nombre o RUT con nombre): ni plataformas ni glosas
-      // genéricas ("DEPOSITO EFECTIVO", "TRANSF DE MAMA").
+      if (!x.tocada) continue;
       const c = claveContraparte(x.mov.descripcion);
-      if (!c || c.tipo === "canal" || !c.patron) continue;
-      const pat = extraerPatronContraparte(x.mov.descripcion);
-      if (!pat) continue;
-      porPatron.set(pat.patron, [...(porPatron.get(pat.patron) ?? []), x]);
+      if (!c || c.tipo !== "rut" || !c.patron) continue;
+      porPatron.set(c.clave, [...(porPatron.get(c.clave) ?? []), x]);
     }
     for (const lista of porPatron.values()) {
       if (lista.length < 2) continue;

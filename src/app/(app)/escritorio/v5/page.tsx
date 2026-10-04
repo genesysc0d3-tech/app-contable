@@ -1,8 +1,4 @@
 import { Suspense } from "react";
-
-// Las server actions de Check corren en esta ruta (responder una pregunta en grupo de
-// cientos de filas incluida): tope explícito en vez del default de la plataforma.
-export const maxDuration = 60;
 import { notFound } from "next/navigation";
 import { getUsuario } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";

@@ -2,7 +2,7 @@
  * Check agrupado (Fase 4) — el motor puro que arma las preguntas en grupo.
  */
 import { describe, expect, it } from "vitest";
-import { armarPreguntas, filaDePropuesta, MIN_FILAS_TARJETA, noAbreLista, ORDEN_RIESGO, type ContextoPreguntas, type FilaPregunta } from "./preguntas-grupo";
+import { armarPreguntas, esPersonaSospechosa, filaDePropuesta, MIN_FILAS_TARJETA, noAbreLista, ORDEN_RIESGO, type ContextoPreguntas, type FilaPregunta } from "./preguntas-grupo";
 
 let n = 0;
 function fila(desc: string, extra: Partial<FilaPregunta> = {}): FilaPregunta {
@@ -130,7 +130,7 @@ describe("cuenta propia: sin respuesta de un toque", () => {
     const r = armarPreguntas(muchas(3, "TRANSF DE AGRICOLA ANDES SUR"), { ...CTX, razonSocial: "Agricola Andes Sur SpA" });
     const t = r.tarjetas[0];
     expect(t.kind).toBe("propia");
-    expect(t.muestra).toBe("Agricola Andes Sur");
+    expect(t.muestra).toBe("Agricola Sur");
     expect(t.respuestas.map((x) => x.accion)).toEqual(["algunas", "mirar"]);
     expect(t.ventaPorDefecto).toBe(false);
   });
@@ -189,6 +189,17 @@ describe("'No es venta' no rechaza solo: pre-agrupa y pregunta '¿Sigue igual?'"
   it("un abono juzgado de una plataforma no marca a nadie", () => {
     const historial = [fila("ABONO MERCADOPAGO", { estado: "rechazado" })];
     expect(kinds(armarPreguntas(muchas(3, "ABONO MERCADOPAGO"), { ...CTX, historial }))).toEqual(["canal"]);
+  });
+});
+
+describe("una 'persona' de más de 20 filas con montos dispares no se agrupa", () => {
+  it("va una por una; con montos parejos sí agrupa", () => {
+    const dispares = Array.from({ length: 21 }, (_, k) => fila("TRANSFERENCIA DE NORA PAZ", { total: k % 2 ? 5000 : 90000 }));
+    const r = armarPreguntas([...dispares, ...muchas(3, "TRANSFERENCIA DE JUAN PEREZ")], CTX);
+    expect(r.tarjetas[0].personas.map((p) => p.etiqueta)).toEqual(["Juan Perez"]);
+    expect(r.sueltas).toBe(21);
+    expect(esPersonaSospechosa(Array(21).fill(10000))).toBe(false);
+    expect(esPersonaSospechosa(Array(20).fill(0).map((_, k) => (k ? 1000 : 90000)))).toBe(false);
   });
 });
 
