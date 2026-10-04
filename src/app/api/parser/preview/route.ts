@@ -14,7 +14,7 @@ import { applyAdapter } from "@/lib/parsers/apply";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { adapterDelDocumento } from "@/lib/parsers/adapter-store";
 import { leerCuadre } from "@/lib/cartola/cuadre-mesa";
-import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
+import { bajarCartola, esPlanillaMapeable, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
 
 const PREVIEW_ROWS = 30;
 
@@ -63,7 +63,10 @@ export async function POST(request: Request) {
   }
 
   let ab: ArrayBuffer;
-  try { ab = await bajarArchivoCartola(sb, documento, { cache: true }); }
+  // PDF sin marca de banco y sin la confirmación del cliente para su formato
+  // (vuelta 6): el popup pregunta "¿Este PDF es de tu banco?".
+  let sinMarcaBanco = false;
+  try { ({ buf: ab, pdfSinMarcaBanco: sinMarcaBanco } = await bajarCartola(sb, documento, { cache: true })); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
   // El archivo ya pasó el cap de 10MB al subir, pero 10MB COMPRIMIDOS pueden
   // declarar un rango gigante que sheet_to_json expande a millones de celdas.
@@ -158,5 +161,6 @@ export async function POST(request: Request) {
     suggested: lector && primary.leeLector ? lector : primary.suggested,
     suggestedSource: lector && primary.leeLector ? "lector" : primary.suggestedSource,
     allSheets: sheets.map((s) => ({ name: s.name, totalRows: s.totalRows })),
+    ...(sinMarcaBanco ? { sinMarcaBanco: true } : {}),
   });
 }

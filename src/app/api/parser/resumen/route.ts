@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDevSupportMode } from "@/lib/dev/support-mode";
 import { rateLimitKey } from "@/lib/security/rate-limit";
 import { enforceRateLimitGlobal } from "@/lib/security/rate-limit-global";
-import { bajarArchivoCartola, esPlanillaMapeable, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
+import { bajarCartola, esPlanillaMapeable, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
 import { resumenDeMapa } from "@/lib/parsers/resumen-mapa";
 
 /**
@@ -43,9 +43,10 @@ export async function POST(request: Request) {
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   if (!esPlanillaMapeable(documento.tipo)) return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
 
-  let buf: ArrayBuffer;
-  try { buf = await bajarArchivoCartola(sb, documento, { cache: true }); }
+  let archivo: Awaited<ReturnType<typeof bajarCartola>>;
+  try { archivo = await bajarCartola(sb, documento, { cache: true }); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
 
-  return NextResponse.json(resumenDeMapa(buf, configDelCliente(body.config)));
+  // PDF sin marca propia de banco (vuelta 6): nunca "cuadra con tu banco".
+  return NextResponse.json(resumenDeMapa(archivo.buf, configDelCliente(body.config), { pdfSinMarcaBanco: archivo.pdfSinMarcaBanco }));
 }

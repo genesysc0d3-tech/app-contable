@@ -4,7 +4,7 @@ import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { computeFingerprint, encabezadoNormalizado } from "@/lib/parsers/fingerprint";
 import { upsertManualAdapter } from "@/lib/parsers/adapter-store";
-import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
+import { bajarCartola, esPlanillaMapeable, clienteServicio, configDelCliente, configValida } from "@/lib/parsers/documento-cartola";
 import { juzgarArchivo } from "@/lib/parsers/resumen-mapa";
 
 /**
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
   // Del body solo se toman el documento, el mapa y las dos decisiones; el dueño
   // es SIEMPRE la empresa del usuario (nada de empresa_id/global desde afuera).
-  const body = (await request.json().catch(() => ({}))) as { documento_id?: string; config?: unknown; reprocess?: boolean; solo_abonos?: boolean };
+  const body = (await request.json().catch(() => ({}))) as { documento_id?: string; config?: unknown; reprocess?: boolean; solo_abonos?: boolean; es_banco?: boolean };
   const documentoId = body.documento_id;
   if (!documentoId) return NextResponse.json({ error: "documento_id requerido" }, { status: 400 });
   if (!configValida(body.config)) return NextResponse.json({ error: "config inválido" }, { status: 400 });
@@ -48,11 +48,20 @@ export async function POST(request: Request) {
   if (!documento) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   if (!esPlanillaMapeable(documento.tipo)) return NextResponse.json({ error: "Solo planillas" }, { status: 400 });
 
-  let buf: ArrayBuffer;
-  try { buf = await bajarArchivoCartola(supabase, documento, { cache: true }); }
+  let archivo: Awaited<ReturnType<typeof bajarCartola>>;
+  try { archivo = await bajarCartola(supabase, documento, { cache: true }); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
 
-  const { resumen, rows } = juzgarArchivo(buf, config);
+  // PDF sin marca propia de banco (vuelta 6, A2): el "Listo" exige que el
+  // cliente diga "Sí, es mi cartola" (si no lo es, va por /api/parser/no-es-cartola).
+  if (archivo.pdfSinMarcaBanco && body.es_banco !== true) {
+    // Una UI vieja (sin la pregunta) llega acá sin es_banco: que recargue.
+    return NextResponse.json({ error: "Recarga la página para continuar: falta confirmar si este PDF es de tu banco", pregunta_banco: true }, { status: 422 });
+  }
+  // Ya confirmado antes para el formato: la confirmación viaja al mapa nuevo
+  // (aunque cambien las columnas, la fila nueva gana en la caché).
+  const esBanco = archivo.bancoConfirmado || (archivo.pdfSinMarcaBanco && body.es_banco === true);
+  const { resumen, rows } = juzgarArchivo(archivo.buf, config, { pdfSinMarcaBanco: archivo.pdfSinMarcaBanco });
   if (!resumen.valido || !rows) {
     return NextResponse.json({ error: resumen.error ?? "Con estas columnas no se puede leer la cartola" }, { status: 422 });
   }
@@ -71,7 +80,7 @@ export async function POST(request: Request) {
     config: {
       ...config,
       ...(titulos ? { titulos } : {}),
-      revision_cliente: { documento_id: documentoId, firma: resumen.firma, ...(soloAbonos ? { solo_abonos: true } : {}) },
+      revision_cliente: { documento_id: documentoId, firma: resumen.firma, ...(soloAbonos ? { solo_abonos: true } : {}), ...(esBanco ? { es_banco: true } : {}) },
     },
     confirmadoPor: "cliente",
   });
@@ -88,7 +97,7 @@ export async function POST(request: Request) {
       recursoId: documentoId,
       // Sin glosas ni montos de terceros: solo cómo se confirmó.
       resumen: soloAbonos ? "Columnas de la cartola confirmadas: trae solo abonos" : "Columnas de la cartola confirmadas por el cliente",
-      metadata: { accion: soloAbonos ? "solo_abonos" : "columnas", estado: resumen.estado },
+      metadata: { accion: soloAbonos ? "solo_abonos" : "columnas", estado: resumen.estado, ...(esBanco ? { es_banco: true } : {}) },
     });
   }
 

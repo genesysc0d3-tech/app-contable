@@ -331,9 +331,14 @@ export async function upsertManualAdapter(args: {
     // cuenta para el consenso global): el "Listo" solo agrega su revisión.
     const pruebaDelBanco = igual && estadoDeAdapter(igual) === "confirmado" && (igual.confirmado_por === "saldo" || igual.confirmado_por === "total_banco");
     const confirmado = pruebaDelBanco ? {} : { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: ahora };
-    const config: AdapterConfig = igual?.config?.cuenta_huella && !args.config.cuenta_huella
+    let config: AdapterConfig = igual?.config?.cuenta_huella && !args.config.cuenta_huella
       ? { ...args.config, cuenta_huella: igual.config.cuenta_huella }
       : args.config;
+    // Vuelta 6 (M1): "Sí, es mi cartola" ya dicho para este formato se conserva
+    // cuando el cliente vuelve a guardar columnas (salvo que ahora diga lo contrario).
+    if (igual?.config?.revision_cliente?.es_banco && config.revision_cliente && !config.revision_cliente.es_banco && !config.revision_cliente.no_es_cartola) {
+      config = { ...config, revision_cliente: { ...config.revision_cliente, es_banco: true } };
+    }
 
     if (existing.data?.id) {
       const base = {
@@ -360,7 +365,7 @@ export async function upsertManualAdapter(args: {
       nombre: args.nombre ?? null,
       tipo_doc: args.tipo_doc ?? "cartola_bancaria",
       source: "manual",
-      config: toJson(args.config),
+      config: toJson(config),
       confianza: 1.0,
       usage_count: 0,
       success_count: 0,
@@ -627,6 +632,54 @@ export async function adapterDelDocumento(
     const row = ad as unknown as { id: string; creado_por_empresa_id: string | null; estado?: string | null; fingerprint?: string; config?: AdapterConfig } | null;
     if (!row || row.creado_por_empresa_id !== empresaId) return null;
     return { id: row.id, estado: estadoDeAdapter(row), fingerprint: row.fingerprint, config: row.config };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ¿Este documento quedó marcado "No es una cartola" por la empresa (vuelta 6c)?
+ * La marca vive en revision_cliente del mapa propio (documento_id = el PDF en
+ * que el cliente lo dijo).
+ */
+export async function documentoMarcadoNoEsCartola(empresaId: string, documentoId: string): Promise<boolean> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return false;
+    const { data } = await sb.from("parser_adapters").select("config").eq("creado_por_empresa_id", empresaId).limit(500);
+    return ((data ?? []) as unknown as { config: AdapterConfig | null }[])
+      .some((r) => r.config?.revision_cliente?.no_es_cartola === true && r.config.revision_cliente.documento_id === documentoId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * DESHACER "No es una cartola" (vuelta 6c): quita la marca de los mapas PROPIOS
+ * de la empresa para esta huella. Las columnas que quedaban en ese mapa nunca las
+ * confirmó el cliente (solo dijo que no era cartola): el mapa vuelve a
+ * provisorio, salvo que tuviera prueba del banco (saldo/total). Devuelve cuántos
+ * mapas tocó (null = error).
+ */
+export async function quitarNoEsCartola(empresaId: string, fingerprint: string): Promise<number | null> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return null;
+    const { data, error } = await sb.from("parser_adapters").select("id, config, confirmado_por")
+      .eq("fingerprint", fingerprint).eq("creado_por_empresa_id", empresaId);
+    if (error) return null;
+    let n = 0;
+    for (const r of (data ?? []) as unknown as { id: string; config: AdapterConfig | null; confirmado_por?: string | null }[]) {
+      if (!r.config?.revision_cliente?.no_es_cartola) continue;
+      const { revision_cliente: _r, ...config } = r.config;
+      const pruebaDelBanco = r.confirmado_por === "saldo" || r.confirmado_por === "total_banco";
+      const cambios = { config: toJson(config as AdapterConfig), ...(pruebaDelBanco ? {} : { estado: "provisorio", confirmado_por: null, confirmado_en: null }) };
+      const u = await sb.from("parser_adapters").update(cambios as never).eq("id", r.id);
+      if (u?.error && esColumnaFaltante(u.error)) await sb.from("parser_adapters").update({ config: toJson(config as AdapterConfig) }).eq("id", r.id);
+      else if (u?.error) return null;
+      n++;
+    }
+    return n;
   } catch {
     return null;
   }

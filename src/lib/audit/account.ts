@@ -39,7 +39,9 @@ export type CuentaAuditAction =
   | "trial_reiniciado"
   | "carril_emision_cambiado"
   | "cuadre_filas_agregadas"
-  | "cartola_lectura_confirmada";
+  | "cartola_lectura_confirmada"
+  | "cartola_no_es_cartola"
+  | "cartola_leer_como_cartola";
 
 export async function recordCuentaAudit(args: {
   sb: Sb;

@@ -15,7 +15,7 @@ import type { CensoCartola, PreExtractedMovimiento } from "./parsers/types";
  */
 export async function parseExcel(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string; empresa_id?: string; origen?: "pdf" }
+  opts?: { documento_id?: string; empresa_id?: string; origen?: "pdf"; pdf_sin_marca_banco?: boolean }
 ): Promise<{
   content: string;
   preExtracted: PreExtractedMovimiento[] | null;
@@ -40,6 +40,8 @@ export interface DiagnosticoPdf {
   tipo: import("./parsers/pdf-router").TipoPdf;
   motivo: string;
   senales: string[];
+  /** Marca propia de banco del router (pdf-router.ts), null = sin marca: el lector no sella. */
+  marca_banco?: string | null;
   paginas: number;
   ms: number;
   /** Solo si entró al lector. */
@@ -59,12 +61,16 @@ export interface DiagnosticoPdf {
  */
 export async function parsePdfCartola(
   pdf: Uint8Array,
-  opts?: { documento_id?: string; empresa_id?: string; clave?: string; diagnostico?: (d: DiagnosticoPdf) => void }
+  opts?: {
+    documento_id?: string; empresa_id?: string; clave?: string; diagnostico?: (d: DiagnosticoPdf) => void;
+    /** Posiciones ya leídas en la MISMA apertura que el texto (leerPdf): no se vuelve a abrir el PDF. */
+    leido?: { items: import("./parsers/pdf-grilla").ItemPdf[]; paginas: number; truncado: boolean };
+  }
 ): Promise<Awaited<ReturnType<typeof parseExcel>> | null> {
   const t0 = Date.now();
   const { leerItemsPdf, libroDesdeGrilla } = await import("./parsers/pdf-grilla");
   const { clasificarPdf } = await import("./parsers/pdf-router");
-  const { items, paginas, truncado } = await leerItemsPdf(pdf, opts?.clave);
+  const { items, paginas, truncado } = opts?.leido ?? await leerItemsPdf(pdf, opts?.clave);
   const avisar = (d: Omit<DiagnosticoPdf, "paginas" | "ms">) => opts?.diagnostico?.({ ...d, paginas, ms: Date.now() - t0 });
   if (truncado) {
     avisar({ tipo: "otro", motivo: "demasiadas_paginas", senales: [] });
@@ -72,21 +78,26 @@ export async function parsePdfCartola(
   }
   const ruta = clasificarPdf(items);
   if (ruta.tipo !== "cartola" || !ruta.rows.length) {
-    avisar({ tipo: ruta.tipo, motivo: ruta.motivo, senales: ruta.senales });
+    avisar({ tipo: ruta.tipo, motivo: ruta.motivo, senales: ruta.senales, marca_banco: ruta.marca_banco });
     return null;
   }
   let r: Awaited<ReturnType<typeof parseExcel>>;
   try {
-    r = await parseExcel(libroDesdeGrilla(ruta.rows), { documento_id: opts?.documento_id, empresa_id: opts?.empresa_id, origen: "pdf" });
+    // Sin marca PROPIA de banco (formato conocido, N° de cuenta corriente/vista/
+    // RUT, título de cartola, nombre del banco en el encabezado) el lector lee,
+    // pero NUNCA sella: podría ser el estado de cuenta de un proveedor que cuadra.
+    r = await parseExcel(libroDesdeGrilla(ruta.rows), {
+      documento_id: opts?.documento_id, empresa_id: opts?.empresa_id, origen: "pdf", pdf_sin_marca_banco: !ruta.marca_banco,
+    });
   } catch (error) {
     const { PlantillaFacturasEnCartolaError } = await import("./parsers/orchestrator");
     if (!(error instanceof PlantillaFacturasEnCartolaError)) throw error;
-    avisar({ tipo: "otro", motivo: "plantilla_facturas", senales: ruta.senales });
+    avisar({ tipo: "otro", motivo: "plantilla_facturas", senales: ruta.senales, marca_banco: ruta.marca_banco });
     return null;
   }
   const leida = r.capa_usada < 4 && !!r.preExtracted?.length;
   avisar({
-    tipo: "cartola", motivo: leida ? ruta.motivo : "lector_no_la_leyo", senales: ruta.senales,
+    tipo: "cartola", motivo: leida ? ruta.motivo : "lector_no_la_leyo", senales: ruta.senales, marca_banco: ruta.marca_banco,
     filas: r.preExtracted?.length ?? 0, sello: r.censo?.verificacion?.tipo ?? "sin_comprobar", capa: r.capa_usada,
   });
   return leida ? r : null;

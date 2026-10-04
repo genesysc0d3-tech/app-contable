@@ -37,6 +37,12 @@ export interface ResumenMapa {
   guardable: boolean;
   /** Firma de la lectura (conteo + sumas): el reproceso la compara. */
   firma: string;
+  /**
+   * PDF sin marca propia de banco (vuelta 6): nunca "comprobada" (podría ser el
+   * estado de cuenta de un proveedor que cuadra); el popup pregunta "¿Este PDF
+   * es de tu banco?" y el "Listo" exige la respuesta.
+   */
+  sinMarcaBanco?: boolean;
 }
 
 const VACIO: Omit<ResumenMapa, "valido" | "error"> = {
@@ -44,15 +50,15 @@ const VACIO: Omit<ResumenMapa, "valido" | "error"> = {
   estado: "alerta", motivo: null, contradice: false, soloAbonos: false, noLeidas: 0, guardable: false, firma: "",
 };
 
-export function resumenDeMapa(buffer: ArrayBuffer, cfg: AdapterConfig): ResumenMapa {
-  return juzgarArchivo(buffer, cfg).resumen;
+export function resumenDeMapa(buffer: ArrayBuffer, cfg: AdapterConfig, opts: { pdfSinMarcaBanco?: boolean } = {}): ResumenMapa {
+  return juzgarArchivo(buffer, cfg, opts).resumen;
 }
 
 /**
  * Lee el archivo y lo juzga con el mapa. Además del resumen devuelve las filas
  * de la hoja leída (null si no se pudo), para la huella y los títulos al guardar.
  */
-export function juzgarArchivo(buffer: ArrayBuffer, cfg: AdapterConfig): { resumen: ResumenMapa; rows: Row[] | null } {
+export function juzgarArchivo(buffer: ArrayBuffer, cfg: AdapterConfig, opts: { pdfSinMarcaBanco?: boolean } = {}): { resumen: ResumenMapa; rows: Row[] | null } {
   let juicio: ReturnType<typeof juzgarMapaEnLibro>;
   try {
     // Mismas opciones que el orquestador (cellStyles: filas ocultas).
@@ -60,7 +66,7 @@ export function juzgarArchivo(buffer: ArrayBuffer, cfg: AdapterConfig): { resume
     if (workbook.SheetNames.some((n) => hojaExcedeCeldas(workbook.Sheets[n]))) {
       return { resumen: { ...VACIO, valido: false, error: "El archivo es demasiado grande para revisarlo acá" }, rows: null };
     }
-    juicio = juzgarMapaEnLibro(workbook, cfg);
+    juicio = juzgarMapaEnLibro(workbook, cfg, { pdfSinMarcaBanco: opts.pdfSinMarcaBanco });
   } catch {
     return { resumen: { ...VACIO, valido: false, error: "No pudimos abrir el archivo" }, rows: null };
   }
@@ -94,6 +100,7 @@ export function juzgarArchivo(buffer: ArrayBuffer, cfg: AdapterConfig): { resume
     noLeidas,
     guardable: !contradice,
     firma: firmaDeLineas(lines),
+    ...(opts.pdfSinMarcaBanco ? { sinMarcaBanco: true } : {}),
   };
   return { resumen, rows: juicio.rows };
 }

@@ -25,6 +25,13 @@ export interface RutaPdf {
   formato_conocido: string | null;
   /** La grilla armada (vacía si no hay tabla de movimientos). */
   rows: Row[];
+  /**
+   * Marca PROPIA de banco (por qué el PDF es del banco y no de un tercero):
+   * "formato_conocido" · "n_cuenta_banco" · "titulo_cartola" · "nombre_banco".
+   * null = sin marca propia: aunque el router la deje pasar como cartola, el
+   * lector NUNCA la sella (queda provisoria → popup/revisión).
+   */
+  marca_banco: string | null;
 }
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -68,7 +75,9 @@ const FUERTES: { id: string; re: RegExp }[] = [
   { id: "saldo_inicial", re: /\bsaldo (inicial|anterior)\b/ },
   // N° de cuenta CORRIENTE/VISTA/RUT ("Cuenta Corriente N° 123", "CuentaRUT N°",
   // "Cuenta Vista: 123"). Un "N° cuenta cliente" genérico no.
-  { id: "n_cuenta_banco", re: /\bn(umero|ro\.?|[°º])?\s*(de )?cuenta ?(corriente|vista|rut)\b|\bcuenta ?(corriente|vista|rut)\s*(n[°º]|nro\.?|numero|:)\s*\d/ },
+  // Vuelta 6 (M2): también "Cta. Cte. N° 123" / "Cta Cte 123" y "Cuenta Corriente
+  // 0-000-12345-6" (sin N°).
+  { id: "n_cuenta_banco", re: /\bn(umero|ro\.?|[°º])?\s*(de )?cuenta ?(corriente|vista|rut)\b|\bcuenta ?(corriente|vista|rut)\s*(n[°º]|nro\.?|numero|:)\s*\d|\bcta\.? ?cte\.?\s*(n[°º]\.?|nro\.?|numero|:)?\s*\d|\bcuenta (corriente|vista)\s+\d[\d.-]{4,}/ },
   { id: "titulo_cartola", re: /\bcartola (de )?(cuenta ?)?(corriente|vista|rut|historica)\b|\bestado de cuenta (corriente|vista)\b(?! (de |del )?(cliente|proveedor))|\bcartola cuenta\b/ },
 ];
 /** Marcas débiles: solas no bastan ("Período" sale en un crédito de consumo). */
@@ -88,10 +97,52 @@ function esEncabezadoBancario(t: string): boolean {
     && /\b(cargos?|abonos?|debitos?|creditos?|giros?|depositos?|egresos?|ingresos?|monto|valor|importe)\b/.test(t);
 }
 
+/**
+ * MARCA PROPIA DE BANCO (vuelta 6, endurecida en dos revisiones adversariales):
+ * el nombre del banco cuenta SOLO en el ENCABEZADO (antes de la tabla; en el pie
+ * sale publicidad, en una glosa la contraparte), al INICIO de la línea y con la
+ * línea sola o casi sola: "Banco X" o la marca comercial ("BancoEstado",
+ * "Mercado Pago", "Tenpo", "MACH"…) y, aparte de eso, solo palabras de una
+ * cartola ("cartola", "cuenta corriente", "S.A.", "Chile", números). Cualquier
+ * otra palabra es el nombre de un tercero: "Santander Motors", "Mach Repuestos",
+ * "MACH Ingeniería SpA", "Ferretería Pérez … Banco de Chile" no son bancos.
+ * Nunca como dato de pago ("Banco: Santander", "Su banco: …").
+ */
+const RE_BANCO_INICIO = /^(banco (de chile|edwards|estado|santander|bci|de credito e inversiones|itau|scotiabank|bice|security|falabella|ripley|consorcio|internacional|btg( pactual)?|do brasil|de la nacion argentina|hsbc|bbva|corpbanca)|bancoestado|scotiabank|itau|bci|bice|coopeuch|mercado ?pago|tenpo|mach|global ?66|santander|prex|chek|cmr falabella)\b/;
+/** Palabras que pueden acompañar al nombre del banco en su propia línea de título. */
+const PALABRAS_DE_BANCO = new Set([
+  "banco", "chile", "s", "a", "sa", "s.a", "s.a.", "cartola", "cartolas", "cuenta", "cuentas", "corriente", "corrientes", "vista", "rut", "cuentarut",
+  "cta", "cte", "estado", "de", "del", "la", "las", "el", "los", "y", "en", "e", "al", "n", "no", "nro", "numero", "movimientos", "historica", "historico",
+  "resumen", "personas", "empresas", "empresa", "pyme", "pymes", "negocios", "linea", "online", "periodo", "desde", "hasta", "emision", "fecha",
+]);
+export function esNombreDeBanco(t: string): boolean {
+  const m = RE_BANCO_INICIO.exec(t);
+  if (!m) return false;
+  const resto = t.slice(m[0].length).split(/[^a-z0-9.°º]+/).filter((w) => /[a-z]/.test(w));
+  return resto.every((w) => PALABRAS_DE_BANCO.has(w.replace(/\.+$/, "")) || PALABRAS_DE_BANCO.has(w));
+}
+/**
+ * Datos para PAGARLE a un tercero ("Datos para transferencia:" / "Banco: …" /
+ * "Cta Cte N° …" / "a nombre de …"): típico de un estado de cuenta de proveedor.
+ * Se evalúa por BLOQUE: el verbo suele ir en una línea y el banco y la cuenta en
+ * las siguientes, así que desde la línea que lo abre hasta la tabla (o hasta un
+ * salto de bloque: un espacio mayor que el interlineado) nada es marca. Frases de PAGO, no rótulos de un resumen ("Transferencias en
+ * línea", "Depósitos", "Pagos" no son instrucción).
+ */
+const RE_INSTRUCCION_PAGO = /\bdatos (bancarios|para (la |el |su )?(transferencia|deposito|pago|abono)|de (pago|transferencia|deposito))\b|\btransfi?er(ir|a|e) a\b|\btransferencias? a nombre\b|\bdeposit(ar|e|en) (en|a)\b|\bforma de pago\b|\bmedios? de pago\b|\bsu banco\b|\ba nombre de\b|\bpag(ar|ue|uen) (en|a)\b|\brealice (su |el |la )?(pago|deposito|transferencia)\b|\bcancelar (en|a)\b|\b(enviar|remitir) (el )?comprobante\b|^banco\s*:/;
+/** Documento COMERCIAL (cuenta corriente mercantil de un proveedor): "Señores: …", "Cliente: …", "RUT cliente". */
+const RE_DOC_COMERCIAL = /\b(senor(es|a)?|sr(es|a)?\.?|cliente)\s*:|\brut (del )?cliente\b|\bcodigo (de )?cliente\b/;
+
 /** Factura/boleta con N° en las GLOSAS de la mayoría de los movimientos: estado de cuenta de un proveedor, no del banco. */
 const RE_GLOSA_DTE = /\b(factura|boleta|nota de (credito|debito))( electronica)?\s*(n[°º.]?\s*)?\d{2,}/;
 
-export function clasificarPdf(items: ItemPdf[]): RutaPdf {
+const reDe = (id: string) => FUERTES.find((f) => f.id === id)!.re;
+
+/**
+ * `sinFormatosConocidos`: solo para medir (scripts): ¿cuántas cartolas reales
+ * tendrían marca propia de banco si su formato dejara de ser conocido?
+ */
+export function clasificarPdf(items: ItemPdf[], opts: { sinFormatosConocidos?: boolean } = {}): RutaPdf {
   const lineas = agruparLineas(items);
   const texto = (l: (typeof lineas)[number]) => norm(l.celdas.map((c) => c.texto).join(" "));
   // Por página: dónde empiezan los títulos (apilados: la línea con "fecha" y sus
@@ -101,6 +152,9 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
   // aunque traiga fecha y monto ("Fecha facturación 15/09 · Pago mínimo $ x").
   const fueraIdx: number[] = [];
   const titulo: string[] = [];
+  // Encabezado = lo de ANTES de la tabla en cada página (o las 3 primeras
+  // líneas de una página sin tabla). Ahí, y solo ahí, vale el nombre del banco.
+  const encabezadoIdx: number[] = [];
   let encabezado = false;
   let movs = 0;
   const paginas = [...new Set(lineas.map((l) => l.pagina))];
@@ -140,32 +194,64 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
       });
     }
     idx.forEach((i, k) => {
+      if (desde >= 0 ? k < desde : k < 3) encabezadoIdx.push(i);
       if (esMov[k] && (h < 0 || k > h)) movs++;
       if (desde < 0 || k < desde || k > hasta) fueraIdx.push(i);
     });
   }
   const fuera = fueraIdx.map((i) => texto(lineas[i]));
   const rows = movs >= 2 ? grillaDesdeItems(items) : [];
-  const conocido = rows.length ? detectarFormatoConocido(rows) : null;
+  const conocido = rows.length && !opts.sinFormatosConocidos ? detectarFormatoConocido(rows) : null;
 
   const noCartola = NO_CARTOLA.filter((s) => fuera.some((t) => s.re.test(t)));
   const glosasDte = lineas.filter((l) => esMovimiento(l) && RE_GLOSA_DTE.test(texto(l))).length;
-  const fuertes = FUERTES.filter((s) => fuera.some((t) => s.re.test(t))).map((s) => s.id);
+  // Encabezado SIN los bloques de instrucción de pago: desde la línea que lo
+  // abre hasta la tabla o hasta un salto de bloque (espacio > 1,6 interlineados).
+  const enBloquePago = new Set<number>();
+  for (const p of paginas) {
+    const enc = encabezadoIdx.filter((i) => lineas[i].pagina === p);
+    const pasos = enc.slice(1).map((i, k) => lineas[enc[k]].y - lineas[i].y).filter((d) => d > 0).sort((a, b) => a - b);
+    const paso = pasos.length ? pasos[Math.floor(pasos.length / 2)] : 14;
+    for (let k = 0; k < enc.length; k++) {
+      if (!RE_INSTRUCCION_PAGO.test(texto(lineas[enc[k]]))) continue;
+      enBloquePago.add(enc[k]);
+      for (let j = k + 1; j < enc.length && lineas[enc[j - 1]].y - lineas[enc[j]].y <= Math.max(paso, 8) * 1.6; j++) enBloquePago.add(enc[j]);
+    }
+  }
+  const encabezadoTxt = encabezadoIdx.filter((i) => !enBloquePago.has(i)).map((i) => texto(lineas[i]));
+  // "ESTADO DE CUENTA CORRIENTE" + "Señores: …" es la cuenta corriente MERCANTIL
+  // de un proveedor (M3): ahí solo vale un título que diga "cartola".
+  const docComercial = encabezadoIdx.some((i) => RE_DOC_COMERCIAL.test(texto(lineas[i])));
+  const esTituloCartola = (t: string) => reDe("titulo_cartola").test(t) && (!docComercial || /\bcartola\b/.test(t));
+  const fuertes = FUERTES.filter((s) => fuera.some((t) => (s.id === "titulo_cartola" ? esTituloCartola(t) : s.re.test(t)))).map((s) => s.id);
   // Estado de cuenta de un proveedor: casi TODAS las glosas son facturas con N°
   // y no hay saldo del banco. Una cartola B2B con muchos "PAGO FACTURA 1234"
   // trae saldo anterior/inicial y sigue siendo cartola.
-  // Facturas en las glosas (vueltas 3-4). Marca de banco = N° de cuenta
-  // corriente/vista/RUT o título de cartola; o un "N° de cuenta" sin tipo junto a
-  // "Saldo anterior" y títulos bancarios (cartola Pyme). Sin marca de banco:
-  // estados cortos (≤4 movimientos) con ≥40% de facturas, o ≥60% en los largos
-  // (una cartola B2B trae 35-40% de "PAGO FACTURA N°"; un proveedor, 70%+). Con
+  // MARCA PROPIA DE BANCO (vuelta 6, 2026-10-03): lo que dice que el PDF lo
+  // emitió un banco y no un tercero. Formato conocido; N° de cuenta
+  // corriente/vista/RUT (fuera de una instrucción de pago "deposite en…"); título
+  // de cartola de cuenta; o el nombre de un banco/fintech en el ENCABEZADO. Un
+  // "N° de cuenta" sin tipo, "Saldo anterior" o los títulos Fecha/Cargo/Abono/
+  // Saldo NO son marca propia: un estado de cuenta de proveedor los trae igual.
+  // Las tres marcas de texto se buscan SOLO en el encabezado (no en el pie) y
+  // fuera de un bloque de instrucción de pago. En un documento COMERCIAL
+  // ("Señores:/Cliente:/RUT cliente") el N° de cuenta y el nombre del banco son
+  // los datos de pago del proveedor: ahí solo vale un título que diga "cartola".
+  const marcaBanco: string | null = conocido ? "formato_conocido"
+    : !docComercial && encabezadoTxt.some((t) => reDe("n_cuenta_banco").test(t)) ? "n_cuenta_banco"
+    : encabezadoTxt.some(esTituloCartola) ? "titulo_cartola"
+    : !docComercial && encabezadoTxt.some(esNombreDeBanco) ? "nombre_banco"
+    : null;
+  // Facturas en las glosas (vueltas 3-4-6). SIN marca propia de banco, desde el
+  // 20% de glosas con Factura/Boleta/NC/ND N° ya no se distingue de un estado de
+  // cuenta de proveedor (una cartola B2B trae 35-40% de "PAGO FACTURA N°", un
+  // proveedor ambiguo 40-59%): → "otro" (la IA, como antes del lector). CON
   // marca: solo ≥80% y sin saldo inicial. Si calza un formato conocido, no aplica.
-  const nCuentaGenerico = fuera.some((t) => /\bn(umero|ro\.?|[°º])\s*(de )?cuenta\b(?! (de |del )?(cliente|proveedor))/.test(t));
-  const marcaDeBanco = fuertes.includes("n_cuenta_banco") || fuertes.includes("titulo_cartola")
-    || (nCuentaGenerico && fuertes.includes("saldo_inicial") && encabezado);
   const pct = movs ? glosasDte / movs : 0;
-  const muchasFacturas = !conocido && glosasDte >= 2 && (
-    (!marcaDeBanco && ((movs <= 4 && pct >= 0.4) || (movs > 4 && pct >= 0.6)))
+  // B2: hace falta más de UNA factura (1 «Pago factura» en 5 movimientos no
+  // basta), salvo en un estado de 2-3 movimientos, donde una ya es la mitad.
+  const muchasFacturas = !conocido && glosasDte >= 1 && (
+    (!marcaBanco && pct >= 0.2 && (glosasDte >= 2 || movs <= 3))
     || (glosasDte >= 3 && pct >= 0.8 && !fuertes.includes("saldo_inicial")));
   if (muchasFacturas) noCartola.push({ id: "facturas_en_glosas", tipo: "no_cartola", re: /$^/ });
   // Señales de TÍTULO: no ganan si el PDF calza un formato conocido, ni sobre una
@@ -179,13 +265,15 @@ export function clasificarPdf(items: ItemPdf[]): RutaPdf {
     noCartola.push(...NO_CARTOLA_TITULO.filter((s) => (s.id === "cliente_proveedor_titulo" ? titulo : titulosNoCuenta).some((t) => s.re.test(t))));
   }
   const debiles = DEBILES.filter((s) => fuera.some((t) => s.re.test(t))).map((s) => s.id);
+  // La marca va PRIMERO: el evento pdf_ruta guarda las 12 primeras señales.
   const senales = [
+    ...(marcaBanco ? [`marca:${marcaBanco}`] : ["sin_marca_banco"]),
     ...noCartola.map((s) => s.id),
     ...fuertes, ...debiles,
     ...(encabezado ? ["encabezado_bancario"] : []),
     ...(conocido ? [`conocido:${conocido.formato.id}`] : []),
   ];
-  const base = { senales, formato_conocido: conocido?.formato.id ?? null, rows };
+  const base = { senales, formato_conocido: conocido?.formato.id ?? null, rows, marca_banco: marcaBanco };
 
   // Primero lo que NO es cartola (prioridad pedida): una sola familia → ese tipo;
   // varias → "otro".
