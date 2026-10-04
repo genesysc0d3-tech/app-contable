@@ -28,6 +28,7 @@ const INVENTARIO: Record<string, Record<string, number>> = {
   "src/lib/ai/aprender-regla.ts": { update: 1 },
   "src/lib/ai/processor.ts": { insertInBatches: 1 },
   "src/lib/ai/reglas-historial.ts": { update: 1 },
+  "src/lib/clasificacion/responder-grupo.ts": { update: 3 },
   "src/lib/facturas/procesar.ts": { insert: 1 },
   "src/lib/telegram/ingesta.ts": { insert: 2, update: 2 },
   "src/lib/telegram/propuestas.ts": { insert: 1, update: 2 },
@@ -153,8 +154,12 @@ describe("escrituras a propuestas_ia — inventario cerrado", () => {
 });
 
 describe("listas cerradas: código ⇄ CHECK de la migración", () => {
-  const sql = readFileSync(join(RAIZ, "supabase/migrations/20261004160000_propuestas_foto_y_decisiones.sql"), "utf8");
+  // El CHECK vigente es el de la ÚLTIMA migración que lo (re)define (Fase 4 sumó check_grupo).
+  const MIG = join(RAIZ, "supabase/migrations");
+  const migraciones = readdirSync(MIG).filter((f) => f.endsWith(".sql") && !f.endsWith("_DOWN.sql")).sort();
   const listaDelCheck = (constraint: string) => {
+    const archivo = migraciones.filter((f) => readFileSync(join(MIG, f), "utf8").includes(`add constraint ${constraint}`)).pop()!;
+    const sql = readFileSync(join(MIG, archivo), "utf8");
     const bloque = sql.slice(sql.indexOf(`add constraint ${constraint}`));
     const dentro = bloque.slice(bloque.indexOf(" in ("), bloque.indexOf(")\n) not valid"));
     return [...dentro.matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();

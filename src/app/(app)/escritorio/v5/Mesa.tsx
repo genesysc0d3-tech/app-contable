@@ -70,7 +70,7 @@ export default function Mesa({ mesa, clientes, empresaId, empresaGiro, empresaRa
       fecha={mesa.calendar.selectedDateLabel}
       subidosContent={
         mesa.docsAgregados.length > 0 || mesa.propuestas.length > 0 ? (
-          <MesaTab mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaTipo={empresaTipo} />
+          <MesaTab mesa={mesa} clientes={clientes} empresaId={empresaId} empresaGiro={empresaGiro} empresaTipo={empresaTipo} empresaRazon={empresaRazon} />
         ) : (
           compactEmpty("subidos")
         )

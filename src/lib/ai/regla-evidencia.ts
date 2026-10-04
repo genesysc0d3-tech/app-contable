@@ -48,10 +48,15 @@ export const CONFIANZA_MAX_A_PRUEBA = 0.8;
 /** Techo de una fila que nace de una regla en disputa: bajo el bulk (por decidir). */
 export const CONFIANZA_MAX_EN_DISPUTA = 0.5;
 
+/** Check agrupado (Fase 4): cuenta como mirada SOLO la persona que la clienta tocó a mano
+ *  en "Algunas" (abierta=true); el "Sí" a toda la tarjeta es un gesto a ciegas. */
+export const CANAL_GRUPO = "check_grupo";
+
 /** ¿Este evento del log (propuesta_decisiones) fue una decisión MIRADA? Espejo del SQL de evidencia_reglas. */
-export function esDecisionMirada(ev: { canal: string | null | undefined; lote_n?: number | null }): boolean {
+export function esDecisionMirada(ev: { canal: string | null | undefined; lote_n?: number | null; abierta?: boolean | null }): boolean {
   if (!ev.canal) return false;
   if (CANALES_MIRADOS.includes(ev.canal)) return true;
+  if (ev.canal === CANAL_GRUPO) return ev.abierta === true;
   return CANALES_LOTE_HUMANO.includes(ev.canal) && ev.lote_n != null && ev.lote_n <= LOTE_MAX_MIRADO;
 }
 

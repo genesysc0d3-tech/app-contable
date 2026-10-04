@@ -107,6 +107,23 @@ export function esExentoPorTipo(tipo: string | null | undefined): boolean {
   return !!tipo && EXENTOS_SET.has(tipo);
 }
 
+/**
+ * Ventas exentas POR NATURALEZA (por ley: P2P, cripto, divisas — Of. SII 963/2018). A
+ * diferencia de "exenta" (que puede ser solo la suposición del clasificador), ninguna
+ * configuración del emisor ni respuesta de la clienta las vuelve afectas.
+ */
+export const TIPOS_EXENTOS_POR_NATURALEZA = [
+  "transferencia_p2p",
+  "compraventa_crypto",
+  "operacion_forex",
+] as const satisfies readonly TipoPropuesto[];
+
+const NATURALEZA_SET: ReadonlySet<string> = new Set(TIPOS_EXENTOS_POR_NATURALEZA);
+
+export function esExentoPorNaturaleza(tipo: string | null | undefined): boolean {
+  return !!tipo && NATURALEZA_SET.has(tipo);
+}
+
 /** Venta afecta POR SU TIPO: venta emitible y no exenta (boleta, factura, factura_afecta). */
 export function esAfectoPorTipo(tipo: string | null | undefined): boolean {
   return esVentaEmitible(tipo) && !esExentoPorTipo(tipo);

@@ -19,6 +19,8 @@ export const CANALES_DECISION = [
   "check_fila",      // acción sobre UNA fila desde la lista (sin abrir el detalle)
   "check_detalle",   // acción con el detalle abierto (editor, veredicto, glosa)
   "check_lote",      // selección múltiple / "poner listas (N)" / cambio de tipo en bloque
+  "check_grupo",     // Check agrupado: respuesta a una pregunta en grupo ("¿les vendiste algo?").
+                     //   abierta=true solo en las personas que la clienta tocó a mano.
   "aprobar_cartola", // "Aprobar cartola" → manda lo listo a Emitir
   "devolver_cartola",// "Devolver cartola" desde Emitir
   "propagacion",     // aprender-al-clasificar voltea hermanos de la misma contraparte
