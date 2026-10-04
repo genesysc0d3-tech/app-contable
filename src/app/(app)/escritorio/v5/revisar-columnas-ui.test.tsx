@@ -92,7 +92,7 @@ describe("resumen en vivo del popup", () => {
     expect(html).toContain("Con estas columnas quedan");
     expect(html).toMatch(/30.*entradas.*1\.234\.000/);
     expect(html).toMatch(/10.*salidas.*56\.700/);
-    expect(html).toContain("del 01/09 al 28/09");
+    expect(html).toMatch(/del 01\/09\/\d{4} al 28\/09\/\d{4}/);
     expect(html).not.toMatch(/adapter|mapeo|sello/i);
   });
 
@@ -162,5 +162,27 @@ describe("revisión adversarial 2026-09-30", () => {
     const src = readFileSync("src/app/(app)/escritorio/v5/MesaTab.tsx", "utf8");
     expect(src).not.toMatch(/<AtribucionDoc key=\{selDoc\.id\}/);
     expect(src).toMatch(/<VeredictoCartola key=\{selDoc\.id\}/);
+  });
+});
+
+// Vuelta 6b (A2): PDF sin marca propia de banco.
+describe("PDF sin marca de banco: sin verde y con el aviso a la vista", () => {
+  it("el resumen del popup nunca dice «Cuadra al peso con tu banco» y explica por qué", async () => {
+    const { LineaResumen } = await import("@/components/upload/FieldMapper");
+    const html = renderToStaticMarkup(createElement(LineaResumen, {
+      cargando: false,
+      resumen: { valido: true, entradas: { n: 5, monto: 1 }, salidas: { n: 5, monto: 1 }, desde: null, hasta: null, estado: "comprobada", motivo: null, contradice: false, soloAbonos: false, noLeidas: 0, guardable: true, firma: "x", sinMarcaBanco: true },
+    }));
+    expect(html).not.toContain("Cuadra al peso");
+    expect(html).toContain("no dice de qué banco es");
+  });
+  it("el visor muestra el aviso completo (no solo en el tooltip)", async () => {
+    const { DETALLE_SIN_MARCA_BANCO } = await import("@/lib/parsers/types");
+    const { default: VeredictoCartola } = await import("./VeredictoCartola");
+    const c: CuadreCartola = { ...cuadre, verificacion: { tipo: "sin_comprobar", alerta: true, detalle: DETALLE_SIN_MARCA_BANCO } };
+    const html = renderToStaticMarkup(createElement(VeredictoCartola, props(c)));
+    expect(html).toContain('data-testid="cta-columnas"');
+    expect(html.replace(/title="[^"]*"/g, "")).toContain("no dice de qué banco es");
+    expect(html).not.toContain("-webkit-line-clamp:3");
   });
 });

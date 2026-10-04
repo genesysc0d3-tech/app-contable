@@ -11,12 +11,13 @@ import type {
   Row,
   VerificacionCartola,
 } from "./types";
+import { DETALLE_SIN_MARCA_BANCO } from "./types";
 import { computeFingerprint, computeFingerprintLegacy, encabezadoNormalizado } from "./fingerprint";
 import { leerLibroCartola } from "./libro";
 import { detectHeuristic } from "./heuristic";
 import { detectByNames, detectPlantillaBoletas } from "./named";
 import { esPlantillaFacturas } from "../facturas/plantilla";
-import { applyAdapter, linesToPreExtracted, serializeLines } from "./apply";
+import { applyAdapter, inferirRangoFechas, linesToPreExtracted, serializeLines } from "./apply";
 import { leerCeldaMonto } from "./numeros";
 import { buscarSegundaSolucion } from "./unicidad";
 import { toleranciaDelSello } from "./saldo-cuadre";
@@ -37,11 +38,16 @@ import {
 } from "./juez-banco";
 import { decidirDosOpiniones, estructuraIaActiva, mapaPorIA, type EvaluacionMapa } from "./estructura-ia";
 import { cambioDeEncabezado } from "./cambio-formato";
+import { normalizarTitulo } from "./encabezados";
+import { claveDeMapa } from "./mapa-clave";
+import { detectarFormatoConocido } from "./formatos-conocidos";
 import {
   getAdapterByFingerprint,
   getAdaptersConfirmadosEmpresa,
   promoverMapaGlobalSiHayConsenso,
   saveAdapter,
+  reusarAdapterPropio,
+  adapterPropioMismoMapa,
   incrementAdapterSuccess,
   decrementAdapterConfianza,
   logParserEvent,
@@ -94,6 +100,17 @@ interface ContextoHoja {
   resumenOtraHoja: ResumenImpreso | null;
   /** Filas (0-based en `rows`) ocultas o con una columna oculta, que traen plata. */
   ocultas: { filas: number[]; columnas: number[] };
+  /**
+   * La grilla viene de un PDF SIN marca propia de banco (ni formato conocido, ni
+   * N° de cuenta corriente/vista/RUT, ni título de cartola, ni nombre del banco
+   * en el encabezado): un estado de cuenta de proveedor también cuadra por
+   * saldo. Se lee, pero NUNCA se sella (queda provisoria → popup/revisión).
+   */
+  pdfSinMarcaBanco?: boolean;
+  /** Las otras hojas del libro (primeras filas), para formatos con resumen en otra hoja. */
+  hojas: { nombre: string; rows: Row[] }[];
+  /** Encabezado del período tomado de otra hoja del MISMO export (solo formatos conocidos que lo declaran). */
+  filasPeriodo: Row[];
 }
 
 interface Lectura {
@@ -110,7 +127,16 @@ interface Lectura {
 
 export async function parseExcelWithOrchestrator(
   buffer: ArrayBuffer,
-  opts?: { documento_id?: string; empresa_id?: string }
+  /**
+   * origen "pdf": la grilla viene de un PDF (pdf-grilla.ts). Un PDF NUNCA
+   * persiste un formato aprendido ni mueve la confianza de uno guardado, salvo
+   * que la lectura quede SELLADA por el banco (saldo/total).
+   */
+  opts?: {
+    documento_id?: string; empresa_id?: string; origen?: "pdf";
+    /** PDF sin marca PROPIA de banco (pdf-router.ts `marca_banco` null): se lee, NUNCA se sella. */
+    pdf_sin_marca_banco?: boolean;
+  }
 ): Promise<{ content: string; result: OrchestratorResult }> {
   const start = Date.now();
   // Por qué falló cada capa, para el log y la alarma de capa 4. Antes tryApply
@@ -137,7 +163,7 @@ export async function parseExcelWithOrchestrator(
     }
 
     const fingerprint = computeFingerprint(rows);
-    const ctx = contextoDeHoja(workbook, sheetName, rows);
+    const ctx: ContextoHoja = { ...contextoDeHoja(workbook, sheetName, rows), pdfSinMarcaBanco: opts?.origen === "pdf" && !!opts.pdf_sin_marca_banco };
 
     const terminar = async (
       lectura: Lectura,
@@ -145,10 +171,16 @@ export async function parseExcelWithOrchestrator(
       adapterId: string | null,
       mapa: MapaUsado,
     ): Promise<{ content: string; result: OrchestratorResult }> => {
+      // Defensa en profundidad: ninguna rama sella un PDF sin marca de banco.
+      if (ctx.pdfSinMarcaBanco && esSelloDelBanco(lectura.verificacion)) {
+        lectura.verificacion = { ...SIN_MARCA_DE_BANCO, ...(lectura.verificacion.contradice ? { contradice: lectura.verificacion.contradice } : {}) };
+        lectura.censo.verificacion = lectura.verificacion;
+      }
+      const { titulos: _t, revision_cliente: _r, cuenta_huella: _c, ...mapaUsado } = lectura.cfg;
       const censo: CensoCartola = {
         ...lectura.censo,
         otras_hojas_con_datos: ctx.otrasHojas,
-        mapa: { ...mapa, adapter_id: adapterId },
+        mapa: { ...mapa, adapter_id: adapterId, clave: claveDeMapa(lectura.cfg), config: mapaUsado as AdapterConfig },
       };
       const warnings = [...lectura.warnings];
       if (mapa.cambio_formato) warnings.push(`formato_cambio: ${mapa.cambio_formato}`);
@@ -223,6 +255,19 @@ export async function parseExcelWithOrchestrator(
     let cached =
       (await getAdapterByFingerprint(fingerprint, opts?.empresa_id)) ??
       (await adaptadorManualConHuellaLegacy(rows, fingerprint, opts?.empresa_id));
+    // PDF y la respuesta del CLIENTE a "¿Este PDF es de tu banco?" (vuelta 6, M1),
+    // guardada en SU mapa de este formato (nunca global: el consenso borra
+    // revision_cliente). "No es una cartola" → el lector no lo lee (sigue el
+    // flujo de texto de antes, la IA); "Sí, es mi cartola" → cuenta como marca
+    // propia de banco para este y los siguientes PDFs del formato de ESA empresa.
+    if (opts?.origen === "pdf" && cached?.creado_por_empresa_id && cached.creado_por_empresa_id === opts.empresa_id) {
+      const rev = cached.config.revision_cliente;
+      if (rev?.no_es_cartola) {
+        const content = legacyFallback(workbook);
+        return { content, result: { content, capa_usada: 4, fingerprint, adapter_id: null, rows_extracted: 0, validator_failed_checks: [], warnings: ["pdf_no_es_cartola_cliente"], error: null, plantilla: false, preExtracted: null, verificacion: null } };
+      }
+      if (rev?.es_banco) ctx.pdfSinMarcaBanco = false;
+    }
     // Títulos de ESTA hoja al revés del mapa (vuelta 2, N1): un global no se
     // aplica (se re-deriva); uno propio se lee pero con alerta.
     let titulosAlReves = false;
@@ -231,9 +276,52 @@ export async function parseExcelWithOrchestrator(
       if (!cached.creado_por_empresa_id) cached = null;
       else titulosAlReves = true;
     }
+    // Layer 1: FORMATO CONOCIDO (formatos-conocidos.ts): huella completa →
+    // mapa registrado, sin adivinar. El juez sigue mandando: sin prueba de
+    // saldo/total no hay sello. Si la EMPRESA ya guardó su propio mapa para esta
+    // huella (corrigió columnas en el popup), manda el suyo.
+    // Un mapa PROPIO ya confirmado (por el cliente, a mano, por Check, por saldo o
+    // total del banco, por consenso) le gana al conocido: la empresa ya lo
+    // validó y sigue por la caché (adapter_id para Check). Un propio provisorio
+    // (una adivinanza vieja) no.
+    const mapaDeLaEmpresa = !!cached?.creado_por_empresa_id
+      && (cached.estado === "confirmado" || cached.source === "manual" || cached.confirmado_por === "cliente" || cached.confirmado_por === "manual");
+    // Formato con su resumen en OTRA hoja del mismo export (BancoEstado
+    // "Resumen"): de ahí el año y el resumen del banco que juzga la lectura —
+    // también cuando la lee el mapa propio de la caché.
+    const { ctx: ctxConocido, detectado } = contextoConPeriodo(ctx, rows);
+    const conocido = mapaDeLaEmpresa ? null : detectado;
+    if (conocido) {
+      const lectura = leer(ctxConocido, conocido.cfg, fallas, `conocido:${conocido.formato.id}`);
+      if (lectura) {
+        lectura.warnings.push(`formato_conocido: ${conocido.formato.id}`);
+        // Las COLUMNAS se saben; que ESTA cartola esté bien leída, no. Sin prueba
+        // del banco (saldo/total) se pide mirar igual que un formato nuevo: si
+        // no, una lectura mala sin alerta (p. ej. subtotales del día leídos como
+        // movimientos en un export sin saldo) pasaría callada (corpus 2026-10-02).
+        const probada = lectura.verificacion.tipo === "saldo" || lectura.verificacion.tipo === "total_banco";
+        // Se guarda como el mapa de la empresa (provisorio sin prueba, confirmado
+        // con ella), igual que un formato derivado: así Check y el popup tienen
+        // un adapter_id que confirmar y la próxima vez manda la caché confirmada.
+        const titulos = encabezadoNormalizado(rows) ?? undefined;
+        const adapterId = await guardarFormatoDerivado({
+          fingerprint,
+          source: "named",
+          nombre: `Formato conocido: ${conocido.formato.nombre} (${sheetName})`,
+          config: { ...conocido.cfg, ...(titulos ? { titulos } : {}), ...(lectura.censo.cuenta?.huella ? { cuenta_huella: lectura.censo.cuenta.huella } : {}) },
+        }, lectura.verificacion, opts);
+        return terminar(lectura, 1, adapterId, {
+          adapter_id: adapterId,
+          estado: probada ? "confirmado" : "provisorio",
+          nuevo: !probada,
+          confirmado_por: probada ? lectura.verificacion.tipo : null,
+          formato_conocido: conocido.formato.id,
+        });
+      }
+    }
     if (cached) {
       const delCliente = !!cached.creado_por_empresa_id && cached.estado === "confirmado" && cached.confirmado_por === "cliente";
-      const lectura = leer(ctx, cached.config, fallas, "cache", { saldoLoJuzgaElJuez: delCliente });
+      const lectura = leer(ctxConocido, cached.config, fallas, "cache", { saldoLoJuzgaElJuez: delCliente });
       if (lectura && titulosAlReves) {
         lectura.verificacion = { tipo: "sin_comprobar", alerta: true, detalle: "Los títulos de la hoja dicen lo contrario del mapa de columnas guardado (cargo↔abono): revisa las columnas", ...(lectura.verificacion.contradice ? { contradice: lectura.verificacion.contradice } : {}) };
         lectura.censo.verificacion = lectura.verificacion;
@@ -268,8 +356,8 @@ export async function parseExcelWithOrchestrator(
         // El reuso cuenta; la confianza sube y el mapa se confirma SOLO con prueba
         // (sello estricto). Confirma el mapa de ESTA empresa; volverlo global
         // exige consenso de 2+ empresas (promoverMapaGlobalSiHayConsenso).
-        await incrementAdapterSuccess(cached.id, { prueba: lectura.verificacion.tipo });
         const conPrueba = ["saldo", "total_banco"].includes(lectura.verificacion.tipo);
+        if (opts?.origen !== "pdf" || conPrueba) await incrementAdapterSuccess(cached.id, { prueba: lectura.verificacion.tipo });
         if (conPrueba && cached.creado_por_empresa_id) await promoverMapaGlobalSiHayConsenso(fingerprint, cached.config);
         const estado = cached.estado === "confirmado" || conPrueba ? "confirmado" : "provisorio";
         // Un GLOBAL aplicado sin prueba en esta lectura es nuevo PARA ESTA
@@ -277,7 +365,7 @@ export async function parseExcelWithOrchestrator(
         const nuevoParaEmpresa = !cached.creado_por_empresa_id && !conPrueba;
         const confirmadoPor = cached.estado === "confirmado" ? (cached.confirmado_por ?? null) : conPrueba ? lectura.verificacion.tipo : null;
         return terminar(lectura, 0, cached.id, { adapter_id: cached.id, estado, nuevo: nuevoParaEmpresa, confirmado_por: confirmadoPor });
-      } else {
+      } else if (opts?.origen !== "pdf") {
         await decrementAdapterConfianza(
           cached.id,
           "Layer 0 validation failed — config may be stale"
@@ -304,6 +392,19 @@ export async function parseExcelWithOrchestrator(
       if (namedCfg) {
         const l = leer(ctx, namedCfg, fallas, "nombres");
         if (l) lector = { lectura: l, capa: 3, source: "named" };
+      }
+    } else if (!conPrueba(lector.lectura)) {
+      // La heurística leyó SIN prueba. Con pocas filas confunde columnas (corpus
+      // PDF 2026-10-02: con 3 movimientos tomó "Saldo" como abono y perdió 2
+      // filas "con cargo y abono a la vez"). Si los TÍTULOS leen la misma hoja
+      // con prueba del banco (el mismo juez, la misma unicidad), o sin perder
+      // filas donde la heurística pierde, ganan los títulos. Nunca al revés: una
+      // lectura con prueba no se cambia.
+      const namedCfg = detectByNames(rows);
+      const l = namedCfg ? leer(ctx, namedCfg, [], "nombres") : null;
+      const perdidas = (x: Lectura) => x.descartes.filter((d) => !d.legitimo).length;
+      if (l && (conPrueba(l) || (perdidas(lector.lectura) > 0 && perdidas(l) === 0 && !l.verificacion.contradice))) {
+        lector = { lectura: l, capa: 3, source: "named" };
       }
     }
 
@@ -364,6 +465,12 @@ export async function parseExcelWithOrchestrator(
   // Layer 4: legacy fallback — generic sheet_to_csv across all sheets
   const content = legacyFallback(workbook);
   const fingerprint = "legacy"; // no meaningful fingerprint for legacy
+  // PDF: la grilla es nuestra; si el lector no la lee, el PDF sigue su flujo de
+  // texto (comprobante/IA) y lo cuenta el evento propio "pdf_ruta" (motivo
+  // lector_no_la_leyo). Ni parser_logs capa 4 ni la alarma de planilla.
+  if (opts?.origen === "pdf") {
+    return { content, result: { content, capa_usada: 4, fingerprint, adapter_id: null, rows_extracted: 0, validator_failed_checks: [], warnings: ["pdf_lector_no_la_leyo"], error: null, plantilla: false, preExtracted: null, verificacion: null } };
+  }
   await logParserEvent({
     documento_id: opts?.documento_id,
     fingerprint,
@@ -526,6 +633,9 @@ function contextoDeHoja(workbook: XLSX.WorkBook, sheetName: string, rows: Row[])
     otrasHojas: otrasHojasConDatos(workbook, sheetName),
     ocultas: ocultasConPlata(sheet, rows),
     resumenOtraHoja: resumenDeOtrasHojas(workbook, sheetName),
+    hojas: workbook.SheetNames.filter((n) => n !== sheetName)
+      .map((n) => ({ nombre: n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "", range: 0 }).slice(0, 60) })),
+    filasPeriodo: [],
   };
 }
 
@@ -546,6 +656,8 @@ export function firmaDeLineas(lines: ParsedLine[]): string {
 export function juzgarMapaEnLibro(
   workbook: XLSX.WorkBook,
   cfg: AdapterConfig,
+  /** PDF sin marca propia de banco: el juez del popup tampoco lo sella (mismo trato que la cola). */
+  opts: { pdfSinMarcaBanco?: boolean } = {},
 ): { ok: true; hoja: string; rows: Row[]; lines: ParsedLine[]; descartes: DescarteFila[]; verificacion: VerificacionCartola; otrasHojas: string[] } | { ok: false; error: string } {
   const hojas = workbook.SheetNames
     .map((n) => ({ n, rows: XLSX.utils.sheet_to_json<Row>(workbook.Sheets[n], { header: 1, defval: "" }) }))
@@ -556,7 +668,9 @@ export function juzgarMapaEnLibro(
   };
   const hoja = hojas.find(produce) ?? hojas[0];
   const fallas: string[] = [];
-  const ctx = contextoDeHoja(workbook, hoja.n, hoja.rows);
+  // El popup juzga con el MISMO contexto que la cola (período/resumen de la hoja
+  // "Resumen" de BancoEstado): si no, pedía confirmar el año actual (vuelta 3).
+  const { ctx } = contextoConPeriodo({ ...contextoDeHoja(workbook, hoja.n, hoja.rows), pdfSinMarcaBanco: !!opts.pdfSinMarcaBanco }, hoja.rows);
   let lectura: Lectura | null = null;
   try {
     lectura = leer(ctx, cfg, fallas, "cliente", { saldoLoJuzgaElJuez: true });
@@ -575,6 +689,14 @@ export function juzgarMapaEnLibro(
   };
 }
 
+const esSelloDelBanco = (v: VerificacionCartola) => v.tipo === "saldo" || v.tipo === "total_banco";
+/** El sello de un PDF sin marca propia de banco (vuelta 6): ninguno. */
+const SIN_MARCA_DE_BANCO: VerificacionCartola = {
+  tipo: "sin_comprobar",
+  alerta: true,
+  detalle: DETALLE_SIN_MARCA_BANCO,
+};
+
 /** Aplica un mapa, valida y SELLA. null = no pasó el validador (con el porqué en `fallas`). */
 function leer(
   ctx: ContextoHoja,
@@ -590,14 +712,14 @@ function leer(
 ): Lectura | null {
   const { rows, sheetName } = ctx;
   const descartes: DescarteFila[] = [];
-  const lines = applyAdapter(rows, cfg, descartes, undefined, { filasFormula: ctx.filasFormula });
+  const lines = applyAdapter(rows, cfg, descartes, undefined, { filasFormula: ctx.filasFormula, filasPeriodo: ctx.filasPeriodo });
   const validation = validate(lines, rows, cfg, descartes);
   const errores = opts.saldoLoJuzgaElJuez ? validation.errors.filter((e) => !e.startsWith("check_6_saldo")) : validation.errors;
   if (errores.length) {
     fallas.push(`${capa}[${sheetName}]: ${errores.join("; ")}`);
     return null;
   }
-  let verificacion = sellarCartola({ rows, cfg, lines, descartes, resumen: ctx.resumen, formulas: ctx.formulas });
+  let verificacion = sellarCartola({ rows, cfg, lines, descartes, resumen: ctx.resumen, formulas: ctx.formulas, filasPeriodo: ctx.filasPeriodo });
   // Lo que el BANCO contradice se conserva aunque otra alerta cambie el detalle.
   const contradice = verificacion.contradice;
   // UNICIDAD (numberOfSolutions === 1): un sello solo vale si ninguna OTRA
@@ -652,6 +774,26 @@ function leer(
       detalle: `Otra(s) hoja(s) del archivo traen movimientos que no se leyeron (${ctx.otrasHojas.join(", ")}). ${verificacion.detalle}`.trim(),
     };
   }
+  // Período tomado de OTRA hoja del export (BancoEstado "Resumen", vuelta 3):
+  // TODAS las fechas tienen que caer entre Fecha Inicio y Fecha Final, y nada
+  // después de la Fecha de Emisión. Si no, el Resumen es de otro período (el
+  // año puesto a "dd/mm" sería adivinado y los totales pueden calzar igual).
+  if (ctx.filasPeriodo.length) {
+    const rango = inferirRangoFechas(rows, cfg, ctx.filasPeriodo);
+    const emision = fechaRotulada(ctx.filasPeriodo, /^fecha (de )?emision$/);
+    const fueraDelPeriodo = !rango?.explicito
+      || lines.some((l) => l.fecha < rango.min || l.fecha > rango.max)
+      || (emision != null && (rango.max > emision || lines.some((l) => l.fecha > emision)));
+    if (fueraDelPeriodo) {
+      verificacion = {
+        tipo: "sin_comprobar",
+        alerta: true,
+        contradice: "banco",
+        detalle: "Las fechas de los movimientos no calzan con el período de la hoja Resumen del archivo (Fecha Inicio/Final): revisa el año y las columnas",
+      };
+    }
+  }
+  if (ctx.pdfSinMarcaBanco && esSelloDelBanco(verificacion)) verificacion = SIN_MARCA_DE_BANCO;
   if (contradice && !verificacion.contradice) verificacion = { ...verificacion, contradice };
   const saldos = saldosDeLaCartola(lines, ctx.resumen);
   return {
@@ -692,10 +834,24 @@ function leer(
 async function guardarFormatoDerivado(
   args: { fingerprint: string; source: AdapterRow["source"]; nombre: string; config: AdapterConfig },
   verificacion: VerificacionCartola,
-  opts: { documento_id?: string; empresa_id?: string } | undefined,
+  opts: { documento_id?: string; empresa_id?: string; origen?: "pdf" } | undefined,
 ): Promise<string | null> {
   const prueba = verificacion.tipo === "saldo" || verificacion.tipo === "total_banco" ? verificacion.tipo : null;
   if (!opts?.empresa_id) return null; // sin dueño no se guarda nada
+  // Upsert lógico (vueltas 2-3): si la empresa ya tiene una fila para esta huella
+  // con EL MISMO mapa, se reusa (repone confianza, cuenta el uso, con prueba la
+  // confirma). Con OTRO mapa se inserta aparte: nunca se reescribe el mapa con
+  // que se leyeron documentos anteriores.
+  let propio: string | null = null;
+  try { propio = await adapterPropioMismoMapa(args.fingerprint, opts.empresa_id, args.config); } catch { propio = null; }
+  // Un PDF sin sello no enseña formatos ni mueve la confianza: la grilla por
+  // posiciones es nuestra reconstrucción, no el archivo del banco.
+  if (opts.origen === "pdf" && !prueba) return propio;
+  if (propio) {
+    await reusarAdapterPropio(propio, { prueba, config: args.config });
+    if (prueba) await promoverMapaGlobalSiHayConsenso(args.fingerprint, args.config);
+    return propio;
+  }
   const id = await saveAdapter({
     ...args,
     empresaId: opts.empresa_id,
@@ -757,4 +913,47 @@ function legacyFallback(workbook: XLSX.WorkBook): string {
     }
   }
   return out.join("\n");
+}
+
+/** ¿La lectura trae prueba del banco (saldo corrido o totales impresos)? */
+function conPrueba(l: Lectura): boolean {
+  return l.verificacion.tipo === "saldo" || l.verificacion.tipo === "total_banco";
+}
+
+/** Fecha (ISO) a la derecha de un rótulo ("Fecha Emisión"), o null. */
+function fechaRotulada(rows: Row[], rotulo: RegExp): string | null {
+  for (const r of rows) {
+    const celdas = r ?? [];
+    for (let j = 0; j < celdas.length; j++) {
+      if (!rotulo.test(normalizarTitulo(celdas[j]))) continue;
+      for (const v of celdas.slice(j + 1, j + 6)) {
+        if ((v as unknown) instanceof Date) { const d = v as unknown as Date; return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+        const m = String(v ?? "").trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+        if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Contexto con el período/resumen de OTRA hoja del mismo export cuando la hoja
+ * calza un formato conocido que lo declara (BancoEstado "Resumen"). Lo usan la
+ * cola (conocido y caché) y el popup (juzgarMapaEnLibro), para que juzguen igual.
+ * El resumen de la otra hoja pasa a ser EL resumen solo si la hoja leída no trae
+ * uno propio; si lo trae, la otra hoja sigue como contradictor.
+ */
+function contextoConPeriodo(ctx: ContextoHoja, rows: Row[]): { ctx: ContextoHoja; detectado: ReturnType<typeof detectarFormatoConocido> } {
+  const detectado = detectarFormatoConocido(rows, ctx.hojas);
+  if (!detectado?.filasPeriodo.length) return { ctx, detectado };
+  const propio = ctx.resumen;
+  return {
+    detectado,
+    ctx: {
+      ...ctx,
+      filasPeriodo: detectado.filasPeriodo,
+      resumen: propio ?? detectarResumenImpreso(detectado.filasPeriodo),
+      resumenOtraHoja: propio ? ctx.resumenOtraHoja : null,
+    },
+  };
 }

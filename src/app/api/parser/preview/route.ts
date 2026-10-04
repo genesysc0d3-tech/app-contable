@@ -13,7 +13,8 @@ import { recordOpsEvent } from "@/lib/ops/events";
 import { applyAdapter } from "@/lib/parsers/apply";
 import type { AdapterConfig, Row } from "@/lib/parsers/types";
 import { adapterDelDocumento } from "@/lib/parsers/adapter-store";
-import { bajarArchivoCartola, esPlanillaMapeable, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
+import { leerCuadre } from "@/lib/cartola/cuadre-mesa";
+import { bajarCartola, esPlanillaMapeable, clienteServicio, configDelCliente } from "@/lib/parsers/documento-cartola";
 
 const PREVIEW_ROWS = 30;
 
@@ -62,7 +63,10 @@ export async function POST(request: Request) {
   }
 
   let ab: ArrayBuffer;
-  try { ab = await bajarArchivoCartola(sb, documento, { cache: true }); }
+  // PDF sin marca de banco y sin la confirmación del cliente para su formato
+  // (vuelta 6): el popup pregunta "¿Este PDF es de tu banco?".
+  let sinMarcaBanco = false;
+  try { ({ buf: ab, pdfSinMarcaBanco: sinMarcaBanco } = await bajarCartola(sb, documento, { cache: true })); }
   catch { return NextResponse.json({ error: "Archivo no disponible" }, { status: 500 }); }
   // El archivo ya pasó el cap de 10MB al subir, pero 10MB COMPRIMIDOS pueden
   // declarar un rango gigante que sheet_to_json expande a millones de celdas.
@@ -84,9 +88,14 @@ export async function POST(request: Request) {
   // Popup "Revisa las columnas": PRE-LLENADO con el mapa con que el lector leyó
   // ESTA cartola (el propio de la empresa), para que si está bien sea un clic en
   // "Listo". Sin él (global, capa 4), la sugerencia de los detectores.
+  // Vuelta 3 (2026-10-03): el mapa con que se leyó ESTE documento queda en su
+  // cuadre (mapa.config). La fila del adaptador puede haber cambiado después con
+  // otra cartola; el popup muestra el de este documento. Sin él (docs viejos), el
+  // adaptador del documento como antes.
+  const mapaDelDoc = leerCuadre(((documento as { progreso_ia?: unknown }).progreso_ia ?? {}) as Record<string, unknown>)?.mapa?.config ?? null;
   const sbServicio = clienteServicio();
-  const delLector = sbServicio ? await adapterDelDocumento(sbServicio, documento.id, empresaIdEfectiva) : null;
-  const lector = delLector?.config ? configDelCliente(delLector.config) : null;
+  const delLector = mapaDelDoc ? null : sbServicio ? await adapterDelDocumento(sbServicio, documento.id, empresaIdEfectiva) : null;
+  const lector = mapaDelDoc ? configDelCliente(mapaDelDoc) : delLector?.config ? configDelCliente(delLector.config) : null;
 
   type SheetData = {
     name: string;
@@ -152,5 +161,6 @@ export async function POST(request: Request) {
     suggested: lector && primary.leeLector ? lector : primary.suggested,
     suggestedSource: lector && primary.leeLector ? "lector" : primary.suggestedSource,
     allSheets: sheets.map((s) => ({ name: s.name, totalRows: s.totalRows })),
+    ...(sinMarcaBanco ? { sinMarcaBanco: true } : {}),
   });
 }

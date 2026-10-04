@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { AdapterConfig, AdapterRow, TipoVerificacion } from "./types";
+import { claveDeMapa } from "./mapa-clave";
+
+export { claveDeMapa };
 
 type LooseClient = SupabaseClient<Database>;
 
@@ -97,7 +100,35 @@ export type AdapterOwnership = {
   disabled_until: string | null;
   creado_por_empresa_id: string | null;
   estado?: string | null;
+  id?: string;
+  source?: string | null;
+  confirmado_por?: string | null;
+  last_used_at?: string | null;
 };
+
+/**
+ * Orden DETERMINÍSTICO entre varias filas propias de una huella (vuelta 4): el
+ * mapa del cliente (manual / "Listo") primero, luego los confirmados, luego por
+ * confianza, uso más reciente e id. Antes ganaba "la primera" de un orden solo
+ * por confianza: con empates, el popup podía entrar en loop.
+ */
+export function rangoDeFila(r: AdapterOwnership): number {
+  if (r.source === "manual" || r.confirmado_por === "cliente" || r.confirmado_por === "manual") return 0;
+  return estadoDeAdapter(r) === "confirmado" ? 1 : 2;
+}
+export function ordenarFilasPropias<T extends AdapterOwnership>(filas: T[]): T[] {
+  return [...filas].sort((a, b) =>
+    rangoDeFila(a) - rangoDeFila(b)
+    || b.confianza - a.confianza
+    || String(b.last_used_at ?? "").localeCompare(String(a.last_used_at ?? ""))
+    || String(a.id ?? "").localeCompare(String(b.id ?? "")));
+}
+
+/** La fila propia que se puede REUSAR para este mapa: la que tiene la MISMA claveDeMapa (o null). */
+export function filaPropiaMismoMapa<T extends { config?: AdapterConfig | null }>(filas: T[], config: AdapterConfig): T | null {
+  const clave = claveDeMapa(config);
+  return filas.find((f) => claveDeMapa(f.config ?? null) === clave) ?? null;
+}
 
 /**
  * AISLAMIENTO CROSS-TENANT (lógica pura, testeable). El adapter 'manual' es un
@@ -122,21 +153,12 @@ export function selectAdapterForEmpresa<T extends AdapterOwnership>(
     return true;
   });
   if (!usable.length) return null;
-  const propio = empresaId ? usable.find((r) => r.creado_por_empresa_id === empresaId) : undefined;
+  const propio = empresaId ? ordenarFilasPropias(usable.filter((r) => r.creado_por_empresa_id === empresaId))[0] : undefined;
   if (propio) return propio;
   const global = usable.find((r) => !r.creado_por_empresa_id && estadoDeAdapter(r) === "confirmado");
   return global ?? null;
 }
 
-/** Lo que define un mapa (sin títulos ni filas de encabezado, que varían por empresa). */
-function claveDeMapa(cfg: AdapterConfig | null | undefined): string {
-  if (!cfg) return "";
-  const c = cfg.columns ?? ({} as AdapterConfig["columns"]);
-  return JSON.stringify([
-    cfg.layout ?? "two_cols", cfg.date_format, cfg.number_format, cfg.default_tipo_flujo ?? null,
-    c.fecha, c.descripcion, c.n_documento, c.cargo, c.abono, c.saldo, c.monto ?? -1, c.tipo_flujo_col ?? -1,
-  ]);
-}
 
 /**
  * ¿Hay CONSENSO para compartir este mapa con todas las empresas? (vuelta 2 de
@@ -290,26 +312,46 @@ export async function upsertManualAdapter(args: {
     // se devolvía el global y la corrección manual no se guardaba, así que una
     // empresa no podía arreglar un formato global mal leído (2026-09-26). El
     // propio gana en selectAdapterForEmpresa.
-    const existing = await sb
+    // Vuelta 4: se reusa SOLO la fila propia con el MISMO mapa (claveDeMapa). Una
+    // fila con otro mapa (p. ej. confirmada por saldo) nunca se reescribe con las
+    // columnas del popup: el mapa del cliente va en su propia fila y gana en la
+    // caché por orden (ordenarFilasPropias).
+    const { data: propias } = await sb
       .from("parser_adapters")
-      .select("id, creado_por_empresa_id")
+      .select("id, config, estado, confirmado_por")
       .eq("fingerprint", args.fingerprint)
-      .eq("creado_por_empresa_id", args.empresaId)
-      .limit(1)
-      .maybeSingle();
+      .eq("creado_por_empresa_id", args.empresaId);
+    const igual = filaPropiaMismoMapa((propias ?? []) as unknown as { id: string; config: AdapterConfig; estado?: string | null; confirmado_por?: string | null }[], args.config);
+    const existing = { data: igual ? { id: igual.id } : null };
+    const ahora = new Date().toISOString();
 
-    // Las columnas que eligió el cliente SON su confirmación.
-    const confirmado = { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: new Date().toISOString() };
+    // Las columnas que eligió el cliente SON su confirmación. Vuelta 5 (M1): si
+    // la fila con este MISMO mapa ya estaba confirmada por el banco (saldo /
+    // total), esa prueba objetiva se conserva (y la huella de la cuenta, que
+    // cuenta para el consenso global): el "Listo" solo agrega su revisión.
+    const pruebaDelBanco = igual && estadoDeAdapter(igual) === "confirmado" && (igual.confirmado_por === "saldo" || igual.confirmado_por === "total_banco");
+    const confirmado = pruebaDelBanco ? {} : { estado: "confirmado", confirmado_por: args.confirmadoPor, confirmado_en: ahora };
+    let config: AdapterConfig = igual?.config?.cuenta_huella && !args.config.cuenta_huella
+      ? { ...args.config, cuenta_huella: igual.config.cuenta_huella }
+      : args.config;
+    // Vuelta 6 (M1): "Sí, es mi cartola" ya dicho para este formato se conserva
+    // cuando el cliente vuelve a guardar columnas (salvo que ahora diga lo contrario).
+    if (igual?.config?.revision_cliente?.es_banco && config.revision_cliente && !config.revision_cliente.es_banco && !config.revision_cliente.no_es_cartola) {
+      config = { ...config, revision_cliente: { ...config.revision_cliente, es_banco: true } };
+    }
 
     if (existing.data?.id) {
       const base = {
         source: "manual",
-        config: toJson(args.config),
+        config: toJson(config),
         nombre: args.nombre ?? null,
         tipo_doc: args.tipo_doc ?? "cartola_bancaria",
         confianza: 1.0,
         disabled_until: null,
         last_failure_reason: null,
+        // Vuelta 5 (A1): el "Listo" es el uso más reciente. Sin esto, con dos filas
+        // del cliente ganaba la otra (más reciente) y el popup volvía (loop).
+        last_used_at: ahora,
       };
       const r = await sb.from("parser_adapters").update({ ...base, ...confirmado } as never).eq("id", existing.data.id);
       if (r?.error && esColumnaFaltante(r.error)) {
@@ -323,11 +365,11 @@ export async function upsertManualAdapter(args: {
       nombre: args.nombre ?? null,
       tipo_doc: args.tipo_doc ?? "cartola_bancaria",
       source: "manual",
-      config: toJson(args.config),
+      config: toJson(config),
       confianza: 1.0,
       usage_count: 0,
       success_count: 0,
-      last_used_at: new Date().toISOString(),
+      last_used_at: ahora,
       creado_por_empresa_id: args.empresaId,
     };
     let res = await sb.from("parser_adapters").insert({ ...base, ...confirmado } as never).select("id").single();
@@ -384,6 +426,64 @@ export async function saveAdapter(args: {
   } catch {
     return null;
   }
+}
+
+/**
+ * La fila PROPIA de la empresa para esta huella con EL MISMO mapa (claveDeMapa),
+ * aunque esté deshabilitada o con confianza baja (invisible para la caché). null
+ * si no hay: entonces se inserta como siempre. Vuelta 3 (2026-10-03): reusar una
+ * fila con OTRO mapa reescribía el mapa con que se leyeron documentos anteriores
+ * (Check confirmaba un mapa nunca revisado).
+ */
+export async function adapterPropioMismoMapa(fingerprint: string, empresaId: string, config: AdapterConfig): Promise<string | null> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return null;
+    const { data } = await sb.from("parser_adapters").select("id, config").eq("fingerprint", fingerprint).eq("creado_por_empresa_id", empresaId);
+    return filaPropiaMismoMapa((data ?? []) as unknown as { id: string; config: AdapterConfig }[], config)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** El mapa guardado con la posición (fila de títulos, inicio de datos, títulos) del nuevo. */
+export function conPosicion(guardado: AdapterConfig, nuevo: AdapterConfig): AdapterConfig {
+  return {
+    ...guardado,
+    header_row: nuevo.header_row,
+    skip_rows_before_data: nuevo.skip_rows_before_data,
+    ...(nuevo.titulos ? { titulos: nuevo.titulos } : {}),
+  };
+}
+
+/**
+ * Reusa la fila propia con el MISMO mapa (adapterPropioMismoMapa): nunca otra
+ * inserción por lectura. Repone la confianza a la de un provisorio vivo y quita
+ * el disabled_until (si no, la fila seguía invisible y volvían los duplicados);
+ * cuenta el uso y, con prueba, la confirma (incrementAdapterSuccess).
+ */
+export async function reusarAdapterPropio(
+  adapterId: string,
+  opts: { prueba?: TipoVerificacion | null; config?: AdapterConfig } = {},
+): Promise<string> {
+  try {
+    const sb = getServiceClient();
+    if (sb) {
+      const { data } = await sb.from("parser_adapters").select("confianza, config").eq("id", adapterId).maybeSingle();
+      const fila = data as { confianza?: number; config?: AdapterConfig } | null;
+      const confianza = Math.max(Number(fila?.confianza ?? 0), CONFIANZA_PROVISORIO);
+      // Mismo mapa de columnas, pero lo POSICIONAL puede haber cambiado (filas de
+      // encabezado de más o de menos): se actualiza sin tocar lo demás (vuelta 4).
+      const config = opts.config && fila?.config
+        ? toJson(conPosicion(fila.config, opts.config))
+        : undefined;
+      await sb.from("parser_adapters").update({ confianza, disabled_until: null, ...(config ? { config } : {}) } as never).eq("id", adapterId);
+    }
+  } catch {
+    /* non-blocking */
+  }
+  await incrementAdapterSuccess(adapterId, { prueba: opts.prueba ?? null });
+  return adapterId;
 }
 
 /**
@@ -532,6 +632,54 @@ export async function adapterDelDocumento(
     const row = ad as unknown as { id: string; creado_por_empresa_id: string | null; estado?: string | null; fingerprint?: string; config?: AdapterConfig } | null;
     if (!row || row.creado_por_empresa_id !== empresaId) return null;
     return { id: row.id, estado: estadoDeAdapter(row), fingerprint: row.fingerprint, config: row.config };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ¿Este documento quedó marcado "No es una cartola" por la empresa (vuelta 6c)?
+ * La marca vive en revision_cliente del mapa propio (documento_id = el PDF en
+ * que el cliente lo dijo).
+ */
+export async function documentoMarcadoNoEsCartola(empresaId: string, documentoId: string): Promise<boolean> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return false;
+    const { data } = await sb.from("parser_adapters").select("config").eq("creado_por_empresa_id", empresaId).limit(500);
+    return ((data ?? []) as unknown as { config: AdapterConfig | null }[])
+      .some((r) => r.config?.revision_cliente?.no_es_cartola === true && r.config.revision_cliente.documento_id === documentoId);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * DESHACER "No es una cartola" (vuelta 6c): quita la marca de los mapas PROPIOS
+ * de la empresa para esta huella. Las columnas que quedaban en ese mapa nunca las
+ * confirmó el cliente (solo dijo que no era cartola): el mapa vuelve a
+ * provisorio, salvo que tuviera prueba del banco (saldo/total). Devuelve cuántos
+ * mapas tocó (null = error).
+ */
+export async function quitarNoEsCartola(empresaId: string, fingerprint: string): Promise<number | null> {
+  try {
+    const sb = getServiceClient();
+    if (!sb) return null;
+    const { data, error } = await sb.from("parser_adapters").select("id, config, confirmado_por")
+      .eq("fingerprint", fingerprint).eq("creado_por_empresa_id", empresaId);
+    if (error) return null;
+    let n = 0;
+    for (const r of (data ?? []) as unknown as { id: string; config: AdapterConfig | null; confirmado_por?: string | null }[]) {
+      if (!r.config?.revision_cliente?.no_es_cartola) continue;
+      const { revision_cliente: _r, ...config } = r.config;
+      const pruebaDelBanco = r.confirmado_por === "saldo" || r.confirmado_por === "total_banco";
+      const cambios = { config: toJson(config as AdapterConfig), ...(pruebaDelBanco ? {} : { estado: "provisorio", confirmado_por: null, confirmado_en: null }) };
+      const u = await sb.from("parser_adapters").update(cambios as never).eq("id", r.id);
+      if (u?.error && esColumnaFaltante(u.error)) await sb.from("parser_adapters").update({ config: toJson(config as AdapterConfig) }).eq("id", r.id);
+      else if (u?.error) return null;
+      n++;
+    }
+    return n;
   } catch {
     return null;
   }

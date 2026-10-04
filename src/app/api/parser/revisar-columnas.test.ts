@@ -167,8 +167,10 @@ describe("cartola CSV (revisión adversarial 2026-09-30)", () => {
     const res = await guardar(post("/api/parser/save-mapping", { documento_id: "doc-1", config: bien, reprocess: true }));
     expect(res.status).not.toBe(400);
   });
-  it("un PDF sigue sin popup de columnas", async () => {
-    tipoDoc = "pdf";
+  // PDF (2026-10-02): la cola lo lee con la grilla por posiciones → SÍ tiene popup
+  // (documento-cartola.ts arma esa misma grilla). Una imagen sigue sin popup.
+  it("una imagen sigue sin popup de columnas", async () => {
+    tipoDoc = "imagen";
     const { POST } = await import("./save-mapping/route");
     expect((await POST(post("/api/parser/save-mapping", { documento_id: "doc-1", config: bien }))).status).toBe(400);
   });
