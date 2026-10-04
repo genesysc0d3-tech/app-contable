@@ -20,6 +20,7 @@
 -- SE BORRA EN CLEAN REAL
 --   audit_chunks, ia_uso, creditos_uso, periodos_contables,
 --   gastos, documentos_tributarios, propuestas_ia, movimientos_raw,
+--   propuesta_decisiones (log del clasificador) de las propuestas borradas,
 --   documentos_subidos, clientes, proveedores,
 --   boletas_emitidas SOLO cuando emision_proveedor = 'mock'.
 --
@@ -42,6 +43,7 @@ UNION ALL SELECT 'ANTES periodos_contables', count(*) FROM public.periodos_conta
 UNION ALL SELECT 'ANTES gastos', count(*) FROM public.gastos
 UNION ALL SELECT 'ANTES documentos_tributarios', count(*) FROM public.documentos_tributarios
 UNION ALL SELECT 'ANTES propuestas_ia', count(*) FROM public.propuestas_ia
+UNION ALL SELECT 'ANTES propuesta_decisiones', count(*) FROM public.propuesta_decisiones
 UNION ALL SELECT 'ANTES movimientos_raw', count(*) FROM public.movimientos_raw
 UNION ALL SELECT 'ANTES documentos_subidos', count(*) FROM public.documentos_subidos
 UNION ALL SELECT 'ANTES clientes', count(*) FROM public.clientes
@@ -171,6 +173,17 @@ AND NOT EXISTS (
     AND (d.progreso_ia ->> 'boleta_id') = b.id::text
 );
 
+-- Log de decisiones (migracion 20261004160000): sin FK a propuestas a proposito
+-- (el rastro sobrevive al borrado), asi que se limpia aparte y DESPUES de los
+-- DELETE de arriba (que dejan filas 'borrado'). Se conserva el de las propuestas
+-- que siguen vivas (las que trazan boletas reales o emisiones abiertas).
+DELETE FROM public.propuesta_decisiones l
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.propuestas_ia p
+  WHERE p.id = l.propuesta_id
+);
+
 DELETE FROM public.clientes c
 WHERE NOT EXISTS (
   SELECT 1
@@ -187,6 +200,7 @@ UNION ALL SELECT 'DESPUES periodos_contables', count(*) FROM public.periodos_con
 UNION ALL SELECT 'DESPUES gastos', count(*) FROM public.gastos
 UNION ALL SELECT 'DESPUES documentos_tributarios', count(*) FROM public.documentos_tributarios
 UNION ALL SELECT 'DESPUES propuestas_ia', count(*) FROM public.propuestas_ia
+UNION ALL SELECT 'DESPUES propuesta_decisiones', count(*) FROM public.propuesta_decisiones
 UNION ALL SELECT 'DESPUES movimientos_raw', count(*) FROM public.movimientos_raw
 UNION ALL SELECT 'DESPUES documentos_subidos', count(*) FROM public.documentos_subidos
 UNION ALL SELECT 'DESPUES clientes', count(*) FROM public.clientes

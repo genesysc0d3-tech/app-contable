@@ -18,6 +18,7 @@ import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { esTipoValido } from "@/lib/sii/destino";
 import { clasificarBoleta, type DocumentoHint } from "../sii/clasificador-tipo";
 import { decidirTipoDtePersistido, decidirEstadoInicial, ajustarPorConflicto, CONFIANZA_REGLA_CONFIRMADA_EN_MARCA } from "./tipo-dte-persistido";
+import { resumenPropuestasABorrar } from "../propuestas/resumen-borrado";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import { notasPropuestasONull, rutPropuestoONull, sanearCampoIdentidad } from "./saneo";
@@ -406,6 +407,8 @@ async function insertInBatches<T extends Record<string, unknown>>(
  */
 export async function limpiarInsercionesPrevias(
   documentoId: string,
+  /** Para el rastro del borrado en la auditoría (Fase 1 medición). Opcional. */
+  empresaId?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = getServiceClient();
   const { data: movsPrevios, error: movErr } = await supabase
@@ -425,11 +428,25 @@ export async function limpiarInsercionesPrevias(
   if (bloqueo.emitidas > 0 || bloqueo.emisionesAbiertas > 0) {
     return { ok: false, error: "REPROCESO_CON_BOLETA_EMITIDA" };
   }
+  // Rastro (Fase 1 medición): SOLO conteos de las propuestas que el reproceso
+  // borra, antes de borrarlas. Best-effort: nunca frena el reproceso.
+  const resumen = empresaId ? await resumenPropuestasABorrar(supabase, { empresaId, documentoId }) : null;
   // Una sentencia: la cascada movimientos_raw → propuestas_ia es atómica y pasa
   // por el trigger PROPUESTA_CON_EMISION (candado 2).
   const { error: delErr } = await supabase.from("movimientos_raw").delete().eq("documento_id", documentoId);
   if (delErr) {
     return { ok: false, error: esErrorCandadoBD(delErr) ? "REPROCESO_CON_BOLETA_EMITIDA" : "REPROCESO_REVISION_FALLO" };
+  }
+  if (empresaId && resumen && resumen.total > 0) {
+    try {
+      const { recordCuentaAudit } = await import("@/lib/audit/account");
+      await recordCuentaAudit({
+        sb: supabase, empresaId, accion: "documento_reprocesado_limpieza",
+        recursoTipo: "documento", recursoId: documentoId,
+        resumen: `Reproceso: se limpiaron ${resumen.total} propuestas del intento anterior`,
+        metadata: { movimientos: movIds.length, propuestas_resumen: resumen },
+      });
+    } catch { /* la auditoría nunca rompe el reproceso */ }
   }
   return { ok: true };
 }
@@ -566,7 +583,7 @@ export async function procesarDocumento(
   // Reproceso idempotente: borra lo que este documento haya dejado en un intento
   // anterior antes de reinsertar (evita movimientos/propuestas duplicados en los
   // reintentos del job). Aborta si ya hay una boleta emitida colgando (ver helper).
-  const limpieza = await limpiarInsercionesPrevias(documentoId);
+  const limpieza = await limpiarInsercionesPrevias(documentoId, empresaId);
   if (!limpieza.ok) {
     const motivo = limpieza.error === "REPROCESO_CON_BOLETA_EMITIDA"
       ? "No se puede reprocesar: el documento ya tiene boletas emitidas o una emisión a medias."
@@ -1579,6 +1596,9 @@ export async function procesarDocumento(
             cliente_id: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? clienteId : null,
             fuente_clasificacion: ajuste.fuente,
             regla_id: enriched.__regla_id ?? null,
+            // Fase 1 medición: qué rama de decidirTipoDtePersistido decidió el tipo_dte
+            // (foto inmutable al nacer; conflicto regla↔marca tiene fuente propia).
+            orig_tipo_dte_fuente: decisionTipo.fuente,
           };
         });
 

@@ -227,7 +227,7 @@ function BlockApproveBtn({ ids, label }: { ids: string[]; label: string }) {
     e.stopPropagation();
     if (ids.length === 0) return;
     setLoading(true);
-    const r = await ponerListo(ids);
+    const r = await ponerListo(ids, undefined, "check_lote");
     if (r.error) toast(r.error, "error"); else toast(`${r.count} listas${r.aviso ? ` · ${r.aviso}` : ""}`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
@@ -254,7 +254,7 @@ function ApproveAllBtn({ propuestas }: { propuestas: Propuesta[] }) {
     e.stopPropagation();
     if (elegibles.length === 0) return;
     setLoading(true);
-    const r = await ponerListo(elegibles.map((p) => p.id));
+    const r = await ponerListo(elegibles.map((p) => p.id), undefined, "check_lote");
     if (r.error) toast(r.error, "error");
     else toast(`${saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`}${r.aviso ? ` · ${r.aviso}` : ""}`);
     if (ctxReload) ctxReload(); else router.refresh();
@@ -444,7 +444,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
         };
     const e = await editarPropuesta(propuesta.id, patch);
     if (e?.error) { toast(e.error, "error"); setBusy(false); return; }
-    const r = await ponerListo([propuesta.id], cid || null);
+    const r = await ponerListo([propuesta.id], cid || null, "check_detalle");
     // Aprender-al-clasificar: si al resolver este movimiento la app acomodó a los
     // hermanos de la misma contraparte en la cartola, lo mostramos (el "momento
     // mágico"). Si solo aprendió la regla para la próxima, un aviso más suave.
@@ -460,7 +460,7 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
 
   async function handleRechazar() {
     setBusy(true);
-    const r = await rechazarPropuesta(propuesta.id);
+    const r = await rechazarPropuesta(propuesta.id, "check_detalle");
     if (r.error) toast(r.error, "error"); else toast("Rechazada");
     onAction();
     setBusy(false);

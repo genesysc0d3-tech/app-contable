@@ -82,3 +82,6 @@ dist/
 
 # Llaves de Flow producción (locales, se suben a Vercel por API)
 .flow/
+
+# medición del clasificador (scripts/medicion/medir-clasificador.mjs): salida local, no se versiona
+artifacts/runs/medicion-clasificador-*.json

@@ -6,6 +6,7 @@ import type { Database } from "@/lib/database.types";
 import { deleteFromR2 } from "@/lib/r2";
 import { esPathDeEmpresa } from "@/lib/storage";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
 import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 import {
   esErrorCandadoBD,
@@ -142,6 +143,12 @@ export async function POST(request: Request) {
   // candado 2 salta (carrera: una emisión arrancó recién), la base revierte TODO y
   // el archivo sigue intacto. Si después falla el borrado del archivo, el documento
   // queda sin movimientos pero con su archivo y su fila: reintentar eliminar lo cierra.
+  // Rastro del borrado (Fase 1 medición): SOLO conteos de lo que se va, para la
+  // auditoría. Best-effort (null si la base no lo tiene); nunca frena el borrado.
+  const propuestasResumen = propIds.length > 0
+    ? await resumenPropuestasABorrar(svc, { empresaId: documento.empresa_id, documentoId: documento_id })
+    : null;
+
   if (movIds.length > 0) {
     const { error: movDelErr } = await svc.from("movimientos_raw").delete().eq("documento_id", documento_id);
     if (movDelErr) {
@@ -215,7 +222,10 @@ export async function POST(request: Request) {
     recursoTipo: "documento",
     recursoId: documento_id,
     resumen: `Documento "${documento.nombre_archivo}" eliminado de la mesa (${propIds.length} propuestas, ${movIds.length} movimientos)`,
-    metadata: { nombre_archivo: documento.nombre_archivo, tipo: documento.tipo, propuestas: propIds.length, movimientos: movIds.length },
+    metadata: {
+      nombre_archivo: documento.nombre_archivo, tipo: documento.tipo, propuestas: propIds.length, movimientos: movIds.length,
+      ...(propuestasResumen ? { propuestas_resumen: propuestasResumen } : {}),
+    },
   });
 
   return NextResponse.json({ ok: true });

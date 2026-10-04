@@ -77,6 +77,7 @@ export async function procesarPlantillaFacturas(
       receptor_comuna: f.receptorComuna,
       receptor_email: f.receptorEmail,
       fuente_clasificacion: "plantilla_facturas",
+      orig_tipo_dte_fuente: "plantilla_facturas",
       confianza: 1,
     });
     if (propErr) throw new Error(`No se pudo crear la factura de la fila ${f.fila}: ${propErr.message}`);

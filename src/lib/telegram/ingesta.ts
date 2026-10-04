@@ -20,6 +20,7 @@ import { receptorObligatorio, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/valid
 import { completarComprobante, elegirComprobanteDelAlbum, extraerCodigoTransaccion, leerComprobante, type ComprobanteLeido } from "@/lib/lectura/comprobante";
 import { aplicarRespuesta, preguntaAclaracion, sePuedePreguntar, type AclaracionGuardada, type RespuestaAclaracion } from "@/lib/telegram/aclaracion";
 import { cargarIdentidadesEmpresa } from "@/lib/lectura/identidades";
+import { sello } from "@/lib/propuestas/sello";
 
 /** Comprobante ilegible (foto borrosa/oscura): pedir screenshot en el momento. */
 const MSG_ILEGIBLE =
@@ -205,6 +206,7 @@ async function procesarComprobanteDeterministico(
       confianza: posibleDuplicado ? 0.5 : parsed.fechaVisible && parsed.direccionPorIdentidad ? 0.92 : 0.78,
       notas: `${posibleDuplicado ? "⚠ Posible duplicado: ya hay otro movimiento con el mismo monto, fecha y glosa — revisa antes de emitir. " : ""}${notaTipo} detectada por parser determinístico de Telegram${identificarContraparte && parsed.contraparte_nombre ? ` · contraparte ${parsed.contraparte_nombre}` : ""}`,
       fuente_clasificacion: "telegram_deterministico",
+      orig_tipo_dte_fuente: "telegram_comprobante",
     });
     if (propError) {
       console.error("[telegram] parser determinístico insert propuesta fallo:", propError.message);
@@ -249,14 +251,16 @@ async function convertirPropuestasAFactura(
     .eq("documento_id", documentoId);
   const ids = (movs ?? []).map((m) => m.id);
   if (ids.length === 0) return;
+  // Un gesto del sistema (reclasificar el comprobante a la mesa factura) = un lote.
+  const selloSistema = sello("sistema", { usuarioId: null, loteN: ids.length });
   await svc
     .from("propuestas_ia")
-    .update({ mesa: "factura", tipo_propuesto: "factura_exenta", tipo_dte: 34 })
+    .update({ mesa: "factura", tipo_propuesto: "factura_exenta", tipo_dte: 34, ...selloSistema })
     .in("movimiento_id", ids)
     .eq("iva", 0);
   await svc
     .from("propuestas_ia")
-    .update({ mesa: "factura", tipo_propuesto: "factura_afecta", tipo_dte: 33 })
+    .update({ mesa: "factura", tipo_propuesto: "factura_afecta", tipo_dte: 33, ...selloSistema })
     .in("movimiento_id", ids)
     .gt("iva", 0);
 }
@@ -305,6 +309,7 @@ async function asegurarPropuestasDeVenta(
       iva: exento ? 0 : total - neto,
       confianza: 0.7,
       notas: "Venta detectada en comprobante",
+      orig_tipo_dte_fuente: "telegram_asegurada" as const,
     };
   });
   const { error } = await svc.from("propuestas_ia").insert(inserts);
