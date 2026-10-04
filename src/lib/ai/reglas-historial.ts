@@ -17,6 +17,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import {
   aplicarCorreccion,
+  avisoCorreccion,
+  esCorreccionDeRegla,
   recalcularEstado,
   type EfectoCorreccion,
   type ReglaConHistorial,
@@ -31,6 +33,7 @@ import { FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 import { clasificarIntocables } from "@/lib/emission/propuestas-intocables";
 import { nuevoLote, sello } from "@/lib/propuestas/sello";
 import type { MovimientoExtraido } from "./types";
+import { contraparteVisible } from "./contraparte-visible";
 
 type SB = SupabaseClient<Database>;
 const TROZO = 50;
@@ -48,7 +51,7 @@ export interface EvidenciaFila {
   glosa: string | null;
 }
 
-const COLS_REGLA = "id, empresa_id, estado, tipo_dte, tipo_propuesto, veces_confirmada, veces_corregida, aprendida_bajo_marca";
+const COLS_REGLA = "id, empresa_id, estado, tipo_dte, tipo_propuesto, veces_confirmada, veces_corregida, corregidas_en_ventana, disputa_eleccion, disputa_racha, aprendida_bajo_marca";
 type ReglaFila = ReglaConHistorial & { id: string; tipo_propuesto?: string | null };
 
 /**
@@ -71,38 +74,54 @@ export async function leerEvidencia(sb: SB, empresaId: string, reglaIds?: string
 export interface FilaCorregida {
   reglaId: string | null | undefined;
   documentoId?: string | null;
+  /** tipo_dte que la fila le MOSTRABA a la clienta antes del cambio (M2). */
+  tipoFila?: number | null;
+  /** Glosa de la fila: de ahí sale la contraparte del aviso. */
+  glosa?: string | null;
+}
+
+export interface ResultadoCorrecciones {
+  efectos: Map<string, EfectoCorreccion>;
+  /** Avisos cortos para el toast de Check (la regla se dio vuelta / entró o salió de disputa). */
+  avisos: string[];
 }
 
 /**
  * Una persona cambió el tipo_dte de estas filas a `tipoNuevo`. Registra UNA corrección
- * por regla (las filas sin regla o de reglas globales no cuentan). Solo mesa boleta
- * (39/41): las reglas hablan ese vocabulario. Nunca lanza.
+ * por regla (las filas sin regla, de reglas globales, o cuyo tipo mostrado no era el de
+ * la regla no cuentan — esCorreccionDeRegla). `mirada`: el gesto fue check_fila /
+ * check_detalle o un lote ≤ 25. Solo mesa boleta (39/41). Nunca lanza.
  */
 export async function registrarCorrecciones(
   sb: SB,
-  args: { empresaId: string; tipoNuevo: number; filas: FilaCorregida[] },
-): Promise<Map<string, EfectoCorreccion>> {
+  args: { empresaId: string; tipoNuevo: number; mirada: boolean; filas: FilaCorregida[] },
+): Promise<ResultadoCorrecciones> {
   const efectos = new Map<string, EfectoCorreccion>();
-  if (args.tipoNuevo !== 39 && args.tipoNuevo !== 41) return efectos;
-  const porRegla = new Map<string, string | null>();
+  const avisos: string[] = [];
+  if (args.tipoNuevo !== 39 && args.tipoNuevo !== 41) return { efectos, avisos };
+  const porRegla = new Map<string, FilaCorregida[]>();
   for (const f of args.filas) {
     if (!f.reglaId) continue;
-    if (!porRegla.has(f.reglaId) || (porRegla.get(f.reglaId) == null && f.documentoId)) porRegla.set(f.reglaId, f.documentoId ?? null);
+    porRegla.set(f.reglaId, [...(porRegla.get(f.reglaId) ?? []), f]);
   }
-  for (const [reglaId, documentoId] of porRegla) {
+  for (const [reglaId, filas] of porRegla) {
     try {
-      efectos.set(reglaId, await registrarCorreccion(sb, { empresaId: args.empresaId, reglaId, tipoNuevo: args.tipoNuevo, documentoId }));
+      const r = await registrarCorreccion(sb, { empresaId: args.empresaId, reglaId, tipoNuevo: args.tipoNuevo, mirada: args.mirada, filas });
+      efectos.set(reglaId, r.efecto);
+      const aviso = avisoCorreccion(r.efecto, contraparteVisible(r.glosa), r.tipoDte);
+      if (aviso) avisos.push(aviso);
     } catch {
       efectos.set(reglaId, "ninguno");
     }
   }
-  return efectos;
+  return { efectos, avisos };
 }
 
 async function registrarCorreccion(
   sb: SB,
-  a: { empresaId: string; reglaId: string; tipoNuevo: number; documentoId: string | null },
-): Promise<EfectoCorreccion> {
+  a: { empresaId: string; reglaId: string; tipoNuevo: number; mirada: boolean; filas: FilaCorregida[] },
+): Promise<{ efecto: EfectoCorreccion; tipoDte: number | null; glosa: string | null }> {
+  const nada = { efecto: "ninguno" as EfectoCorreccion, tipoDte: null, glosa: null };
   // Dos intentos: la escritura es condicional al contador leído (otra corrección en
   // paralelo no se pierde: si cambió, se relee y se recalcula).
   for (let intento = 0; intento < 2; intento++) {
@@ -113,20 +132,28 @@ async function registrarCorreccion(
       .eq("empresa_id", a.empresaId)
       .maybeSingle();
     const regla = r as ReglaFila | null;
-    if (!regla || regla.empresa_id == null) return "ninguno";
+    if (!regla || regla.empresa_id == null) return nada;
+    // M2: solo filas que mostraban el tipo de la regla (o, en disputa, sin tipo).
+    const fila = a.filas.find((f) => esCorreccionDeRegla(regla, { tipoFila: f.tipoFila ?? null, tipoNuevo: a.tipoNuevo }));
+    if (!fila) return nada;
     const ev = await leerEvidencia(sb, a.empresaId, [a.reglaId]);
     const confirmadas = ev?.get(a.reglaId)?.confirmadas ?? regla.veces_confirmada ?? 0;
-    const res = aplicarCorreccion(regla, { tipoNuevo: a.tipoNuevo, confirmadas });
-    if (res.efecto === "ninguno") return "ninguno";
+    const res = aplicarCorreccion(regla, { tipoNuevo: a.tipoNuevo, confirmadas, mirada: a.mirada });
+    if (res.efecto === "ninguno") return nada;
     const cambios: Record<string, unknown> = {
       estado: res.estado,
       veces_corregida: res.veces_corregida,
-      // La ventana de evidencia vuelve a empezar: lo confirmado ANTES de esta corrección
-      // era del tipo corregido y no puede re-promoverla (B1).
-      veces_confirmada: 0,
-      evidencia_desde: new Date().toISOString(),
+      corregidas_en_ventana: res.corregidas_en_ventana,
+      disputa_eleccion: res.disputa_eleccion,
+      disputa_racha: res.disputa_racha,
       aprendida_bajo_marca: res.aprendida_bajo_marca,
     };
+    if (res.reiniciaVentana) {
+      // Lo confirmado ANTES de este cambio era del tipo corregido / en disputa: no puede
+      // re-promoverla (B1). La ventana de evidencia vuelve a empezar.
+      cambios.evidencia_desde = new Date().toISOString();
+      cambios.veces_confirmada = 0;
+    }
     if (res.tipo_dte !== regla.tipo_dte) {
       cambios.tipo_dte = res.tipo_dte;
       cambios.tipo_propuesto = res.tipo_dte === 41 ? "exenta" : "boleta";
@@ -137,19 +164,19 @@ async function registrarCorreccion(
       .eq("id", a.reglaId)
       .eq("empresa_id", a.empresaId)
       .eq("veces_corregida", regla.veces_corregida ?? 0);
-    if (error) return "ninguno";
+    if (error) return nada;
     if ((count ?? 0) === 0) continue;
-    if (a.documentoId) {
+    if (fila.documentoId) {
       try {
         await sb.from("clasificacion_regla_soportes").upsert(
-          { regla_id: a.reglaId, documento_id: a.documentoId, empresa_id: a.empresaId, rol: "corrigio" },
+          { regla_id: a.reglaId, documento_id: fila.documentoId, empresa_id: a.empresaId, rol: "corrigio" },
           { onConflict: "regla_id,documento_id,rol", ignoreDuplicates: true },
         );
       } catch { /* best-effort */ }
     }
-    return res.efecto;
+    return { efecto: res.efecto, tipoDte: res.tipo_dte, glosa: fila.glosa ?? null };
   }
-  return "ninguno";
+  return nada;
 }
 
 // ── Recalcular el estado derivado ───────────────────────────────────────────────

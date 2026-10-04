@@ -43,62 +43,57 @@ const reglaFila = (o: Record<string, unknown> = {}) => ({
 });
 
 describe("registrarCorrecciones", () => {
-  it("dos filas de la MISMA regla = UNA corrección; firme sin confirmaciones baja a prueba sin cambiar el tipo; reinicia la evidencia; soporte corrigio", async () => {
-    const { sb, llamadas } = fakeSb((l) => {
-      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila() };
-      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas: 0, confirmadas_miradas: 0 }] };
-      if (l.op === "update") return { count: 1 };
-      return undefined;
-    });
-    const ef = await registrarCorrecciones(sb, {
-      empresaId: "E1", tipoNuevo: 39,
-      filas: [{ reglaId: "r1", documentoId: "D1" }, { reglaId: "r1", documentoId: "D1" }, { reglaId: null }],
-    });
-    expect(ef.get("r1")).toBe("baja_a_prueba");
+  const responde = (regla: Record<string, unknown>, confirmadas: number): Responder => (l) => {
+    if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila(regla) };
+    if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas, confirmadas_miradas: 0 }] };
+    if (l.op === "update") return { count: 1 };
+    return undefined;
+  };
+  const fila = (o: Record<string, unknown> = {}) => ({ reglaId: "r1", documentoId: "D1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ", ...o });
+
+  it("A1: firme SIN evidencia → se da vuelta (UNA escritura por regla), ventana nueva, soporte corrigio y aviso", async () => {
+    const { sb, llamadas } = fakeSb(responde({}, 0));
+    const r = await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 39, mirada: false, filas: [fila(), fila(), { reglaId: null }] });
+    expect(r.efectos.get("r1")).toBe("se_da_vuelta");
+    expect(r.avisos).toEqual(["Aprendí: desde ahora Juan Perez va como Afecta."]);
     const upd = llamadas.filter((l) => l.tabla === "clasificacion_reglas" && l.op === "update");
     expect(upd).toHaveLength(1);
-    expect(upd[0].payload).toMatchObject({ estado: "a_prueba", veces_corregida: 1, veces_confirmada: 0 });
+    expect(upd[0].payload).toMatchObject({ estado: "a_prueba", tipo_dte: 39, tipo_propuesto: "boleta", veces_corregida: 1, veces_confirmada: 0 });
     expect(typeof (upd[0].payload as Record<string, unknown>).evidencia_desde).toBe("string");
-    expect(upd[0].payload).not.toHaveProperty("tipo_dte");
     expect(upd[0].filtros).toMatchObject({ "eq:empresa_id": "E1", "eq:veces_corregida": 0 });
     expect(llamadas.find((l) => l.tabla === "clasificacion_regla_soportes")?.payload).toMatchObject({ regla_id: "r1", documento_id: "D1", rol: "corrigio" });
   });
-  it("B1: firme CON confirmaciones (5 cartolas) → en_disputa, sin cambiar el tipo", async () => {
-    const { sb, llamadas } = fakeSb((l) => {
-      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila({ tipo_dte: 39, tipo_propuesto: "boleta" }) };
-      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas: 5, confirmadas_miradas: 2 }] };
-      if (l.op === "update") return { count: 1 };
-      return undefined;
-    });
-    const ef = await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 41, filas: [{ reglaId: "r1" }] });
-    expect(ef.get("r1")).toBe("en_disputa");
+  it("A1: CON evidencia + mirada → en_disputa sin cambiar el tipo, con aviso", async () => {
+    const { sb, llamadas } = fakeSb(responde({ tipo_dte: 39, tipo_propuesto: "boleta" }, 5));
+    const r = await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 41, mirada: true, filas: [fila({ tipoFila: 39 })] });
+    expect(r.efectos.get("r1")).toBe("en_disputa");
+    expect(r.avisos).toEqual(["Ya no estoy seguro de Juan Perez: te lo voy a preguntar."]);
     const upd = llamadas.find((l) => l.tabla === "clasificacion_reglas" && l.op === "update")!;
     expect(upd.payload).toMatchObject({ estado: "en_disputa" });
     expect(upd.payload).not.toHaveProperty("tipo_dte");
   });
-  it("a prueba sin confirmaciones → se da vuelta (tipo y tipo_propuesto nuevos)", async () => {
-    const { sb, llamadas } = fakeSb((l) => {
-      if (l.tabla === "clasificacion_reglas" && l.op === "select") return { data: reglaFila({ estado: "a_prueba" }) };
-      if (l.tabla === "rpc:evidencia_reglas_lote") return { data: [{ regla_id: "r1", confirmadas: 0, confirmadas_miradas: 0 }] };
-      if (l.op === "update") return { count: 1 };
-      return undefined;
-    });
-    await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 39, filas: [{ reglaId: "r1" }] });
+  it("A1: CON evidencia + 1ª corrección a ciegas → sigue firme, solo suma (sin aviso, sin reiniciar la ventana)", async () => {
+    const { sb, llamadas } = fakeSb(responde({ tipo_dte: 39, tipo_propuesto: "boleta" }, 5));
+    const r = await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 41, mirada: false, filas: [fila({ tipoFila: 39 })] });
+    expect(r.efectos.get("r1")).toBe("suma");
+    expect(r.avisos).toEqual([]);
     const upd = llamadas.find((l) => l.tabla === "clasificacion_reglas" && l.op === "update")!;
-    expect(upd.payload).toMatchObject({ estado: "a_prueba", tipo_dte: 39, tipo_propuesto: "boleta" });
+    expect(upd.payload).toMatchObject({ estado: "firme", veces_corregida: 1, corregidas_en_ventana: 1 });
+    expect(upd.payload).not.toHaveProperty("evidencia_desde");
   });
-  it("mismo tipo que la regla, o regla de otra empresa / global (no aparece scopeada) → no escribe", async () => {
-    const mismo = fakeSb((l) => (l.tabla === "clasificacion_reglas" && l.op === "select" ? { data: reglaFila() } : undefined));
-    await registrarCorrecciones(mismo.sb, { empresaId: "E1", tipoNuevo: 41, filas: [{ reglaId: "r1" }] });
-    expect(mismo.llamadas.some((l) => l.op === "update")).toBe(false);
+  it("M2: la fila mostraba OTRO tipo que la regla (forzado/cambiado antes) → no corrige", async () => {
+    const { sb, llamadas } = fakeSb(responde({ tipo_dte: 39, tipo_propuesto: "boleta" }, 0));
+    const r = await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 41, mirada: true, filas: [fila({ tipoFila: 41 })] });
+    expect(r.efectos.get("r1")).toBe("ninguno");
+    expect(llamadas.some((l) => l.op === "update")).toBe(false);
+  });
+  it("regla de otra empresa / global (no aparece scopeada) → no escribe; factura (33/34) ni consulta", async () => {
     const ajena = fakeSb(() => undefined);
-    await registrarCorrecciones(ajena.sb, { empresaId: "E1", tipoNuevo: 39, filas: [{ reglaId: "rX" }] });
+    await registrarCorrecciones(ajena.sb, { empresaId: "E1", tipoNuevo: 39, mirada: true, filas: [fila({ reglaId: "rX" })] });
     expect(ajena.llamadas.some((l) => l.op === "update")).toBe(false);
-  });
-  it("factura (33/34) no corrige reglas (hablan boleta 39/41)", async () => {
-    const { sb, llamadas } = fakeSb(() => undefined);
-    await registrarCorrecciones(sb, { empresaId: "E1", tipoNuevo: 33, filas: [{ reglaId: "r1" }] });
-    expect(llamadas).toHaveLength(0);
+    const fac = fakeSb(() => undefined);
+    await registrarCorrecciones(fac.sb, { empresaId: "E1", tipoNuevo: 33, mirada: true, filas: [fila()] });
+    expect(fac.llamadas).toHaveLength(0);
   });
 });
 

@@ -212,16 +212,18 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   const commit = async (action: () => Promise<unknown>, okMsg: string, tipoDte?: 39 | 41 | null) => {
     setBusy(true);
     try {
+      let avisoRegla = "";
       if (ov || tipoDte !== undefined) {
         const e = (await editarPropuesta(propuesta.id, {
           ...(ov ? { tipo_propuesto: ov.tipo, monto_neto: ov.neto, iva: ov.iva, total: ov.total } : {}),
           ...(tipoDte !== undefined ? { tipo_dte: tipoDte } : {}),
-        })) as { error?: string } | undefined;
+        })) as { error?: string; aviso?: string } | undefined;
         // Si el guardado del tipo/override falla, NO aprobar con los datos viejos.
         if (e?.error) { toast(e.error, "error"); return; }
+        if (e?.aviso) avisoRegla = ` · ${e.aviso}`;
       }
       const r = (await action()) as { error?: string } | undefined;
-      if (r && r.error) toast(r.error, "error"); else toast(okMsg);
+      if (r && r.error) toast(r.error, "error"); else toast(`${okMsg}${avisoRegla}`);
       onAction();
     } catch {
       // Un throw de la server action dejaba el botón busy para siempre (sin finally).

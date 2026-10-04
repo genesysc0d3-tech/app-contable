@@ -1,7 +1,6 @@
 /**
  * "Lo que aprendí" — piezas PURAS (testeables) de la pantalla y su acción.
  */
-import { extraerPatronContraparte } from "@/lib/ai/aprender-regla";
 import type { EstadoRegla } from "@/lib/ai/regla-evidencia";
 
 export interface ReglaAprendida {
@@ -17,18 +16,7 @@ export interface ReglaAprendida {
 export const SIN_CONTRAPARTE = "Contraparte de una cartola borrada";
 export const VACIO_LO_QUE_APRENDI = "Todavía no aprendo nada. Cuando corrijas un tipo en Check, lo recuerdo aquí.";
 
-function titulo(s: string): string {
-  return s.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_m, esp: string, l: string) => esp + l.toUpperCase());
-}
-
-/** Nombre de la contraparte a partir de una glosa viva ("TRANSFERENCIA DE JUAN PEREZ" → "Juan Perez"). */
-export function contraparteVisible(glosa: string | null | undefined): string | null {
-  const g = String(glosa ?? "").trim();
-  if (!g) return null;
-  const p = extraerPatronContraparte(g);
-  if (p) return titulo(p.patron);
-  return g.length > 48 ? `${g.slice(0, 47)}…` : g;
-}
+export { contraparteVisible } from "@/lib/ai/contraparte-visible";
 
 const ORDEN: Record<string, number> = { en_disputa: 0, a_prueba: 1, firme: 2 };
 

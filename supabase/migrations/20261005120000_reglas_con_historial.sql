@@ -26,8 +26,9 @@
 --     mirada, aciertos por fila y una glosa de muestra. evidencia_reglas_lote: lo
 --     mismo en UN jsonb (una ejecución por apertura, sin el tope de 1.000 filas).
 -- (g) Índice propuestas_ia(regla_id): lo usan la evidencia, el trigger y Deshacer.
---     Normal (no CONCURRENTLY: va en la transacción de la migración); propuestas_ia
---     tiene ~6.000 filas (línea base 2026-10-04) → milisegundos de lock.
+--     CREATE INDEX normal, no CONCURRENTLY (así el archivo corre igual dentro o fuera
+--     de una transacción): bloquea las ESCRITURAS a propuestas_ia mientras se
+--     construye; con ~6.000 filas (línea base 2026-10-04) son milisegundos.
 --
 -- ORDEN DE DEPLOY: (1) esta migración (aditiva; el código viejo sigue igual: las
 -- existentes quedan firmes y con su confianza); (2) deploy del código de la Fase 3;
@@ -51,6 +52,9 @@ alter table public.clasificacion_reglas
   add column if not exists deshecha_por         uuid,
   add column if not exists aprendida_bajo_marca boolean not null default false,
   add column if not exists evidencia_desde      timestamptz,
+  add column if not exists corregidas_en_ventana integer not null default 0,
+  add column if not exists disputa_eleccion     smallint,
+  add column if not exists disputa_racha        integer not null default 0,
   add column if not exists ligada_a_cartolas    boolean not null default false;
 
 -- Desde ahora, una regla nueva nace a prueba y ligada a sus cartolas (las de arriba ya
@@ -85,6 +89,7 @@ alter table public.clasificacion_reglas add constraint clasificacion_reglas_apag
 alter table public.clasificacion_reglas drop constraint if exists clasificacion_reglas_contadores_check;
 alter table public.clasificacion_reglas add constraint clasificacion_reglas_contadores_check check (
   veces_acunada >= 0 and veces_confirmada >= 0 and veces_corregida >= 0
+  and corregidas_en_ventana >= 0 and disputa_racha >= 0
 );
 
 comment on column public.clasificacion_reglas.estado is
@@ -99,6 +104,10 @@ comment on column public.clasificacion_reglas.nacio_carril is
   'Canal de la decisión que la acuñó (check_fila/check_detalle/check_lote).';
 comment on column public.clasificacion_reglas.evidencia_desde is
   'Solo cuentan confirmaciones de filas nacidas DESPUÉS de esto (la última corrección). NULL = toda la historia.';
+comment on column public.clasificacion_reglas.corregidas_en_ventana is
+  'Correcciones dentro de la ventana de evidencia actual (se reinicia con evidencia_desde). 2 → en_disputa.';
+comment on column public.clasificacion_reglas.disputa_eleccion is
+  'En disputa: la última elección MIRADA de la persona (39/41). La misma 2 veces seguidas (disputa_racha) → sale con ese tipo.';
 comment on column public.clasificacion_reglas.ligada_a_cartolas is
   'Nació con historial (Fase 3): si se borra la última cartola que la sostiene queda huérfana. Las existentes antes de la migración = false (nunca se apagan solas).';
 comment on column public.clasificacion_reglas.aprendida_bajo_marca is

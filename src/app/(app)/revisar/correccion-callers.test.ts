@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { aprenderSpy, corregirSpy, RESP } = vi.hoisted(() => ({
-  corregirSpy: vi.fn(async () => new Map()),
+  corregirSpy: vi.fn(async () => ({ efectos: new Map(), avisos: [] as string[] })),
   aprenderSpy: vi.fn(async () => ({ creada: true, actualizada: false, propagadas: 0, patron: "x" })),
   RESP: {} as Record<string, { select?: unknown; update?: unknown }>,
 }));
@@ -83,9 +83,9 @@ describe("Fase 3 — correcciones desde Check", () => {
   it("cambio de tipo en lote: UNA llamada con las filas que venían de reglas, antes de acuñar", async () => {
     RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto", boletas_tipo_default: null } } };
     RESP["propuestas_ia"] = { select: { data: [
-      { id: "p1", total: 1000, movimiento_id: "m1", regla_id: "r1" },
-      { id: "p2", total: 2000, movimiento_id: "m2", regla_id: "r1" },
-      { id: "p3", total: 3000, movimiento_id: "m3", regla_id: null },
+      { id: "p1", total: 1000, movimiento_id: "m1", regla_id: "r1", tipo_dte: 41 },
+      { id: "p2", total: 2000, movimiento_id: "m2", regla_id: "r1", tipo_dte: 41 },
+      { id: "p3", total: 3000, movimiento_id: "m3", regla_id: null, tipo_dte: null },
     ] }, update: { error: null, count: 1 } };
     RESP["movimientos_raw"] = { select: { data: [
       { id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" },
@@ -96,8 +96,11 @@ describe("Fase 3 — correcciones desde Check", () => {
     expect(r.ok).toBe(true);
     expect(corregirSpy).toHaveBeenCalledTimes(1);
     expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), {
-      empresaId: "E1", tipoNuevo: 39,
-      filas: [{ reglaId: "r1", documentoId: "d1" }, { reglaId: "r1", documentoId: "d1" }],
+      empresaId: "E1", tipoNuevo: 39, mirada: true, // check_lote de 3 filas (≤ 25) = mirada
+      filas: [
+        { reglaId: "r1", tipoFila: 41, documentoId: "d1", glosa: "TRANSFERENCIA DE JUAN PEREZ" },
+        { reglaId: "r1", tipoFila: 41, documentoId: "d1", glosa: "ABONO JUAN PEREZ" },
+      ],
     });
     // antes de acuñar, y el acuñar lleva canal + movimiento (nacio_carril / soporte)
     const ordenCorregir = (corregirSpy.mock.invocationCallOrder as number[])[0];
@@ -118,6 +121,25 @@ describe("Fase 3 — correcciones desde Check", () => {
     expect(corregirSpy).not.toHaveBeenCalled();
   });
 
+  it("M2: una fila cuyo 41 lo forzó el emisor exento (regla 39) no corrige la regla", async () => {
+    RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
+    RESP["propuestas_ia"] = { select: { data: [{ id: "p1", total: 1000, movimiento_id: "m1", regla_id: "r39", tipo_dte: 41, orig_tipo_dte_fuente: "regla_forzada_exenta" }] }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: [{ id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" }] } };
+    await cambiarTipoPropuestas(["p1"], "afecta", "boleta", "check_fila");
+    expect(corregirSpy).not.toHaveBeenCalled();
+  });
+
+  it("M3: el aviso de la regla viaja en la respuesta del cambio en lote; un lote > 25 va como NO mirado", async () => {
+    RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
+    const ids = Array.from({ length: 30 }, (_, i) => `p${i}`);
+    RESP["propuestas_ia"] = { select: { data: ids.map((id, i) => ({ id, total: 1000, movimiento_id: `m${i}`, regla_id: "r1", tipo_dte: 41 })) }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: ids.map((_, i) => ({ id: `m${i}`, descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" })) } };
+    corregirSpy.mockResolvedValueOnce({ efectos: new Map(), avisos: ["Ya no estoy seguro de Juan Perez: te lo voy a preguntar."] });
+    const r = await cambiarTipoPropuestas(ids, "afecta", "boleta", "check_lote");
+    expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ mirada: false }));
+    expect(r.aviso).toContain("Ya no estoy seguro de Juan Perez");
+  });
+
   it("sin reglas detrás → no corrige", async () => {
     RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
     RESP["propuestas_ia"] = { select: { data: [{ id: "p1", total: 1000, movimiento_id: "m1", regla_id: null }] }, update: { error: null, count: 1 } };
@@ -130,8 +152,14 @@ describe("Fase 3 — correcciones desde Check", () => {
     RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
     RESP["propuestas_ia"] = { select: { data: { tipo_dte: 41, movimiento_id: "m1", regla_id: "r1" } }, update: { error: null, count: 1 } };
     RESP["movimientos_raw"] = { select: { data: { descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" } } };
-    await editarPropuesta("p1", { tipo_dte: 39 });
-    expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), { empresaId: "E1", tipoNuevo: 39, filas: [{ reglaId: "r1", documentoId: "d1" }] });
+    corregirSpy.mockResolvedValueOnce({ efectos: new Map(), avisos: ["Aprendí: desde ahora Juan Perez va como Afecta."] });
+    const r = await editarPropuesta("p1", { tipo_dte: 39 });
+    expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), {
+      empresaId: "E1", tipoNuevo: 39, mirada: true,
+      filas: [{ reglaId: "r1", documentoId: "d1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ" }],
+    });
+    // M3: el aviso llega a Check
+    expect(r).toMatchObject({ ok: true, aviso: "Aprendí: desde ahora Juan Perez va como Afecta." });
     expect(aprenderSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ canal: "check_detalle", movimientoId: "m1" }));
   });
 

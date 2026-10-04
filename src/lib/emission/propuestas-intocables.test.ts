@@ -198,8 +198,11 @@ describe("cierres de la revisión adversarial", () => {
   it("los bulk avisan lo que se quedó", () => {
     expect(avisoSeQuedan(new Map([["a", "emitida"], ["b", "a_medias"]]))).toBe("1 ya emitida se queda · 1 a medias se queda (verifícala en A medias)");
     expect(avisoSeQuedan(new Map())).toBe("");
-    for (const fn of ["volverAPendientes", "rechazarPropuestas", "cambiarTipoPropuestas", "restaurarPropuestas"]) {
+    for (const fn of ["volverAPendientes", "rechazarPropuestas", "restaurarPropuestas"]) {
       expect(cuerpo(fn)).toMatch(/aviso: avisoSeQuedan\(sepR\.intocables\) \|\| undefined/);
     }
+    // cambiarTipoPropuestas junta el aviso de intocables con el de la regla (Fase 3).
+    expect(cuerpo("cambiarTipoPropuestas")).toMatch(/\[\.\.\.avisosRegla, avisoSeQuedan\(sepR\.intocables\)\]/);
+    expect(cuerpo("cambiarTipoPropuestas")).toMatch(/aviso: avisoFinal \|\| undefined/);
   });
 });

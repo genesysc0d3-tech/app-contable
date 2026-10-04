@@ -169,10 +169,10 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
       receptor_telefono: telefono.trim() || null,
       medio_pago: medioPago || null,
       notas: detalle.trim() || null,
-    }) as { error?: string } | undefined;
+    }) as { error?: string; aviso?: string } | undefined;
     setBusy(false);
     if (r && r.error) { toast(r.error, "error"); return; }
-    toast("Guardado");
+    toast(`Guardado${r?.aviso ? ` · ${r.aviso}` : ""}`);
     cerrar(true);
   };
 

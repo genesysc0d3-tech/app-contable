@@ -169,7 +169,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                             {([["exenta","Exenta"],["afecta","Afecta"],["no_es_venta","No es venta"]] as const).map(([d,label]) => (
                               <button key={d} onClick={async () => {
                                 const r = await decidirVenta([p.id], d, (p as unknown as { mesa?: string | null }).mesa === "factura" ? "factura" : "boleta");
-                                if (r.error) toast(r.error, "error"); else toast(d === "no_es_venta" ? "No es venta" : `Venta ${d}`);
+                                if (r.error) toast(r.error, "error"); else toast(`${d === "no_es_venta" ? "No es venta" : `Venta ${d}`}${r.aviso ? ` · ${r.aviso}` : ""}`);
                                 onAction();
                               }} style={{fontSize:8.5,fontWeight:700,padding:"2px 7px",borderRadius:99,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
                             ))}
@@ -449,10 +449,12 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     // hermanos de la misma contraparte en la cartola, lo mostramos (el "momento
     // mágico"). Si solo aprendió la regla para la próxima, un aviso más suave.
     const ap = e && "aprendizaje" in e ? e.aprendizaje : null;
+    // Si la corrección cambió lo que la app recuerda de la contraparte, se dice (Fase 3).
+    const avisoRegla = e && "aviso" in e && e.aviso ? ` · ${e.aviso}` : "";
     if (r.error) toast(r.error, "error");
-    else if (ap && ap.propagadas > 0) toast(`Lista · acomodé ${ap.propagadas} más de la misma contraparte`);
-    else if (ap && (ap.creada || ap.actualizada)) toast("Lista · aprendí esta contraparte");
-    else toast("Lista");
+    else if (ap && ap.propagadas > 0) toast(`Lista · acomodé ${ap.propagadas} más de la misma contraparte${avisoRegla}`);
+    else if (ap && (ap.creada || ap.actualizada)) toast(`Lista · aprendí esta contraparte${avisoRegla}`);
+    else toast(`Lista${avisoRegla}`);
     onAction();
     setBusy(false);
     onClose();

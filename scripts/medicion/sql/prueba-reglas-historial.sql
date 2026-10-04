@@ -91,6 +91,14 @@ begin
   begin update public.clasificacion_reglas set estado = 'deshecha', activa = true where id = '00000000-0000-4000-8000-0000000000b1';
   exception when check_violation then ok := true; end;
   if not ok then raise exception '[3] FALLA: deshecha con activa=true'; end if;
+  ok := false;
+  begin update public.clasificacion_reglas set corregidas_en_ventana = -1 where id = '00000000-0000-4000-8000-0000000000b1';
+  exception when check_violation then ok := true; end;
+  if not ok then raise exception '[3] FALLA: aceptó un contador negativo'; end if;
+  if (select (corregidas_en_ventana, disputa_racha, disputa_eleccion) is distinct from (0, 0, null::smallint)
+        from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000b1') then
+    raise exception '[3] FALLA: contadores de ventana/disputa no nacen en cero';
+  end if;
   update public.clasificacion_reglas set estado = 'firme' where id = '00000000-0000-4000-8000-0000000000b1';
   select estado_cambiado_at into t from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000b1';
   if t is null then raise exception '[3] FALLA: estado_cambiado_at no se marcó'; end if;

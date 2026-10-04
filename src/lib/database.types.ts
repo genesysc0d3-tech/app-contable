@@ -459,6 +459,11 @@ export type Database = {
           tipo_propuesto: string
           veces_aplicada: number
           aprendida_bajo_marca: boolean
+          corregidas_en_ventana: number
+          disputa_eleccion: number | null
+          disputa_racha: number
+          evidencia_desde: string | null
+          ligada_a_cartolas: boolean
           deshecha_por: string | null
           documento_origen_id: string | null
           estado: string
@@ -488,6 +493,11 @@ export type Database = {
           tipo_propuesto: string
           veces_aplicada?: number
           aprendida_bajo_marca?: boolean
+          corregidas_en_ventana?: number
+          disputa_eleccion?: number | null
+          disputa_racha?: number
+          evidencia_desde?: string | null
+          ligada_a_cartolas?: boolean
           deshecha_por?: string | null
           documento_origen_id?: string | null
           estado?: string
@@ -517,6 +527,11 @@ export type Database = {
           tipo_propuesto?: string
           veces_aplicada?: number
           aprendida_bajo_marca?: boolean
+          corregidas_en_ventana?: number
+          disputa_eleccion?: number | null
+          disputa_racha?: number
+          evidencia_desde?: string | null
+          ligada_a_cartolas?: boolean
           deshecha_por?: string | null
           documento_origen_id?: string | null
           estado?: string

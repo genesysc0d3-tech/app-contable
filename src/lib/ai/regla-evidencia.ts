@@ -5,9 +5,10 @@
  * Una regla de usuario se gana la confianza con evidencia, no con un clic:
  *
  *   a_prueba ──(2-3 cartolas emitidas sin corrección)──▶ firme
- *      │  ▲                                                 │
- *      │  └──────────────── corrección ─────────────────────┘
- *      └──(corrección con ≥1 confirmación, o corregidas ≥2 y ≥ confirmadas)──▶ en_disputa
+ *   corrección SIN evidencia (a_prueba o firme)   → se da vuelta al tipo nuevo (a_prueba)
+ *   corrección CON evidencia, mirada o 2ª en la ventana → en_disputa (sin tipo)
+ *   corrección CON evidencia, a ciegas (lote > 25), 1ª  → nada cambia (suma la corrección)
+ *   en_disputa + la MISMA elección mirada 2 veces seguidas → sale con ese tipo (a_prueba)
  *   deshecha  = la persona la deshizo en "Lo que aprendí" (activa=false)
  *   huerfana  = se borró la última cartola que la sostenía (la pone un trigger de la base)
  *
@@ -68,7 +69,13 @@ export interface ReglaConHistorial {
   estado: EstadoRegla | string | null | undefined;
   tipo_dte: number | null;
   veces_confirmada: number | null | undefined;
+  /** Historia completa de correcciones (contador, nunca se reinicia). */
   veces_corregida: number | null | undefined;
+  /** Correcciones dentro de la ventana de evidencia actual (se reinicia con ella). */
+  corregidas_en_ventana?: number | null;
+  /** En disputa: la última elección mirada de la persona y cuántas veces seguidas. */
+  disputa_eleccion?: number | null;
+  disputa_racha?: number | null;
   aprendida_bajo_marca?: boolean | null;
 }
 
@@ -96,7 +103,7 @@ export interface RecalculoRegla {
  * Estado DERIVADO de la evidencia (cron nocturno + al abrir "Lo que aprendí").
  *  - global → firme; deshecha/huerfana → no se tocan (las decide una persona / la base).
  *  - en_disputa es pegajosa: la resuelve una persona (Deshacer o corregir).
- *  - correcciones ≥2 y ≥ confirmadas → en_disputa (vale también para una firme).
+ *  - correcciones EN LA VENTANA ≥2 y ≥ confirmadas → en_disputa (también una firme).
  *  - a_prueba con confirmaciones ≥ umbral (2 mirada / 3 ciega) → firme.
  *  - una firme NUNCA baja por falta de confirmaciones (decisión del fundador).
  */
@@ -104,7 +111,7 @@ export function recalcularEstado(r: ReglaConHistorial, ev: EvidenciaRegla): Reca
   const antes = estadoDe(r);
   const confirmadas = Math.max(0, Math.floor(ev.confirmadas || 0));
   const miradas = Math.max(0, Math.floor(ev.confirmadasMiradas || 0));
-  const corregidas = Math.max(0, r.veces_corregida ?? 0);
+  const corregidas = Math.max(0, r.corregidas_en_ventana ?? 0);
   let estado: EstadoRegla = antes;
   if (r.empresa_id == null) estado = "firme";
   else if (antes === "deshecha" || antes === "huerfana" || antes === "en_disputa") estado = antes;
@@ -118,35 +125,44 @@ export function recalcularEstado(r: ReglaConHistorial, ev: EvidenciaRegla): Reca
   };
 }
 
-export type EfectoCorreccion = "ninguno" | "baja_a_prueba" | "se_da_vuelta" | "en_disputa" | "suma";
+export type EfectoCorreccion = "ninguno" | "se_da_vuelta" | "en_disputa" | "sale_de_disputa" | "suma";
 
 export interface ResultadoCorreccion {
-  /** Toda corrección efectiva reinicia la ventana de evidencia (evidencia_desde = ahora). */
   efecto: EfectoCorreccion;
   estado: EstadoRegla;
   tipo_dte: number | null;
   veces_corregida: number;
+  corregidas_en_ventana: number;
+  disputa_eleccion: number | null;
+  disputa_racha: number;
   aprendida_bajo_marca: boolean;
+  /** La ventana de evidencia vuelve a empezar (evidencia_desde = ahora, confirmadas 0). */
+  reiniciaVentana: boolean;
 }
 
+/** Elecciones miradas seguidas e iguales que sacan a una regla de la disputa. */
+export const RACHA_SALE_DE_DISPUTA = 2;
+
 /**
- * Una persona cambió el tipo_dte de una propuesta que esta regla clasificó (una vez por
- * regla y acción, no por fila). La corrección BAJA de nivel; no pisa el tipo de una
- * regla con historial:
- *  - mismo tipo que la regla, regla global, deshecha o huérfana → nada.
- *  - firme SIN confirmaciones → a_prueba (el tipo NO cambia).
- *  - firme CON confirmaciones → en_disputa (sin tipo: el clasificador no lo estampa).
- *    Antes bajaba a a_prueba con el tipo viejo y las confirmaciones viejas la volvían
- *    a firme sola (revisión adversarial 2026-10-04, B1).
- *  - a_prueba sin confirmaciones → se da vuelta al tipo nuevo (sigue a prueba).
- *  - a_prueba con ≥1 confirmación → en_disputa.
- *  - en_disputa → sigue en disputa (suma la corrección).
- *  - y siempre: corregidas ≥2 y ≥ confirmadas → en_disputa (gana sobre lo anterior).
- * `confirmadas` = evidencia VIVA de la regla en el momento de corregir.
+ * Una persona cambió en Check el tipo que la regla le MOSTRÓ en una fila (una vez por
+ * regla y acción, no por fila; el llamador ya descartó filas con tipo forzado por el
+ * emisor o por conflicto con la marca de la cartola). Producto (fundador, 2026-10-04):
+ * la corrección no puede volver más torpe a una regla que hoy aprende al tiro.
+ *  - global, deshecha o huérfana → nada.
+ *  - en_disputa: cada elección MIRADA arma una racha; la MISMA elección
+ *    RACHA_SALE_DE_DISPUTA veces seguidas → sale con ese tipo, a_prueba, ventana nueva.
+ *    Una elección a ciegas solo suma la corrección (no rompe ni arma la racha).
+ *  - mismo tipo que la regla (o regla sin tipo) → nada.
+ *  - SIN evidencia en la ventana (a_prueba o firme) → se da vuelta al tipo nuevo,
+ *    a_prueba, ventana nueva (como hoy en prod: la regla sigue a la persona).
+ *  - CON evidencia: en_disputa (sin tipo estampado) si la corrección fue MIRADA
+ *    (check_fila/check_detalle o lote ≤ 25) o es la 2ª corrección dentro de la ventana;
+ *    una 1ª corrección a ciegas (lote > 25) NO la mueve: suma y sigue igual.
+ * `confirmadas` = evidencia VIVA de la regla dentro de su ventana.
  */
 export function aplicarCorreccion(
   r: ReglaConHistorial,
-  c: { tipoNuevo: number; confirmadas: number },
+  c: { tipoNuevo: number; confirmadas: number; mirada: boolean },
 ): ResultadoCorreccion {
   const antes = estadoDe(r);
   const base: ResultadoCorreccion = {
@@ -154,28 +170,70 @@ export function aplicarCorreccion(
     estado: antes,
     tipo_dte: r.tipo_dte,
     veces_corregida: r.veces_corregida ?? 0,
+    corregidas_en_ventana: r.corregidas_en_ventana ?? 0,
+    disputa_eleccion: r.disputa_eleccion ?? null,
+    disputa_racha: r.disputa_racha ?? 0,
     aprendida_bajo_marca: r.aprendida_bajo_marca === true,
+    reiniciaVentana: false,
   };
   if (r.empresa_id == null || antes === "deshecha" || antes === "huerfana") return base;
-  if (r.tipo_dte == null || r.tipo_dte === c.tipoNuevo) return base;
+  const corregidas = base.veces_corregida + 1;
 
+  if (antes === "en_disputa") {
+    if (!c.mirada) return { ...base, efecto: "suma", veces_corregida: corregidas, corregidas_en_ventana: base.corregidas_en_ventana + 1 };
+    const racha = base.disputa_eleccion === c.tipoNuevo ? base.disputa_racha + 1 : 1;
+    if (racha >= RACHA_SALE_DE_DISPUTA) {
+      return {
+        ...base, efecto: "sale_de_disputa", estado: "a_prueba", tipo_dte: c.tipoNuevo, veces_corregida: corregidas,
+        corregidas_en_ventana: 0, disputa_eleccion: null, disputa_racha: 0,
+        aprendida_bajo_marca: c.tipoNuevo === r.tipo_dte ? base.aprendida_bajo_marca : false, reiniciaVentana: true,
+      };
+    }
+    return { ...base, efecto: "suma", veces_corregida: corregidas, corregidas_en_ventana: base.corregidas_en_ventana + 1, disputa_eleccion: c.tipoNuevo, disputa_racha: racha };
+  }
+
+  if (r.tipo_dte == null || r.tipo_dte === c.tipoNuevo) return base;
   const confirmadas = Math.max(0, Math.floor(c.confirmadas || 0));
-  const corregidas = (r.veces_corregida ?? 0) + 1;
-  if (enDisputaPorCorrecciones(corregidas, confirmadas) || antes === "en_disputa" || confirmadas >= 1) {
-    return { ...base, efecto: antes === "en_disputa" ? "suma" : "en_disputa", estado: "en_disputa", veces_corregida: corregidas };
+  const enVentana = base.corregidas_en_ventana + 1;
+  if (confirmadas === 0) {
+    // Sin evidencia: la persona sabe más que la regla → se da vuelta (y la señal "Afecta
+    // confirmada en la marca P2P" era del tipo viejo).
+    return {
+      ...base, efecto: "se_da_vuelta", estado: "a_prueba", tipo_dte: c.tipoNuevo, veces_corregida: corregidas,
+      corregidas_en_ventana: 0, aprendida_bajo_marca: false, reiniciaVentana: true,
+    };
   }
-  if (antes === "firme") {
-    return { ...base, efecto: "baja_a_prueba", estado: "a_prueba", veces_corregida: corregidas };
+  if (c.mirada || enVentana >= 2) {
+    return {
+      ...base, efecto: "en_disputa", estado: "en_disputa", veces_corregida: corregidas,
+      corregidas_en_ventana: enVentana, disputa_eleccion: null, disputa_racha: 0, reiniciaVentana: true,
+    };
   }
-  // a_prueba sin confirmaciones: la persona sabe más que la regla → se da vuelta.
-  return {
-    efecto: "se_da_vuelta",
-    estado: "a_prueba",
-    tipo_dte: c.tipoNuevo,
-    veces_corregida: corregidas,
-    // La señal "Afecta confirmada en la marca P2P" era del tipo viejo.
-    aprendida_bajo_marca: false,
-  };
+  return { ...base, efecto: "suma", veces_corregida: corregidas, corregidas_en_ventana: enVentana };
+}
+
+/**
+ * ¿Esta fila corrige a la regla? Se compara contra lo que la regla le MOSTRÓ a la
+ * clienta en la fila (su tipo_dte), no contra el tipo guardado en la regla: una fila
+ * cuyo tipo no era el de la regla (lo forzó el emisor exento, lo cambió antes una
+ * persona…) no habla de la regla. En disputa la regla no estampa tipo: cualquier
+ * elección cuenta (arma la racha para salir).
+ */
+export function esCorreccionDeRegla(
+  r: Pick<ReglaConHistorial, "estado" | "tipo_dte">,
+  f: { tipoFila: number | null | undefined; tipoNuevo: number },
+): boolean {
+  if (r.estado === "en_disputa") return f.tipoFila == null || f.tipoFila === r.tipo_dte;
+  return r.tipo_dte != null && f.tipoFila === r.tipo_dte && f.tipoNuevo !== f.tipoFila;
+}
+
+/** Lo que la clienta ve en Check cuando su corrección le cambió el estado a una regla. */
+export function avisoCorreccion(efecto: EfectoCorreccion, contraparte: string | null | undefined, tipoDte: number | null | undefined): string | null {
+  const quien = contraparte?.trim() || "esa contraparte";
+  const tipo = tipoDte === 41 ? "Exenta" : tipoDte === 39 ? "Afecta" : null;
+  if ((efecto === "se_da_vuelta" || efecto === "sale_de_disputa") && tipo) return `Aprendí: desde ahora ${quien} va como ${tipo}.`;
+  if (efecto === "en_disputa") return `Ya no estoy seguro de ${quien}: te lo voy a preguntar.`;
+  return null;
 }
 
 /** Nombre de una regla aprendida: SIN el tercero (privacidad). */

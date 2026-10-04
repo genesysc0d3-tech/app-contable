@@ -21,6 +21,9 @@ SQLDIR="$REPO/scripts/medicion/sql"
 DATA=$(mktemp -d /tmp/pgrh.XXXXXX)
 limpiar() { "$PGBIN/pg_ctl" -D "$DATA" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$DATA"; }
 trap limpiar EXIT
+# zsh: con errexit, una falla DENTRO de una función sale sin correr el trap EXIT (dejaba
+# clusters vivos en /tmp/pgrh.*). TRAPZERR sí corre: limpia y sale.
+TRAPZERR() { limpiar; trap - EXIT; exit 1; }
 
 EXCLUIR="20261005120000|20261005120100" "$REPO/scripts/medicion/reproducir-esquema-local.sh" "$PORT" "$DATA"
 P=("$PGBIN/psql" -X -q -v ON_ERROR_STOP=1 -h "$DATA" -p "$PORT" -U postgres -d postgres)
