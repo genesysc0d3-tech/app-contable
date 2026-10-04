@@ -19,10 +19,18 @@
  *    el usuario revisa antes de apretar Emitir. El gatillo final es humano.
  *  - Minimización (Ley 19.628): NO guardamos receptor_*_default (identidad del
  *    tercero). El patrón basta para clasificar; el receptor se minimiza igual en
- *    el insert de propuestas según monto.
+ *    el insert de propuestas según monto. Y el NOMBRE de la regla tampoco lleva al
+ *    tercero (Fase 3): "Contraparte aprendida · Exenta".
+ *  - HISTORIAL (Fase 3, regla-evidencia.ts): una regla NUEVA nace 'a_prueba' (su fila
+ *    nace pendiente, no "lista") y se gana el 'firme' con cartolas emitidas. Re-acuñar
+ *    suma veces_acunada y NUNCA pisa el tipo de una regla existente: si la persona dice
+ *    otro tipo, eso es una CORRECCIÓN (reglas-historial.ts), que baja de nivel.
+ *    Cada acuñación deja su SOPORTE (la cartola que la enseñó): si se borra la última,
+ *    la base la deja huérfana y sin el tercero.
  */
 
-import { esHintExentoPorLey, CONFIANZA_REGLA_CONFIRMADA_EN_MARCA } from "./tipo-dte-persistido";
+import { esHintExentoPorLey } from "./tipo-dte-persistido";
+import { nombreReglaAprendida } from "./regla-evidencia";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { detectaNoBoletar } from "../sii/clasificador-tipo";
@@ -152,6 +160,10 @@ export interface AprenderArgs {
    * P2P no cuenta como confirmación consciente contra la marca.
    */
   tamanoLote?: number;
+  /** Canal de la decisión (check_fila/check_detalle/check_lote) → nacio_carril. */
+  canal?: string;
+  /** Movimiento puntual que la enseñó (soporte: glosa viva para "Lo que aprendí"). */
+  movimientoId?: string | null;
 }
 
 /** Lote máximo cuyo "Afecta" sobre cartola P2P/forex todavía confirma la regla en la marca. */
@@ -163,6 +175,8 @@ export interface AprenderResultado {
   /** cuántos hermanos de la misma contraparte se voltearon a "listas" en la cartola. */
   propagadas: number;
   patron: string | null;
+  /** Regla creada / re-acuñada (null si no se aprendió nada). */
+  reglaId?: string | null;
 }
 
 const VACIO: AprenderResultado = {
@@ -170,6 +184,7 @@ const VACIO: AprenderResultado = {
   actualizada: false,
   propagadas: 0,
   patron: null,
+  reglaId: null,
 };
 
 /**
@@ -196,14 +211,14 @@ export async function aprenderReglaDesdeResolucion(
     // "MARIA" no se lleva "MARIANA". ruleMatches ya ejecuta el camino regex.
     const patronRegex = regexContraparte(patron);
     const tipoProp = args.tipoDte === 41 ? "exenta" : "boleta";
-    const etiqueta = args.tipoDte === 41 ? "Exenta" : "Afecta";
 
-    // "Afecta" elegido por una persona sobre una cartola marcada P2P/forex (fila "¿?"
-    // por conflicto regla↔marca): la regla queda CONFIRMADA en esa marca → la próxima
-    // cartola P2P no vuelve a preguntar (corta el loop). Se marca con la confianza
-    // (sin columna nueva). Best-effort: si no se puede leer el hint, 0.95 normal.
-    let confianzaRegla = 0.95;
-    if (args.tipoDte === 39 && args.documentoId && (args.tamanoLote ?? 1) <= LOTE_MAX_SENAL_MARCA) {
+    // Marca de la cartola: de dónde nació la regla (nacio_hint) y la señal "Afecta
+    // confirmada sobre una cartola P2P/forex" (fila «¿?» por conflicto regla↔marca): la
+    // regla queda CONFIRMADA en esa marca → la próxima cartola P2P no vuelve a preguntar
+    // (corta el loop). Campo propio aprendida_bajo_marca (Fase 3; antes, confianza 0.99).
+    // Un "Afecta" en lote grande no cuenta. Best-effort: sin hint, sin señal.
+    let hint: string | null = null;
+    if (args.documentoId) {
       try {
         const { data: doc } = await sb
           .from("documentos_subidos")
@@ -211,64 +226,100 @@ export async function aprenderReglaDesdeResolucion(
           .eq("id", args.documentoId)
           .eq("empresa_id", args.empresaId)
           .maybeSingle();
-        if (esHintExentoPorLey((doc as { tipo_operacion_hint?: string | null } | null)?.tipo_operacion_hint)) {
-          confianzaRegla = CONFIANZA_REGLA_CONFIRMADA_EN_MARCA;
-        }
-      } catch { /* sin hint → 0.95 normal */ }
+        hint = (doc as { tipo_operacion_hint?: string | null } | null)?.tipo_operacion_hint ?? null;
+      } catch { /* sin hint */ }
     }
+    const senalMarca = args.tipoDte === 39 && (args.tamanoLote ?? 1) <= LOTE_MAX_SENAL_MARCA && esHintExentoPorLey(hint);
 
     // Dedup por (empresa, patron, flujo). Sin unique constraint, tomamos la 1ª.
     const { data: prev } = await sb
       .from("clasificacion_reglas")
-      .select("id, veces_aplicada, confianza, tipo_dte")
+      .select("id, tipo_dte, estado, activa, veces_acunada, aprendida_bajo_marca")
       .eq("empresa_id", args.empresaId)
       .eq("patron", patronRegex)
       .eq("tipo_flujo_match", args.tipoFlujo)
       .limit(1);
-    const existente = prev?.[0];
-
-    // La señal "Afecta confirmada en la marca" no se pisa: confirmar Afecta otra vez
-    // FUERA de una cartola P2P (o en lote grande) mantiene el 0.99. Solo un cambio a
-    // Exenta (41) la apaga — ya no hay 39 que proteger.
-    const prevConf = (existente as { confianza?: number | null; tipo_dte?: number | null } | undefined);
-    if (args.tipoDte === 39 && prevConf?.tipo_dte === 39 && (prevConf.confianza ?? 0) >= CONFIANZA_REGLA_CONFIRMADA_EN_MARCA) {
-      confianzaRegla = Math.max(confianzaRegla, prevConf.confianza ?? 0);
-    }
+    const existente = prev?.[0] as
+      | { id: string; tipo_dte: number | null; estado: string | null; activa: boolean | null; veces_acunada: number | null; aprendida_bajo_marca: boolean | null }
+      | undefined;
 
     let creada = false;
     let actualizada = false;
+    let reglaId: string | null = null;
     if (existente?.id) {
-      const { error } = await sb
-        .from("clasificacion_reglas")
-        .update({
-          tipo_dte: args.tipoDte,
-          tipo_propuesto: tipoProp,
-          confianza: confianzaRegla,
-          activa: true,
-          last_used_at: new Date().toISOString(),
-          veces_aplicada: (existente.veces_aplicada ?? 0) + 1,
-        })
-        // service role bypassa RLS → el scope por empresa es explícito (defensa
-        // en profundidad, aunque el id ya salió de una query scopeada arriba).
-        .eq("id", existente.id)
-        .eq("empresa_id", args.empresaId);
-      if (error) return { ...VACIO, patron };
-      actualizada = true;
+      let cambios: Record<string, unknown> | null = null;
+      const apagada = existente.activa === false || existente.estado === "deshecha" || existente.estado === "huerfana";
+      if (apagada) {
+        // Apagada (la deshizo la persona, quedó huérfana o se desactivó): volver a
+        // enseñarla la REACTIVA, como siempre, pero A PRUEBA y con lo que dice HOY (sus
+        // correcciones y confirmaciones viejas eran de antes).
+        cambios = {
+          tipo_dte: args.tipoDte, tipo_propuesto: tipoProp, estado: "a_prueba", activa: true,
+          nombre: nombreReglaAprendida(args.tipoDte), veces_acunada: (existente.veces_acunada ?? 0) + 1,
+          veces_corregida: 0, veces_confirmada: 0, evidencia_desde: new Date().toISOString(),
+          aprendida_bajo_marca: senalMarca, confianza: 0.95, deshecha_por: null,
+        };
+      } else if (existente.tipo_dte == null || existente.tipo_dte === args.tipoDte) {
+        // Misma enseñanza: suma acuñación (no uso). La señal de marca no se pisa.
+        cambios = {
+          veces_acunada: (existente.veces_acunada ?? 0) + 1,
+          aprendida_bajo_marca: existente.aprendida_bajo_marca === true || senalMarca,
+          ...(existente.tipo_dte == null ? { tipo_dte: args.tipoDte, tipo_propuesto: tipoProp } : {}),
+        };
+      }
+      // Tipo DISTINTO de una regla viva: NO se pisa (corrección → reglas-historial.ts).
+      if (cambios) {
+        const { error } = await sb
+          .from("clasificacion_reglas")
+          .update(cambios)
+          // service role bypassa RLS → el scope por empresa es explícito (defensa
+          // en profundidad, aunque el id ya salió de una query scopeada arriba).
+          .eq("id", existente.id)
+          .eq("empresa_id", args.empresaId);
+        if (error) return { ...VACIO, patron };
+        actualizada = true;
+        reglaId = existente.id;
+      }
     } else {
-      const { error } = await sb.from("clasificacion_reglas").insert({
+      const { data: nueva, error } = await sb.from("clasificacion_reglas").insert({
         empresa_id: args.empresaId,
-        nombre: `Auto: ${patron} → ${etiqueta}`,
+        nombre: nombreReglaAprendida(args.tipoDte),
         patron: patronRegex,
         patron_tipo: "regex",
         tipo_flujo_match: args.tipoFlujo,
         tipo_propuesto: tipoProp,
         tipo_dte: args.tipoDte,
-        confianza: confianzaRegla,
+        confianza: 0.95,
         prioridad: 50, // convención: reglas de usuario ganan a las globales (80-110)
         created_by: args.userId,
-      });
+        estado: "a_prueba",
+        veces_acunada: 1,
+        nacio_hint: hint,
+        nacio_carril: args.canal ?? null,
+        documento_origen_id: args.documentoId,
+        aprendida_bajo_marca: senalMarca,
+        ligada_a_cartolas: true,
+      }).select("id").maybeSingle();
       if (error) return { ...VACIO, patron };
       creada = true;
+      reglaId = (nueva as { id?: string } | null)?.id ?? null;
+    }
+
+    // Soporte: la cartola que la enseñó — SOLO al nacer. Re-acuñar una regla existente
+    // NO la liga a esta cartola (borrar la cartola jamás debe apagar una regla vieja).
+    if (creada && reglaId && args.documentoId) {
+      try {
+        await sb.from("clasificacion_regla_soportes").upsert(
+          {
+            regla_id: reglaId,
+            documento_id: args.documentoId,
+            empresa_id: args.empresaId,
+            movimiento_id: args.movimientoId ?? null,
+            rol: "acuno",
+          },
+          { onConflict: "regla_id,documento_id,rol", ignoreDuplicates: true },
+        );
+      } catch { /* sin soporte: la regla no queda ligada a esta cartola */ }
     }
 
     const propagadas = args.documentoId
@@ -281,10 +332,13 @@ export async function aprenderReglaDesdeResolucion(
           tipoDte: args.tipoDte,
           tipoPropuesto: tipoProp,
           usuarioId: args.userId,
+          // Solo si la regla dice LO MISMO que se propaga (nació, se re-acuñó igual o
+          // renació): una regla viva con otro tipo no se pisa ni se le cuelgan filas.
+          reglaId,
         })
       : 0;
 
-    return { creada, actualizada, propagadas, patron };
+    return { creada, actualizada, propagadas, patron, reglaId };
   } catch {
     return VACIO;
   }
@@ -308,6 +362,12 @@ async function propagarEnCartola(
     tipoPropuesto: string;
     /** Quién gatilló la propagación (va al sello: decision_por). */
     usuarioId: string | null;
+    /**
+     * Regla que dice este tipo: las hermanas quedan LIGADAS a ella (regla_id), así una
+     * corrección posterior sobre una hermana corrige la regla y Deshacer las re-evalúa.
+     * La evidencia no las cuenta como confirmación (canal propagacion).
+     */
+    reglaId?: string | null;
   },
 ): Promise<number> {
   // `patron` es solo-letras+espacios (lo limpió extraerPatronContraparte), así
@@ -339,7 +399,7 @@ async function propagarEnCartola(
     const { count, error: updErr } = await sb
       .from("propuestas_ia")
       .update(
-        { tipo_dte: args.tipoDte, tipo_propuesto: args.tipoPropuesto, ...selloPropagacion },
+        { tipo_dte: args.tipoDte, tipo_propuesto: args.tipoPropuesto, ...(args.reglaId ? { regla_id: args.reglaId } : {}), ...selloPropagacion },
         { count: "exact" },
       )
       .eq("empresa_id", args.empresaId)

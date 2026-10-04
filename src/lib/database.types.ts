@@ -401,6 +401,44 @@ export type Database = {
           },
         ]
       }
+      clasificacion_regla_soportes: {
+        Row: {
+          created_at: string
+          documento_id: string
+          empresa_id: string
+          id: number
+          movimiento_id: string | null
+          regla_id: string
+          rol: string
+        }
+        Insert: {
+          created_at?: string
+          documento_id: string
+          empresa_id: string
+          id?: never
+          movimiento_id?: string | null
+          regla_id: string
+          rol: string
+        }
+        Update: {
+          created_at?: string
+          documento_id?: string
+          empresa_id?: string
+          id?: never
+          movimiento_id?: string | null
+          regla_id?: string
+          rol?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clasificacion_regla_soportes_regla_id_fkey"
+            columns: ["regla_id"]
+            isOneToOne: false
+            referencedRelation: "clasificacion_reglas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clasificacion_reglas: {
         Row: {
           activa: boolean
@@ -420,6 +458,23 @@ export type Database = {
           tipo_flujo_match: string | null
           tipo_propuesto: string
           veces_aplicada: number
+          aprendida_bajo_marca: boolean
+          corregida_at: string | null
+          corregidas_en_ventana: number
+          disputa_eleccion: number | null
+          disputa_racha: number
+          disputa_ultima_propuesta: string | null
+          evidencia_desde: string | null
+          ligada_a_cartolas: boolean
+          deshecha_por: string | null
+          documento_origen_id: string | null
+          estado: string
+          estado_cambiado_at: string | null
+          nacio_carril: string | null
+          nacio_hint: string | null
+          veces_acunada: number
+          veces_confirmada: number
+          veces_corregida: number
         }
         Insert: {
           activa?: boolean
@@ -439,6 +494,23 @@ export type Database = {
           tipo_flujo_match?: string | null
           tipo_propuesto: string
           veces_aplicada?: number
+          aprendida_bajo_marca?: boolean
+          corregida_at?: string | null
+          corregidas_en_ventana?: number
+          disputa_eleccion?: number | null
+          disputa_racha?: number
+          disputa_ultima_propuesta?: string | null
+          evidencia_desde?: string | null
+          ligada_a_cartolas?: boolean
+          deshecha_por?: string | null
+          documento_origen_id?: string | null
+          estado?: string
+          estado_cambiado_at?: string | null
+          nacio_carril?: string | null
+          nacio_hint?: string | null
+          veces_acunada?: number
+          veces_confirmada?: number
+          veces_corregida?: number
         }
         Update: {
           activa?: boolean
@@ -458,8 +530,32 @@ export type Database = {
           tipo_flujo_match?: string | null
           tipo_propuesto?: string
           veces_aplicada?: number
+          aprendida_bajo_marca?: boolean
+          corregida_at?: string | null
+          corregidas_en_ventana?: number
+          disputa_eleccion?: number | null
+          disputa_racha?: number
+          disputa_ultima_propuesta?: string | null
+          evidencia_desde?: string | null
+          ligada_a_cartolas?: boolean
+          deshecha_por?: string | null
+          documento_origen_id?: string | null
+          estado?: string
+          estado_cambiado_at?: string | null
+          nacio_carril?: string | null
+          nacio_hint?: string | null
+          veces_acunada?: number
+          veces_confirmada?: number
+          veces_corregida?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "clasificacion_reglas_documento_origen_fkey"
+            columns: ["documento_origen_id"]
+            isOneToOne: false
+            referencedRelation: "documentos_subidos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "clasificacion_reglas_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -3694,6 +3790,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      incrementar_uso_reglas: {
+        Args: { p_regla_ids: string[] }
+        Returns: number
+      }
+      evidencia_reglas: {
+        Args: { p_empresa_id: string; p_regla_ids?: string[] | null }
+        Returns: {
+          regla_id: string
+          confirmadas: number
+          confirmadas_miradas: number
+          aciertos: number
+          soportes: number
+          documentos_confirman: string[]
+          glosa: string | null
+        }[]
+      }
       emision_ref_nueva: {
         Args: {
           p_empresa_id: string

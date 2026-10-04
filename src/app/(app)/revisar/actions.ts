@@ -1,14 +1,16 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient } from "@supabase/supabase-js";
+import { getEmpresaAndService } from "@/lib/auth/contexto-empresa";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
-import { getDevSupportMode, getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
+import { buscarReglaPorContraparte, buscarReglasPorContrapartes, claveContraparte, registrarCorrecciones } from "@/lib/ai/reglas-historial";
+import { esDecisionMirada } from "@/lib/ai/regla-evidencia";
+
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
-import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
+import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR, FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
 import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
@@ -17,6 +19,12 @@ import { canalDeOrigen, nuevoLote, sello, type CanalDecision } from "@/lib/propu
 import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
 
 const BATCH_SIZE = 50;
+
+/** La fila mostraba un tipo que NO decidió la regla: conflicto con la marca P2P (sin
+ *  tipo) o emisor exento que forzó 41 sobre una regla 39. Cambiarlo no corrige la regla. */
+function tipoNoEsDeLaRegla(f: { fuente_clasificacion?: string | null; orig_tipo_dte_fuente?: string | null }): boolean {
+  return f.fuente_clasificacion === FUENTE_CONFLICTO_MARCA || f.orig_tipo_dte_fuente === "regla_forzada_exenta";
+}
 
 /** Desde dónde se puede aprobar (mismo allowlist que editarPropuesta y ponerListo). */
 const ESTADOS_APROBABLES = ["pendiente", "listo", "editado"];
@@ -43,56 +51,10 @@ async function hayPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[
   return (await contarPorDecidir(sb, empresaId, ids)) > 0;
 }
 
-/**
- * Fetches the current user's empresa_id (with auth) and returns a service-role
- * Supabase client. Service role bypasses RLS — every UPDATE must be scoped
- * with .eq("empresa_id", empresaId) for security.
- *
- * Why service role: RLS policies on propuestas_ia were silently dropping
- * UPDATE operations (returning success but 0 rows changed) in some cases,
- * causing the optimistic UI to "approve" things that never persisted.
- */
-async function getEmpresaAndService() {
-  const supportBlock = await getDevSupportWriteBlock();
-  if (supportBlock) return supportBlock;
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "No autenticado" } as const;
-
-  const { data: usuario } = await supabase
-    .from("usuarios")
-    .select("empresa_id, rol")
-    .eq("id", user.id)
-    .single();
-  if (!usuario?.empresa_id) return { error: "Usuario sin empresa" } as const;
-
-  // TODAS las acciones de este archivo MUTAN (aprobar/editar/rechazar/poner listo/
-  // crear cliente). Aprobar/editar propuestas es un acto tributario: 'viewer' queda
-  // fuera, igual que en las rutas de emisión (ROLES_EMISION). Gate único acá.
-  if (!ROLES_EMISION.has(String(usuario.rol))) {
-    return { error: "Tu rol no permite esta acción" } as const;
-  }
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return { error: "Backend mal configurado" } as const;
-
-  const sb = createServiceClient(url, key);
-  return { empresaId: usuario.empresa_id, userId: user.id, sb, soporte: await enIntervencionDeSoporte() } as const;
-}
-
-/** ¿La escritura la hace un operador en una intervención de soporte autorizada?
- *  (getDevSupportWriteBlock ya la dejó pasar). Va al sello: decision_soporte.
- *  Sin la cookie de soporte no consulta la base. null = no se pudo saber. */
-async function enIntervencionDeSoporte(): Promise<boolean | null> {
-  try {
-    const modo = await getDevSupportMode();
-    return modo?.ok === true;
-  } catch {
-    return null;
-  }
-}
+// Guard de acceso: src/lib/auth/contexto-empresa.ts (compartido con "Lo que aprendí").
+// Service role porque las policies de propuestas_ia botaban UPDATEs en silencio (0
+// filas) y la UI optimista "aprobaba" lo que nunca persistía: cada UPDATE de este
+// archivo va scopeado con .eq("empresa_id", empresaId).
 
 type Ctx = { userId: string; soporte: boolean | null };
 /** Un lote que llega como argumento (server action = endpoint público): solo un uuid. */
@@ -366,6 +328,10 @@ export async function cambiarTipoPropuestas(
 
   let cambiadas = 0;
   const movIdsCambiados: string[] = [];
+  // Filas cambiadas que venían de una regla: la corrección se registra UNA vez por regla.
+  // Filas cambiadas que pueden corregir una regla (regla_id, o se busca por contraparte).
+  const reglaPorMov = new Map<string, { reglaId: string | null; tipoFila: number | null; propuestaId: string }>();
+  let avisosRegla: string[] = [];
   const lote = loteValido(loteGesto) ?? nuevoLote();
   const canal = origen === undefined ? "check_lote" : canalDeOrigen(origen, gestoN);
   for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
@@ -375,13 +341,13 @@ export async function cambiarTipoPropuestas(
     // movimiento_id para poder aprender la regla de contraparte (abajo).
     const { data: filas, error: leerError } = await ctx.sb
       .from("propuestas_ia")
-      .select("id, total, movimiento_id")
+      .select("id, total, movimiento_id, regla_id, tipo_dte, fuente_clasificacion, orig_tipo_dte_fuente")
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .in("estado", ["pendiente", "editado", "listo"]);
     if (leerError) return { error: leerError.message, count: cambiadas };
 
-    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null }>) {
+    for (const fila of (filas ?? []) as Array<{ id: string; total: number | null; movimiento_id: string | null; regla_id: string | null; tipo_dte?: number | null; fuente_clasificacion?: string | null; orig_tipo_dte_fuente?: string | null }>) {
       const { neto, iva } = derivarMontosDte(Number(fila.total ?? 0), afecta);
       const { error, count } = await ctx.sb
         .from("propuestas_ia")
@@ -390,7 +356,16 @@ export async function cambiarTipoPropuestas(
         .eq("id", fila.id)
         .in("estado", ["pendiente", "editado", "listo"]);
       if (error) return { error: error.message, count: cambiadas };
-      if ((count ?? 0) > 0 && fila.movimiento_id) movIdsCambiados.push(fila.movimiento_id);
+      if ((count ?? 0) > 0 && fila.movimiento_id) {
+        movIdsCambiados.push(fila.movimiento_id);
+        // Corrección de la regla = cambiar el tipo que la regla le MOSTRÓ en esta fila
+        // (M2). Una «¿?» por conflicto con la marca P2P o un 41 forzado por emisor exento
+        // no hablan de la regla. El tipo previo se compara contra la regla en
+        // registrarCorrecciones (esCorreccionDeRegla).
+        // Sin regla_id (hermana propagada antes de ligarse, o fila IA anterior a la regla):
+        // se busca la regla viva por la contraparte más abajo.
+        if (!tipoNoEsDeLaRegla(fila)) reglaPorMov.set(fila.movimiento_id, { reglaId: fila.regla_id ?? null, tipoFila: fila.tipo_dte ?? null, propuestaId: fila.id });
+      }
       cambiadas += count ?? 0;
     }
   }
@@ -411,14 +386,39 @@ export async function cambiarTipoPropuestas(
       // en SILENCIO → el aprendizaje se autodesactivaría justo en la cartola de
       // corrido grande (el caso que este fix busca resolver). + filtro empresa_id
       // (defensa en profundidad: el service role bypassa RLS).
-      const movs: Array<{ descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }> = [];
+      const movs: Array<{ id: string; descripcion: string | null; tipo_flujo: string | null; documento_id: string | null }> = [];
       for (let i = 0; i < movIdsCambiados.length; i += BATCH_SIZE) {
         const { data } = await ctx.sb
           .from("movimientos_raw")
-          .select("descripcion, tipo_flujo, documento_id")
+          .select("id, descripcion, tipo_flujo, documento_id")
           .eq("empresa_id", ctx.empresaId)
           .in("id", movIdsCambiados.slice(i, i + BATCH_SIZE));
         if (data) movs.push(...(data as typeof movs));
+      }
+      // Fase 3: la persona cambió el tipo de filas que una regla clasificó → UNA
+      // corrección por regla (no por fila). Baja de nivel, no pisa (reglas-historial.ts).
+      // ANTES de acuñar: si la regla a prueba se da vuelta, el acuñar de abajo la refuerza.
+      // Las filas sin regla_id buscan su regla viva por contraparte en UNA consulta.
+      const sinRegla = movs.filter((m) => reglaPorMov.has(m.id) && !reglaPorMov.get(m.id)!.reglaId);
+      const porContraparte = sinRegla.length > 0
+        ? await buscarReglasPorContrapartes(ctx.sb, ctx.empresaId, sinRegla.map((m) => ({ descripcion: m.descripcion, tipoFlujo: m.tipo_flujo })))
+        : new Map<string, string>();
+      const filasCorregidas: Array<{ reglaId: string; tipoFila: number | null; documentoId: string | null; glosa: string | null; propuestaId: string }> = [];
+      for (const m of movs) {
+        const r = reglaPorMov.get(m.id);
+        if (!r) continue;
+        const reglaId = r.reglaId ?? porContraparte.get(claveContraparte(m.descripcion, m.tipo_flujo) ?? "") ?? null;
+        if (reglaId) filasCorregidas.push({ reglaId, tipoFila: r.tipoFila, documentoId: m.documento_id, glosa: m.descripcion, propuestaId: r.propuestaId });
+      }
+      if (filasCorregidas.length > 0) {
+        const { avisos } = await registrarCorrecciones(ctx.sb, {
+          empresaId: ctx.empresaId,
+          tipoNuevo: tipoDte,
+          // Mirada = una fila / el detalle, o un lote chico (≤ 25): lo mismo que la evidencia.
+          mirada: esDecisionMirada({ canal, lote_n: gestoN }),
+          filas: filasCorregidas,
+        });
+        avisosRegla = avisos;
       }
       const vistos = new Set<string>();
       for (const m of movs) {
@@ -437,6 +437,8 @@ export async function cambiarTipoPropuestas(
           tipoDte: tipoDte as 39 | 41,
           // Tamaño del gesto: un "Afecta" en lote grande no confirma la regla contra la marca P2P.
           tamanoLote: cambiadas,
+          canal,
+          movimientoId: m.id,
         });
       }
     } catch {
@@ -447,7 +449,9 @@ export async function cambiarTipoPropuestas(
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: cambiadas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
+  // Avisos de la regla (se dio vuelta / ya no estoy seguro) junto al de intocables.
+  const avisoFinal = [...avisosRegla, avisoSeQuedan(sepR.intocables)].filter(Boolean).join(" ");
+  return { ok: true, count: cambiadas, aviso: avisoFinal || undefined };
 }
 
 /**
@@ -615,27 +619,47 @@ export async function editarPropuesta(
   // sí es elección deliberada y acuña aparte.) Se lee ANTES porque el update
   // sobreescribe el tipo_dte previo.
   let previo:
-    | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null }
+    | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null; movimiento_id: string }
     | null = null;
+  // Regla que clasificó la fila (Fase 3): si la persona le cambia el tipo, es una corrección.
+  let reglaPrevia: { reglaId: string; documentoId: string | null; tipoFila: number | null; glosa: string | null; propuestaId: string; explicita: boolean } | null = null;
   if (campos.tipo_dte === 39 || campos.tipo_dte === 41) {
     const { data: p } = await ctx.sb
       .from("propuestas_ia")
-      .select("tipo_dte, movimiento_id")
+      .select("tipo_dte, movimiento_id, regla_id, fuente_clasificacion, orig_tipo_dte_fuente")
       .eq("empresa_id", ctx.empresaId)
       .eq("id", propuestaId)
       .maybeSingle();
     const aportaSenal = p != null && (p.tipo_dte == null || p.tipo_dte !== campos.tipo_dte);
-    if (p && p.movimiento_id && aportaSenal) {
-      const { data: m } = await ctx.sb
-        .from("movimientos_raw")
-        .select("descripcion, tipo_flujo, documento_id")
-        .eq("id", p.movimiento_id)
-        .maybeSingle();
-      if (m && (m.tipo_flujo === "entrada" || m.tipo_flujo === "salida")) {
-        previo = {
-          descripcion: m.descripcion ?? "",
-          tipo_flujo: m.tipo_flujo,
-          documento_id: m.documento_id,
+    // El movimiento se lee siempre: aprender lo necesita si hay señal, y la corrección de
+    // la regla también sin señal (en disputa, repetir el tipo mirado arma la racha).
+    const { data: m } = p?.movimiento_id
+      ? await ctx.sb
+          .from("movimientos_raw")
+          .select("descripcion, tipo_flujo, documento_id")
+          .eq("id", p.movimiento_id)
+          .maybeSingle()
+      : { data: null };
+    if (p && p.movimiento_id && aportaSenal && m && (m.tipo_flujo === "entrada" || m.tipo_flujo === "salida")) {
+      previo = {
+        descripcion: m.descripcion ?? "",
+        tipo_flujo: m.tipo_flujo,
+        documento_id: m.documento_id,
+        movimiento_id: p.movimiento_id,
+      };
+    }
+    const pr = p as { regla_id?: string | null; tipo_dte?: number | null; fuente_clasificacion?: string | null; orig_tipo_dte_fuente?: string | null } | null;
+    if (pr && !tipoNoEsDeLaRegla(pr)) {
+      // Sin regla_id (hermana propagada antes de ligarse, fila IA anterior a la regla):
+      // la regla viva de esa contraparte, con la misma clave que acuñar.
+      const reglaId = pr.regla_id
+        ?? (m ? await buscarReglaPorContraparte(ctx.sb, { empresaId: ctx.empresaId, descripcion: m.descripcion, tipoFlujo: m.tipo_flujo }) : null);
+      if (reglaId) {
+        reglaPrevia = {
+          reglaId, documentoId: m?.documento_id ?? null, tipoFila: pr.tipo_dte ?? null, glosa: m?.descripcion ?? null,
+          propuestaId,
+          // "Lista" sin tocar el selector sobre una fila que ya traía tipo NO es elegir.
+          explicita: pr.tipo_dte == null || pr.tipo_dte !== campos.tipo_dte,
         };
       }
     }
@@ -666,6 +690,15 @@ export async function editarPropuesta(
   // fallo acá no rompe la edición ya guardada.
   const tipoDtePersistida = "tipo_dte" in update && (update.tipo_dte === 39 || update.tipo_dte === 41);
   let aprendizaje: AprenderResultado | null = null;
+  let aviso: string | undefined;
+  if (reglaPrevia && tipoDtePersistida) {
+    // Una corrección por regla y acción (mirada: es el detalle de UNA fila); no-op si la
+    // fila no mostraba el tipo de la regla o si es el mismo.
+    try {
+      const { avisos } = await registrarCorrecciones(ctx.sb, { empresaId: ctx.empresaId, tipoNuevo: update.tipo_dte as number, mirada: true, filas: [reglaPrevia] });
+      aviso = avisos.join(" ") || undefined;
+    } catch { /* best-effort: la edición ya quedó */ }
+  }
   if (previo && tipoDtePersistida) {
     aprendizaje = await aprenderReglaDesdeResolucion(ctx.sb, {
       empresaId: ctx.empresaId,
@@ -674,13 +707,15 @@ export async function editarPropuesta(
       descripcion: previo.descripcion,
       tipoFlujo: previo.tipo_flujo,
       tipoDte: update.tipo_dte as 39 | 41,
+      canal: "check_detalle",
+      movimientoId: previo.movimiento_id,
     });
   }
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, aprendizaje };
+  return { ok: true, aprendizaje, aviso };
 }
 
 export async function aprobarTodas(
