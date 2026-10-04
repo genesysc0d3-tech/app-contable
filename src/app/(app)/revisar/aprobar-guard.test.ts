@@ -90,3 +90,17 @@ describe("aprobarTodas — filtra por estado en la propia consulta", () => {
     }
   });
 });
+
+describe("aprobarTodas — avisa cuántas «¿?» quedaron sin enviar (B1)", () => {
+  it("si quedaron filas por decidir, el resultado trae «N quedaron por decidir»", async () => {
+    // El fake devuelve count=1 por consulta: 2 lotes de UPDATE → 2 aprobadas de 60, y
+    // el conteo de «¿?» (2 lotes de 50) → 2.
+    const r = await aprobarTodas(Array.from({ length: 60 }, (_, i) => `P${i}`));
+    expect(r).toMatchObject({ ok: true, count: 2, porDecidir: 2, aviso: "2 quedaron por decidir («¿?»)" });
+  });
+  it("si se aprobaron todas, no hay aviso", async () => {
+    estado.count = 1;
+    const r = await aprobarTodas(["P1"]);
+    expect(r).not.toHaveProperty("aviso");
+  });
+});

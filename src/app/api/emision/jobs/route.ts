@@ -474,7 +474,7 @@ export async function POST(request: Request) {
       );
     }
     // Destino único (carril extensión, mismo criterio que emitir-lote): un «¿?» no se
-    // emite sin decidir, y una no-venta (gasto, no_comercial…) NUNCA se emite. La
+    // emite sin decidir. Una no-venta APROBADA sí (el humano manda, 2026-09-01). La
     // verificación (adopción) no emite: queda fuera. Va DESPUÉS de "ya emitida / a
     // medias" (esas se saltan sin frenar el lote) y ANTES de tomar el candado.
     if (!cleanText(payload.adopta_job_id)) {

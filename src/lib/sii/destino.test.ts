@@ -57,11 +57,11 @@ describe("destinoPropuesta / motivoNoEmitible — la fila, no solo el tipo", () 
   it("arriendo con un 41 viejo del cable automático sigue «¿?» (no fue una persona)", () => {
     expect(destinoPropuesta({ tipo_propuesto: "arriendo", tipo_dte: 41, fuente_clasificacion: "regla_global" })).toBe("preguntar");
   });
-  it("motivoNoEmitible: «¿?» y no-ventas nunca se emiten; ventas sí", () => {
+  it("motivoNoEmitible: solo los «¿?» se frenan; una no-venta aprobada sí sale (el humano manda)", () => {
     expect(motivoNoEmitible(conflicto)?.code).toBe("TIPO_POR_DECIDIR");
     expect(motivoNoEmitible({ tipo_propuesto: "arriendo" })?.code).toBe("TIPO_POR_DECIDIR");
-    expect(motivoNoEmitible({ tipo_propuesto: "no_comercial", tipo_dte: 41 })?.code).toBe("NO_ES_VENTA");
-    expect(motivoNoEmitible({ tipo_propuesto: "gasto_egreso" })?.code).toBe("NO_ES_VENTA");
+    expect(motivoNoEmitible({ tipo_propuesto: "no_comercial", tipo_dte: 41 })).toBeNull();
+    expect(motivoNoEmitible({ tipo_propuesto: "gasto_egreso" })).toBeNull();
     expect(motivoNoEmitible({ tipo_propuesto: "transferencia_p2p", tipo_dte: 41 })).toBeNull();
     expect(motivoNoEmitible({ tipo_propuesto: "factura_afecta", tipo_dte: 33 })).toBeNull();
   });

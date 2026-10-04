@@ -8,7 +8,7 @@ import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
-import { MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
+import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
 import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
@@ -21,19 +21,24 @@ const ESTADOS_APROBABLES = ["pendiente", "listo", "editado"];
 const MENSAJE_NO_APROBABLE =
   "Este movimiento cambió mientras lo mirabas (otra persona lo aprobó, rechazó o emitió). Recarga para ver cómo quedó.";
 
-/** ¿Alguna de estas filas es un «¿?» (destino "preguntar")? Para explicar por qué no se aprobó. */
-async function hayPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[]): Promise<boolean> {
+/** Cuántas de estas filas son «¿?» (destino "preguntar"). Best-effort: 0 si falla. */
+async function contarPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[]): Promise<number> {
+  let n = 0;
   try {
-    const { count } = await sb
-      .from("propuestas_ia")
-      .select("id", { count: "exact", head: true })
-      .eq("empresa_id", empresaId)
-      .in("id", ids.slice(0, BATCH_SIZE))
-      .or(PG_OR_ES_POR_DECIDIR);
-    return (count ?? 0) > 0;
-  } catch {
-    return false;
-  }
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const { count } = await sb
+        .from("propuestas_ia")
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .in("id", ids.slice(i, i + BATCH_SIZE))
+        .or(PG_OR_ES_POR_DECIDIR);
+      n += count ?? 0;
+    }
+  } catch { /* el aviso es informativo */ }
+  return n;
+}
+async function hayPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[]): Promise<boolean> {
+  return (await contarPorDecidir(sb, empresaId, ids)) > 0;
 }
 
 /**
@@ -392,6 +397,8 @@ export async function cambiarTipoPropuestas(
           descripcion: m.descripcion ?? "",
           tipoFlujo: m.tipo_flujo,
           tipoDte: tipoDte as 39 | 41,
+          // Tamaño del gesto: un "Afecta" en lote grande no confirma la regla contra la marca P2P.
+          tamanoLote: cambiadas,
         });
       }
     } catch {
@@ -630,7 +637,7 @@ export async function editarPropuesta(
 
 export async function aprobarTodas(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; porDecidir?: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
 
   const ctx = await getEmpresaAndService();
@@ -684,10 +691,11 @@ export async function aprobarTodas(
     metadata: { cantidad: aprobadas },
   });
 
+  const porDecidir = aprobadas < propuestaIds.length ? await contarPorDecidir(ctx.sb, ctx.empresaId, propuestaIds) : 0;
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: aprobadas };
+  return { ok: true, count: aprobadas, ...(porDecidir > 0 ? { porDecidir, aviso: avisoPorDecidir(porDecidir) } : {}) };
 }
 
 // "Poner listo" (staged): marca propuestas como preparadas SIN mandarlas a Emitir.
@@ -696,7 +704,7 @@ export async function aprobarTodas(
 export async function ponerListo(
   propuestaIds: string[],
   clienteId?: string | null
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; porDecidir?: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
@@ -723,9 +731,11 @@ export async function ponerListo(
     listas += count ?? 0;
   }
   if (listas === 0 && propuestaIds.length > 0) return { error: `No se marcó ninguna propuesta como lista. Si es un «¿?»: ${MSG_TIPO_POR_DECIDIR}`, count: 0 };
+  // B1: si algunas no se movieron por ser «¿?», se dice cuántas (no desaparecen en silencio).
+  const porDecidir = listas < propuestaIds.length ? await contarPorDecidir(ctx.sb, ctx.empresaId, propuestaIds) : 0;
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: listas };
+  return { ok: true, count: listas, ...(porDecidir > 0 ? { porDecidir, aviso: avisoPorDecidir(porDecidir) } : {}) };
 }
 
 // Edita SOLO la glosa (notas) de una boleta ya EN EMISIÓN ('aprobado') o 'listo', SIN
@@ -981,7 +991,8 @@ export async function aprobarCartola(
   // A4): aprobar todo sin mirar no es prueba. Solo la aprobación fila a fila.
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  const aviso = avisoSeQuedan(sep.intocables);
+  const porDecidir = aprobadas < ids.length ? await contarPorDecidir(ctx.sb, ctx.empresaId, ids) : 0;
+  const aviso = [avisoSeQuedan(sep.intocables), porDecidir > 0 ? avisoPorDecidir(porDecidir) : ""].filter(Boolean).join(" · ");
   return { ok: true, count: aprobadas, ...(aviso ? { aviso } : {}) };
 }
 

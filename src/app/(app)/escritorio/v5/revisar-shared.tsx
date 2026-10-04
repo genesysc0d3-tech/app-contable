@@ -228,7 +228,7 @@ function BlockApproveBtn({ ids, label }: { ids: string[]; label: string }) {
     if (ids.length === 0) return;
     setLoading(true);
     const r = await ponerListo(ids);
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas`);
+    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas${r.aviso ? ` · ${r.aviso}` : ""}`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }
@@ -256,7 +256,7 @@ function ApproveAllBtn({ propuestas }: { propuestas: Propuesta[] }) {
     setLoading(true);
     const r = await ponerListo(elegibles.map((p) => p.id));
     if (r.error) toast(r.error, "error");
-    else toast(saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`);
+    else toast(`${saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`}${r.aviso ? ` · ${r.aviso}` : ""}`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }

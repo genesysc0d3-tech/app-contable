@@ -269,8 +269,8 @@ describe("PATCH — carrera con /result (rev 2 M3)", () => {
   });
 });
 
-// Destino único (revisión adversarial M3): el carril de la extensión no emite un «¿?»
-// ni una no-venta, aunque estén aprobados. Antes de tomar el candado.
+// Destino único: el carril de la extensión no emite un «¿?» aunque esté aprobado (antes
+// de tomar el candado). Una no-venta aprobada sí sale: el humano manda (2026-09-01).
 describe("POST /api/emision/jobs — destino único", () => {
   const lote = { provider: "sii_local", tipo_dte: 41, origin: "emision_lote", propuesta_id: PROP, datos: { monto: 10000, receptor_rut: null, glosa: "Venta exenta" } };
   const conTipo = (extra: Record<string, unknown>) =>
@@ -287,12 +287,11 @@ describe("POST /api/emision/jobs — destino único", () => {
     conTipo({ tipo_propuesto: "boleta", tipo_dte: null, fuente_clasificacion: "conflicto_marca_cartola" });
     expect((await (await POST(req("POST", lote))).json()).error).toBe("TIPO_POR_DECIDIR");
   });
-  it("no_comercial aprobado (familia de las 3 emitidas de la línea base) → 409 NO_ES_VENTA", async () => {
+  it("no_comercial APROBADO → sí abre el job (el humano manda, 2026-09-01)", async () => {
     conTipo({ tipo_propuesto: "no_comercial" });
     const res = await POST(req("POST", lote));
-    expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe("NO_ES_VENTA");
-    expect(estado.acquire).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(estado.acquire).toHaveBeenCalledTimes(1);
   });
   it("ya emitida va antes: un arriendo ya emitido se salta como PROPUESTA_YA_EMITIDA", async () => {
     conTipo({ tipo_propuesto: "arriendo" });

@@ -59,8 +59,11 @@ export async function getPendientesEmision(
   // tipo sea otro (gasto, honorarios, factura en mesa boleta…) — antes el
   // filtro SQL las hacía desaparecer de Emitir y el usuario veía la pestaña
   // «pegada». El motor (evaluarEmision) les pone sus advertencias
-  // (NO_BOLETAR/TIPO_ASUMIDO); lo editado-no-aprobado de otros tipos sigue
-  // fuera (es un gasto a medio editar, no una decisión).
+  // (NO_BOLETAR/TIPO_ASUMIDO) y se emiten igual; lo editado-no-aprobado de otros
+  // tipos sigue fuera (es un gasto a medio editar, no una decisión). Única
+  // excepción (destino único 2026-10-04): los «¿?» (arriendo/comisión/conflicto
+  // regla↔marca) no son una decisión tomada → salen de la cola más abajo y se
+  // cuentan aparte (totales.por_decidir).
   propsQuery = mesaActiva === "factura"
     ? propsQuery.in("tipo_propuesto", tiposConDestino("factura"))
     : propsQuery.or(`tipo_propuesto.in.(${TIPOS_EMITIBLES.join(",")}),estado.eq.aprobado`);

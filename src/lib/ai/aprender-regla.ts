@@ -145,7 +145,16 @@ export interface AprenderArgs {
   tipoFlujo: "entrada" | "salida";
   /** 39 afecta / 41 exenta — la decisión humana recién persistida. */
   tipoDte: 39 | 41;
+  /**
+   * Cuántas filas cambió la persona en ESE gesto (cambio de tipo en lote). Sin valor =
+   * decisión individual. Un "Afecta" masivo (> LOTE_MAX_SENAL_MARCA) sobre una cartola
+   * P2P no cuenta como confirmación consciente contra la marca.
+   */
+  tamanoLote?: number;
 }
+
+/** Lote máximo cuyo "Afecta" sobre cartola P2P/forex todavía confirma la regla en la marca. */
+export const LOTE_MAX_SENAL_MARCA = 25;
 
 export interface AprenderResultado {
   creada: boolean;
@@ -193,7 +202,7 @@ export async function aprenderReglaDesdeResolucion(
     // cartola P2P no vuelve a preguntar (corta el loop). Se marca con la confianza
     // (sin columna nueva). Best-effort: si no se puede leer el hint, 0.95 normal.
     let confianzaRegla = 0.95;
-    if (args.tipoDte === 39 && args.documentoId) {
+    if (args.tipoDte === 39 && args.documentoId && (args.tamanoLote ?? 1) <= LOTE_MAX_SENAL_MARCA) {
       try {
         const { data: doc } = await sb
           .from("documentos_subidos")
@@ -210,12 +219,20 @@ export async function aprenderReglaDesdeResolucion(
     // Dedup por (empresa, patron, flujo). Sin unique constraint, tomamos la 1ª.
     const { data: prev } = await sb
       .from("clasificacion_reglas")
-      .select("id, veces_aplicada")
+      .select("id, veces_aplicada, confianza, tipo_dte")
       .eq("empresa_id", args.empresaId)
       .eq("patron", patronRegex)
       .eq("tipo_flujo_match", args.tipoFlujo)
       .limit(1);
     const existente = prev?.[0];
+
+    // La señal "Afecta confirmada en la marca" no se pisa: confirmar Afecta otra vez
+    // FUERA de una cartola P2P (o en lote grande) mantiene el 0.99. Solo un cambio a
+    // Exenta (41) la apaga — ya no hay 39 que proteger.
+    const prevConf = (existente as { confianza?: number | null; tipo_dte?: number | null } | undefined);
+    if (args.tipoDte === 39 && prevConf?.tipo_dte === 39 && (prevConf.confianza ?? 0) >= CONFIANZA_REGLA_CONFIRMADA_EN_MARCA) {
+      confianzaRegla = Math.max(confianzaRegla, prevConf.confianza ?? 0);
+    }
 
     let creada = false;
     let actualizada = false;

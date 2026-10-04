@@ -20,7 +20,7 @@
 import { SUFIJO_SOCIETARIO } from "../ai/classifier";
 import { clasificarBoleta, type DocumentoHint, type EmpresaContext, type PatronContext } from "../sii/clasificador-tipo";
 import { validarBoleta } from "../sii/validation";
-import { destino, esExentoPorTipo, esTipoValido } from "../sii/destino";
+import { esExentoPorTipo } from "../sii/destino";
 
 /** Confianza mínima del clasificador (afecta/exenta) para auto-marcar como listo. */
 export const CONFIANZA_TIPO_MIN = 0.8;
@@ -117,12 +117,6 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
   }
   if (input.yaEmitida) {
     bloqueos.push({ code: "YA_EMITIDA", msg: "Esta operación ya tiene una boleta emitida." });
-  }
-  // Destino único: una NO-VENTA (gasto, no_comercial, impuesto…) nunca se emite,
-  // aunque esté aprobada — los carriles de emisión (lote y jobs de la extensión) la
-  // rechazan igual; mejor decirlo acá, donde se puede arreglar (cambiar el tipo en Check).
-  if (esTipoValido(input.tipoPropuesto) && destino(input.tipoPropuesto) === "no_es_venta") {
-    bloqueos.push({ code: "NO_ES_VENTA", msg: "No es una venta: no se emite. Si sí lo es, cámbiale el tipo en Check." });
   }
   // La APROBACIÓN humana manda sobre la heurística (criterio 3 de Matías:
   // advertir, nunca bloquear — y pedido del fundador 2026-09-01: "si las

@@ -222,7 +222,7 @@ export default function CartolaEditor({
         // tachado-en-su-lugar es solo para el ✕ individual, que protege el
         // contexto bajo el cursor — bug cazado por el fundador 2026-09-02).
         toast(accion === "listo"
-          ? `${r.count} marcadas listas`
+          ? `${r.count} marcadas listas${"aviso" in r && r.aviso ? ` · ${r.aviso}` : ""}`
           : `${r.count} marcadas sin boleta (tachadas, recuperables)${"aviso" in r && r.aviso ? ` · ${r.aviso}` : ""}`);
       }
       setSel(new Set());
@@ -333,7 +333,7 @@ export default function CartolaEditor({
     setBusyBulk(true);
     const r = await ponerListo(elegibles.map((p) => p.id));
     if (r.error) toast(r.error, "error");
-    else toast(saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`);
+    else toast(`${saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`}${r.aviso ? ` · ${r.aviso}` : ""}`);
     onAction();
     setBusyBulk(false);
   }

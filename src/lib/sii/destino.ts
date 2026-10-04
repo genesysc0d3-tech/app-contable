@@ -176,14 +176,20 @@ export const PG_OR_ES_POR_DECIDIR = `tipo_propuesto.in.${PG_TIPOS_POR_DECIDIR},a
 
 /**
  * ¿Se puede EMITIR esta fila (cualquier carril: lote, jobs de la extensión)?
- * null = sí; si no, el código y el mensaje para el cliente.
+ * null = sí. Solo bloquea los «¿?» (destino "preguntar"): eso es una decisión que
+ * nadie tomó todavía. Una NO-VENTA APROBADA sí se emite (fundador 2026-09-01: "si las
+ * acepté, no tiene sentido que me las bloquee"): el humano manda y la cola la muestra
+ * con su advertencia (NO_BOLETAR/TIPO_ASUMIDO). Lo que el sistema no hace es dejarla
+ * "lista" solo (decidirEstadoInicial).
  */
-export function motivoNoEmitible(p: PropuestaParaDestino): { code: "TIPO_POR_DECIDIR" | "NO_ES_VENTA"; msg: string } | null {
-  const d = destinoPropuesta(p);
-  if (d === "preguntar") return { code: "TIPO_POR_DECIDIR", msg: MSG_TIPO_POR_DECIDIR };
-  if (d === "no_es_venta") return { code: "NO_ES_VENTA", msg: "Este movimiento no es una venta: no se emite. Si sí lo es, cámbialo en Check." };
-  return null;
+export function motivoNoEmitible(p: PropuestaParaDestino): { code: "TIPO_POR_DECIDIR"; msg: string } | null {
+  return destinoPropuesta(p) === "preguntar" ? { code: "TIPO_POR_DECIDIR", msg: MSG_TIPO_POR_DECIDIR } : null;
 }
 
 /** Tipos de VENTA (boleta + factura), en orden canónico. */
 export const TIPOS_VENTA: string[] = [...tiposConDestino("boleta"), ...tiposConDestino("factura")];
+
+/** "3 quedaron por decidir": aviso de las «¿?» que un aprobar/poner listas dejó atrás. */
+export function avisoPorDecidir(n: number): string {
+  return n === 1 ? "1 quedó por decidir («¿?»)" : `${n} quedaron por decidir («¿?»)`;
+}
