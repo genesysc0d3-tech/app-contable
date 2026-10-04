@@ -6,6 +6,7 @@ import { chileDateString, chileDayStartUtc, chileDayOfMonth } from "@/lib/chile-
 import { formatDisplayDateEsCl } from "@/lib/display-date";
 import type { ActividadItem } from "./ActividadView";
 import { sinDocsRepetidos } from "./mesa-data-util";
+import { esAfectoPorTipo, esVentaEmitible } from "@/lib/sii/destino";
 import { traerTodasLasFilas } from "@/lib/supabase/paginar";
 import { FILTRO_TIPOS_REGISTRO_EMISION, boletasUnicasSinDocumento } from "@/lib/emission/registros-emision";
 
@@ -274,11 +275,12 @@ export async function fetchMesaDateDependent(
     if (!docId) continue;
     const t = p.tipo_propuesto;
     const mix = (docTipoMix[docId] ??= { afectas: 0, exentas: 0, gastos: 0 });
-    // Solo ventas EXENTAS reales cuentan como exentas; los demás tipos que no son
-    // venta afecta (impuesto, remuneración, arriendo, cotización, etc.) NO son ventas
-    // boletables → van al balde "gastos/no-venta", no inflan exentas (auditoría #33).
-    if (t === "boleta" || t === "factura" || t === "factura_afecta") mix.afectas++;
-    else if (t === "exenta" || t === "factura_exenta" || t === "compraventa_crypto" || t === "transferencia_p2p" || t === "operacion_forex") mix.exentas++;
+    // Destino único (@/lib/sii/destino): solo las VENTAS cuentan como afectas/exentas;
+    // las no-ventas (impuesto, remuneración, cotización, etc.) van al balde
+    // "gastos/no-venta", no inflan exentas (auditoría #33). Lo "por decidir"
+    // (arriendo/comisión) tampoco es venta todavía: no infla afectas ni exentas.
+    if (esAfectoPorTipo(t)) mix.afectas++;
+    else if (esVentaEmitible(t)) mix.exentas++;
     else mix.gastos++;
   }
 
@@ -298,7 +300,7 @@ export async function fetchMesaDateDependent(
     console.error("[mesa] getPendientesEmision falló — la cola de Emitir queda vacía", e);
     return {
       items: [] as Awaited<ReturnType<typeof getPendientesEmision>>["items"],
-      totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, a_medias: 0, monto_total: 0, monto_listo: 0 },
+      totales: { total_pendientes: 0, listas_emitir: 0, por_revisar: 0, bloqueadas: 0, a_medias: 0, por_decidir: 0, por_decidir_msg: null as string | null, monto_total: 0, monto_listo: 0 },
       aprobadas_otros_tipos: {} as Record<string, number>,
       a_medias: [] as Awaited<ReturnType<typeof getPendientesEmision>>["a_medias"],
     };

@@ -8,6 +8,7 @@ import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
+import { TIPOS_POR_DECIDIR, MSG_TIPO_POR_DECIDIR } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
 import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
@@ -656,11 +657,13 @@ export async function ponerListo(
       // Guard de estado (auditoría #25/#29): solo se stagea desde estados PRE-emisión.
       // Nunca degradar una 'aprobado' (ya en la cola de Emitir) ni resucitar una
       // 'rechazado'/emitida a 'listo'.
-      .in("estado", ["pendiente", "editado", "listo"]);
+      .in("estado", ["pendiente", "editado", "listo"])
+      // Destino único: lo "por decidir" (arriendo/comisión) no se stagea a ciegas.
+      .not("tipo_propuesto", "in", `(${TIPOS_POR_DECIDIR.join(",")})`);
     if (error) return { error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`, count: listas };
     listas += count ?? 0;
   }
-  if (listas === 0 && propuestaIds.length > 0) return { error: "No se marcó ninguna propuesta como lista", count: 0 };
+  if (listas === 0 && propuestaIds.length > 0) return { error: `No se marcó ninguna propuesta como lista. Si es arriendo o comisión: ${MSG_TIPO_POR_DECIDIR}`, count: 0 };
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   return { ok: true, count: listas };

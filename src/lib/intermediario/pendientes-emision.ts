@@ -20,10 +20,10 @@ export type EmpresaCtx = {
 
 const HINTS_OPERACION = new Set(["p2p_cripto", "forex_divisas", "servicios", "ventas", "mixto"]);
 
-// Fuente única en @/lib/sii/tipos-propuesta (compartida con emitir-lote). Se
+// Fuente única: destino único @/lib/sii/destino (compartida con emitir-lote). Se
 // re-exporta por compatibilidad con importadores existentes.
 export { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
-import { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
+import { TIPOS_EMITIBLES, TIPOS_POR_DECIDIR, destino, tiposConDestino, MSG_TIPO_POR_DECIDIR } from "@/lib/sii/destino";
 
 /**
  * Lista propuestas tipo boleta aprobadas/editadas que aún NO están emitidas,
@@ -54,7 +54,7 @@ export async function getPendientesEmision(
     .eq("empresa_id", empresaId)
     .eq("mesa", mesaActiva)
     .in("estado", estados);
-  // Facturas: solo sus dos tipos. Boletas (fundador 2026-09-01, «el humano
+  // Facturas: solo los tipos con destino factura. Boletas (fundador 2026-09-01, «el humano
   // manda»): los tipos emitibles Y ADEMÁS toda propuesta APROBADA aunque su
   // tipo sea otro (gasto, honorarios, factura en mesa boleta…) — antes el
   // filtro SQL las hacía desaparecer de Emitir y el usuario veía la pestaña
@@ -62,7 +62,7 @@ export async function getPendientesEmision(
   // (NO_BOLETAR/TIPO_ASUMIDO); lo editado-no-aprobado de otros tipos sigue
   // fuera (es un gasto a medio editar, no una decisión).
   propsQuery = mesaActiva === "factura"
-    ? propsQuery.in("tipo_propuesto", ["factura_afecta", "factura_exenta"])
+    ? propsQuery.in("tipo_propuesto", tiposConDestino("factura"))
     : propsQuery.or(`tipo_propuesto.in.(${TIPOS_EMITIBLES.join(",")}),estado.eq.aprobado`);
   // Respeta el calendario maestro: solo el periodo visible (created_at de la propuesta), igual que Check.
   if (range) propsQuery = propsQuery.gte("created_at", range.start).lt("created_at", range.end);
@@ -176,7 +176,12 @@ export async function getPendientesEmision(
   }
 
   type PropuestaRaw = NonNullable<typeof propuestas>[number];
-  const visibles = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id) && !enRevision.has(p.id));
+  const noTerminadas = (propuestas ?? []).filter((p: PropuestaRaw) => !yaEmitidas.has(p.id) && !enRevision.has(p.id));
+  // Destino único: un ingreso "por decidir" (arriendo/comisión — ¿es venta, exenta o
+  // afecta?) NO entra a la cola de Emitir aunque esté aprobado: el lote lo rechazaría
+  // (TIPO_POR_DECIDIR). Se cuenta APARTE con su texto, para que no desaparezca.
+  const porDecidir = noTerminadas.filter((p: PropuestaRaw) => destino(p.tipo_propuesto) === "preguntar");
+  const visibles = noTerminadas.filter((p: PropuestaRaw) => destino(p.tipo_propuesto) !== "preguntar");
 
   // Umbral 135 UF con la UF del día (fallback a referencial si la API cae).
   const umbralIdentificacionClp = await getUmbralIdentificacionClp();
@@ -353,6 +358,11 @@ export async function getPendientesEmision(
     por_revisar: items.filter((i) => i.balde === "por_revisar").length,
     bloqueadas: items.filter((i) => i.balde === "bloqueadas").length,
     a_medias: a_medias.length,
+    /** Ingresos aprobados que esperan la decisión "¿es venta?" en Check (fuera de la cola). */
+    por_decidir: porDecidir.length,
+    por_decidir_msg: porDecidir.length > 0
+      ? `${porDecidir.length === 1 ? "1 ingreso espera" : `${porDecidir.length} ingresos esperan`} tu decisión (arriendo o comisión). ${MSG_TIPO_POR_DECIDIR}`
+      : null,
     monto_total: items.reduce((s, i) => s + i.monto_total, 0),
     monto_listo: items.filter((i) => i.balde === "listas").reduce((s, i) => s + i.monto_total, 0),
   };
@@ -364,7 +374,8 @@ export async function getPendientesEmision(
       .select("tipo_propuesto")
       .eq("empresa_id", empresaId)
       .in("estado", ["aprobado", "editado"])
-      .not("tipo_propuesto", "in", `(${TIPOS_EMITIBLES.map((t) => `"${t}"`).join(",")})`);
+      // Los "por decidir" ya se cuentan aparte (totales.por_decidir).
+      .not("tipo_propuesto", "in", `(${[...TIPOS_EMITIBLES, ...TIPOS_POR_DECIDIR].map((t) => `"${t}"`).join(",")})`);
     if (otras) {
       aprobadas_otros_tipos = otras.reduce((acc: Record<string, number>, r) => {
         const t = r.tipo_propuesto || "desconocido";

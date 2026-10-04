@@ -15,8 +15,9 @@ import type { PreExtractedMovimiento } from "../parsers/types";
 import { parseFecha } from "./fecha";
 import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEmisor } from "./tipo-emisor";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
-import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
-import { clasificarBoleta, decidirTipoDteAuto, type DocumentoHint } from "../sii/clasificador-tipo";
+import { esTipoValido } from "@/lib/sii/destino";
+import { clasificarBoleta, type DocumentoHint } from "../sii/clasificador-tipo";
+import { decidirTipoDtePersistido, decidirEstadoInicial } from "./tipo-dte-persistido";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import { notasPropuestasONull, rutPropuestoONull, sanearCampoIdentidad } from "./saneo";
@@ -69,16 +70,8 @@ const MIN_CONFIANZA = 0.6;
 // NO lleva regla_id → ninguno de esos auto-stagea: quedan "pendiente" para que el
 // usuario los prepare con un gesto de bulk deliberado. El Aprobar atómico
 // (aprobarCartola) sigue siendo el único gatillo hacia Emitir. Banda ALTA=0.85 del visor.
-const AUTO_STAGE_THRESHOLD = 0.85;
-
-// tipo_propuesto que representan una VENTA emitible (boleta) — el cable de
-// auto-clasificación solo persiste tipo_dte para estos. Deja fuera gasto/
-// no_comercial/impuesto/cotización/remuneración/dividendo/interés/etc. (no son
-// ventas → no boleta, aunque la empresa sea exenta).
-const TIPOS_VENTA_AUTO = new Set([
-  "boleta", "factura", "exenta", "factura_afecta", "factura_exenta",
-  "compraventa_crypto", "transferencia_p2p", "operacion_forex", "arriendo", "comision",
-]);
+// AUTO_STAGE_THRESHOLD y la regla de "nace listo" viven en tipo-dte-persistido.ts
+// (decidirEstadoInicial, pura). Qué tipos son venta: destino único (@/lib/sii/destino).
 
 /** Sanitize a value that should be numeric but OpenCode may return as "null" string */
 function toNum(val: unknown): number | null {
@@ -88,23 +81,17 @@ function toNum(val: unknown): number | null {
 }
 
 /** Normalize tipo_propuesto to valid check constraint values */
-const VALID_TIPOS = new Set([
-  "boleta", "factura", "exenta", "gasto", "registro_crypto", "ignorar",
-  "boleta_honorarios", "factura_afecta", "factura_exenta", "compraventa_crypto",
-  "transferencia_p2p", "operacion_forex", "gasto_egreso", "no_comercial",
-  "impuesto", "cotizacion_previsional", "remuneracion", "arriendo",
-  "dividendo", "comision", "interes", "retencion", "donacion",
-]);
+// Tipos válidos: TODOS_LOS_TIPOS del destino único (@/lib/sii/destino).
 function normTipo(val: string | null | undefined): string {
   if (!val) return "no_comercial";
   const s = val.trim().toLowerCase();
-  if (VALID_TIPOS.has(s)) return s;
+  if (esTipoValido(s)) return s;
   // Common OpenCode variations
   if (s.includes("crypto") || s.includes("bitcoin") || s.includes("usdt")) return "compraventa_crypto";
   if (s.includes("p2p") || s.includes("transferencia")) return "transferencia_p2p";
   if (s.includes("forex") || s.includes("divisa")) return "operacion_forex";
   // Honorarios (BHE, Segunda Categoría, fuera de emisión DTE): SOLO si el texto lo
-  // dice explícito. El literal exacto "boleta" ya salió en VALID_TIPOS; aquí caen
+  // dice explícito. El literal exacto "boleta" ya salió en esTipoValido; aquí caen
   // variantes de texto libre ("boleta afecta", "boleta 39", "boleta electrónica").
   if (s.includes("honorario")) return "boleta_honorarios";
   if (s.includes("boleta") && (s.includes("exent") || s.includes("no afect"))) return "exenta";
@@ -1509,40 +1496,21 @@ export async function procesarDocumento(
             undefined,
             docHint,
           );
-          // GUARDARRAÍL DURO: nunca persistir tipo_dte sobre un no_boletar
-          // (préstamo/cuenta propia/sueldo/aporte capital/devolución) ni sobre una
-          // SALIDA. Vale para TODOS los orígenes (regla de usuario, auto o exento):
-          // aunque una regla vieja o el hint digan otra cosa, un no_boletar no
-          // recibe tipo ni se emite.
-          const puedePersistirTipo =
-            mov?.tipo_flujo === "entrada" && clasifTipo.sugerencia !== "no_boletar";
-          // El AUTO determinista solo corre sobre tipos de VENTA (no gasto/impuesto/
-          // etc.). La glosa muda ("TRANSF DE JUAN") es EL caso a resolver por el
-          // hint+exento — no se puede exigir señal de glosa sin matar justo eso. La
-          // defensa contra no-ventas es el guardarraíl no_boletar (arriba) + la
-          // revisión humana de "Listas". Los no-ventas claros (aporte capital,
-          // préstamo, cuenta propia, DAP) los caza angleGlosa como no_boletar.
-          const esVentaCandidata =
-            puedePersistirTipo && TIPOS_VENTA_AUTO.has(tipoBase);
-          // Política de auto-persistencia (pura, testeable): el default de cuenta NO
-          // cortocircuita (una glosa contraria baja la confianza → revisar), y un 39
-          // (afecta, fabrica IVA) exige evidencia real, no solo el bias de cuenta con
-          // glosa muda. El hint por-cartola (docHint) y el exento sí son autoritativos.
-          const tipoDteAuto: 39 | 41 | null =
-            !esVentaCandidata ? null
-              : decidirTipoDteAuto(clasifTipo, { docHint, tipoContribuyente: emp?.tipo_contribuyente });
-          // Precedencia: la regla de usuario manda (si pasa el guardarraíl); si no,
-          // el auto. El emisor exento se fuerza a 41 (nunca 39).
-          // Incidente 2026-09-24: una categoría EXENTA por naturaleza (P2P/cripto/forex/
-          // exenta) jamás nace 39, diga lo que diga el giro o el default suave de la
-          // glosa. El Check la muestra "EXE" por la categoría; Emitir leía el 39 grabado.
-          const exentoPorCategoria = esTipoPropuestoExento(tipoBase);
-          const tipoDtePersist: 39 | 41 | null =
-            !puedePersistirTipo ? null
-              : exentoPorCategoria ? 41
-              : enriched.__tipo_dte === 39 || enriched.__tipo_dte === 41
-                ? (exentoFinal || empExento ? 41 : enriched.__tipo_dte)
-                : tipoDteAuto;
+          // Decisión de tipo_dte (pura, testeable): guardarraíl no_boletar/salida,
+          // solo VENTAS por destino único, categoría exenta → 41, regla de usuario
+          // (emisor exento → 41; marca P2P/forex de la cartola protege contra una
+          // regla 39 vieja → null, a revisar), si no el auto. Ver tipo-dte-persistido.ts.
+          const decisionTipo = decidirTipoDtePersistido({
+            tipoFlujo: mov?.tipo_flujo,
+            tipoBase,
+            clasif: clasifTipo,
+            docHint,
+            tipoContribuyente: emp?.tipo_contribuyente,
+            reglaTipoDte: enriched.__tipo_dte,
+            emisorExento: exentoFinal || empExento,
+          });
+          const tipoDteAuto = decisionTipo.tipoDteAuto;
+          const tipoDtePersist = decisionTipo.tipoDte;
           // Auto-clasificado (determinista, sin regla) → sube la confianza a
           // bulk-elegible (BULK_MIN_CONFIANZA 0.8) para que "Poner listas (N)" las
           // tome. NO auto-stagea: el estado sigue la regla de abajo (queda
@@ -1586,10 +1554,12 @@ export async function procesarDocumento(
             // Auto-stage a "listo" SOLO con clasificación real por regla (regla_id).
             // El atajo template (boleta @0.95 sin match) nace "pendiente": el usuario
             // hace un gesto de bulk antes de que quede a un click del SII.
-            estado:
-              confianza != null && confianza >= AUTO_STAGE_THRESHOLD && enriched.__regla_id != null
-                ? ("listo" as const)
-                : ("pendiente" as const),
+            estado: decidirEstadoInicial({
+              confianza,
+              reglaId: enriched.__regla_id,
+              tipoPropuesto: tipoNorm,
+              conflictoMarcaCartola: decisionTipo.conflictoMarcaCartola,
+            }),
             spread_compra: toNum(p.spread_compra),
             spread_venta: toNum(p.spread_venta),
             spread_ganancia: toNum(p.spread_ganancia),

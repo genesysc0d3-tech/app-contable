@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
+import { TIPOS_EMITIBLES, destino, MSG_TIPO_POR_DECIDIR } from "@/lib/sii/destino";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -269,7 +269,13 @@ export async function POST(request: Request) {
     }
     // "exenta" incluida (ya estaba en pendientes-emision): un contribuyente exento
     // emite DTE 41; el tipo_dte real lo decide clasificarBoleta abajo, no este tipo.
-    // TIPOS_EMITIBLES viene de la fuente única (misma lista que la cola de pendientes).
+    // TIPOS_EMITIBLES viene del destino único (misma lista que la cola de pendientes).
+    // "Por decidir" (arriendo/comisión): no se adivina exenta ni afecta → la decide
+    // el cliente en Check. Código propio para que la UI lo distinga de un tipo inválido.
+    if (destino(p.tipo_propuesto) === "preguntar") {
+      results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_POR_DECIDIR", error_message: MSG_TIPO_POR_DECIDIR });
+      continue;
+    }
     if (!TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
       results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como boleta` });
       continue;

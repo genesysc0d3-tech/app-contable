@@ -412,6 +412,26 @@ export default function CartolaEditor({
     if (p.estado === "aprobado") return "emision";
     return "pendientes";
   }
+  // Fila "¿?" (destino "preguntar": arriendo/comisión). El cliente decide en un
+  // toque, reutilizando las MISMAS acciones del lote: Exenta/Afecta = cambio de tipo
+  // (aprende la contraparte), No es venta = juicio sin boleta (recuperable).
+  async function decidirUna(p: Propuesta, decision: "exenta" | "afecta" | "no_es_venta") {
+    if (actingRef.current.has(p.id)) return;
+    actingRef.current.add(p.id);
+    try {
+      if (decision === "no_es_venta") {
+        const casa = seccionDe(p);
+        const r = await rechazarPropuestas([p.id]);
+        if (r.error) toast(r.error, "error");
+        else { setJuzgadasEnSesion((prev) => new Map(prev).set(p.id, casa)); toast("Listo: no es venta (queda tachada, recuperable)"); }
+      } else {
+        const r = await cambiarTipoPropuestas([p.id], decision, mesa === "factura" ? "factura" : "boleta");
+        if (r.error) toast(r.error, "error");
+        else toast(`Quedó como venta ${decision}${r.aviso ? ` · ${r.aviso}` : ""}`);
+      }
+      onAction();
+    } finally { actingRef.current.delete(p.id); }
+  }
   async function rejectOne(p: Propuesta) {
     if (actingRef.current.has(p.id)) return;
     actingRef.current.add(p.id);
@@ -580,6 +600,7 @@ export default function CartolaEditor({
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
                       onVolver={row.p.estado === "listo" ? () => volverUna(row.p) : undefined}
+                      onDecidir={(d) => decidirUna(row.p, d)}
                       selected={sel.has(row.p.id) || selJuz.has(row.p.id) || selListas.has(row.p.id)}
                       onSelect={terminadas.has(row.p.id) ? undefined
                         : row.section === "pendientes" && esJuzgable(row.p)
@@ -695,13 +716,15 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
 }
 
 /* ─── Fila de tx (colapsada) ─── */
-function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, onVolver, selected = false, onSelect }: {
+function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, onVolver, onDecidir, selected = false, onSelect }: {
   p: Propuesta;
   /** Emitida o a medias: fila tachada, sin casilla, sin detalle y sin acciones. */
   terminada?: Terminada;
   isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
   /** Solo listas: ↩ vuelve a pendiente (fundador 2026-09-02: cambio de estado individual en toda sección). */
   onVolver?: () => void;
+  /** Fila "¿?" (por decidir): Exenta / Afecta / No es venta. */
+  onDecidir?: (d: "exenta" | "afecta" | "no_es_venta") => void;
   selected?: boolean;
   /** Casilla de selección múltiple (pendientes, listas y juzgadas — cada una con su lote). */
   onSelect?: (shift: boolean) => void;
@@ -712,6 +735,8 @@ function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, o
   // 'aprobado' = comprometida a Emitir → sin ✎ (auditoría #21).
   const enEmision = p.estado === "aprobado";
   const rechazada = p.estado === "rechazado" || p.estado === "descartado";
+  // "¿Es venta? · decide tú": sin ✓ (no se adivina exenta ni afecta), con las 3 respuestas.
+  const porDecidir = tm.destino === "preguntar" && !enEmision && !rechazada && !!onDecidir;
   return (
     <div className="ce-row" onClick={onToggle} style={selected ? { background: "color-mix(in srgb, var(--accent) 7%, transparent)" } : undefined}>
       {/* Casilla estilo explorador: seleccionar para juzgar en grupo (shift = rango).
@@ -740,7 +765,17 @@ function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, o
       {enEmision && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--blue)", letterSpacing: ".06em", padding: "3px 8px", borderRadius: 99, background: "rgba(96,165,250,.1)", border: "1px solid rgba(96,165,250,.3)" }}>EN EMISIÓN</span>}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* ✓ solo en borradores (pendiente/editado): nunca demotar una 'listo' (ya staged) ni una 'aprobado' (ya en Emitir) */}
-        {(p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
+        {porDecidir && onDecidir && (
+          <span role="group" aria-label="¿Es venta?" style={{ display: "inline-flex", gap: 4, marginRight: 4 }}>
+            {([["exenta", "Exenta"], ["afecta", "Afecta"], ["no_es_venta", "No es venta"]] as const).map(([d, label]) => (
+              <button key={d} onClick={() => onDecidir(d)}
+                style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 9px", borderRadius: 99, border: "1px solid var(--border)", background: "var(--surface2)", color: d === "no_es_venta" ? "var(--text2)" : "var(--text)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
+        {!porDecidir && (p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
         {onVolver && <RowActionBtn type="edit" icon="↩" onClick={onVolver} />}
         {rechazada ? (
           /* Restaurar reemplaza al ✎ en rechazadas: el detalle acá solo llevaba a un error engañoso */

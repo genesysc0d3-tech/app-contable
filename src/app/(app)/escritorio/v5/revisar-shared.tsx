@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta, editarGlosaEmitible } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
-import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
+import { destino, esAfectoPorTipo, esExentoPorTipo } from "@/lib/sii/destino";
 import type { Tables } from "@/lib/database.types";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
@@ -46,16 +46,10 @@ export function fmtShort(d: string | null | undefined): string {
   return formatShortDateEsCl(d, true);
 }
 
-// Tipo de la propuesta para decisión rápida: visible tanto en la fila
-// colapsada (sigla) como en el detalle expandido (label completo).
-export function tipoMeta(tipoPropuesto: string | null) {
-  if (tipoPropuesto === "gasto_egreso") return { sigla: "GASTO", label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "var(--amber)" };
-  if (tipoPropuesto === "no_comercial") return { sigla: "N/C", label: "No comercial · no se boletea", bg: "color-mix(in srgb, var(--text) 7%, transparent)", color: "var(--text2)" };
-  const afecta = tipoPropuesto === "boleta" || tipoPropuesto === "factura";
-  return afecta
-    ? { sigla: "AFE", label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "var(--lime)" }
-    : { sigla: "EXE", label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "var(--blue)" };
-}
+// tipoMeta (sigla/label del tipo) vive en ./tipo-meta (puro, testeable por el censo
+// del destino único). Re-exportado para los importadores existentes.
+import { tipoMeta } from "./tipo-meta";
+export { tipoMeta };
 
 export function RevisarEmpty() {
   return (
@@ -352,9 +346,8 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   // entero: hablaba de "boleta" y, peor, al aprobar escribía tipo_propuesto
   // "boleta"/tipo_dte 39 — convertía una FACTURA en boleta (2026-09-03). El
   // carril se decide igual que en EditorAmpliado: la mesa manda.
-  const esFactura = (propuesta as unknown as { mesa?: string | null }).mesa === "factura"
-    || propuesta.tipo_propuesto === "factura_afecta"
-    || propuesta.tipo_propuesto === "factura_exenta";
+  const enMesaFactura = (propuesta as unknown as { mesa?: string | null }).mesa === "factura";
+  const esFactura = enMesaFactura || destino(propuesta.tipo_propuesto) === "factura";
   const doc = esFactura ? "factura" : "boleta";
 
   // Campos editables (editable, sin lock). El tipo lo decide PRIMERO la clasificación
@@ -362,12 +355,11 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   // sugerencia de la empresa. Un default de empresa 'afecto'/'auto' NUNCA puede pisar
   // una exención POR LEY (cripto/forex/P2P, Of. SII 963/2018): eso fabricaría IVA
   // inexistente sobre una venta exenta (el footgun que el clasificador ya prohíbe).
-  const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
-          : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
+        : esExentoPorTipo(propuesta.tipo_propuesto) ? "exenta"
+          : esAfectoPorTipo(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipoContribuyente === "exento" ? "exenta"
               : empresaTipoContribuyente === "afecto" ? "afecta"
                 : "exenta"; // default seguro: nunca fabricar IVA sobre algo sin clasificar
