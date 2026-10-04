@@ -148,6 +148,7 @@ export async function POST(request: Request) {
         receptor_comuna: comuna,
         receptor_email: email,
         fuente_clasificacion: "factura_unica",
+        orig_tipo_dte_fuente: "factura_unica",
         confianza: 1,
       })
       .select("id")

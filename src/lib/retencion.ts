@@ -20,6 +20,15 @@ export const GLOSA_CADUCADA = "[glosa caducada por retención]";
 const DIA_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Retención del log de decisiones (propuesta_decisiones, Fase 1 medición del
+ * clasificador). Decisión del fundador 2026-10-04: igual que las boletas (~6 años,
+ * plazo del Código Tributario). El log no guarda PII de terceros (solo códigos,
+ * conteos y "tenía/no tenía receptor"), pero sí el usuario que decidió.
+ * CONFIRMAR CON MATÍAS (6 años = 2190 días).
+ */
+export const RETENCION_DECISIONES_DIAS = 2190;
+
+/**
  * ISO del corte de retención. Las filas con `created_at` ANTERIOR a este valor
  * ya cumplieron los años y deben anonimizarse. El corte siempre queda en el
  * PASADO respecto de `nowMs` — nunca anonimiza datos recientes.

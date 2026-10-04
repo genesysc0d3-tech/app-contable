@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { recordOpsError, recordOpsEvent } from "@/lib/ops/events";
-import { GLOSA_CADUCADA, RETENCION_ANOS, cutoffRetencionISO } from "@/lib/retencion";
+import { GLOSA_CADUCADA, RETENCION_ANOS, RETENCION_DECISIONES_DIAS, cutoffRetencionISO } from "@/lib/retencion";
 
 // Purga de retención (auditoría #11, Ley 21.719 — limitación de conservación).
 // audit_chunks guarda texto CRUDO de cartolas (PII); parser_logs, diagnósticos.
@@ -39,6 +39,7 @@ export async function GET(request: Request) {
   const now = Date.now();
   const cutoff = new Date(now - RETENCION_DIAS * 24 * 60 * 60 * 1000).toISOString();
   const cutoffGlosa = cutoffRetencionISO(now);
+  const cutoffDecisiones = new Date(now - RETENCION_DECISIONES_DIAS * 24 * 60 * 60 * 1000).toISOString();
 
   try {
     const audit = await sb.from("audit_chunks").delete().lt("created_at", cutoff).select("id");
@@ -54,18 +55,26 @@ export async function GET(request: Request) {
       .neq("descripcion", GLOSA_CADUCADA)
       .select("id");
 
+    // Log de decisiones del clasificador (Fase 1 medición): misma retención que
+    // las boletas. count, no select: pueden ser muchas filas.
+    const decisiones = await sb
+      .from("propuesta_decisiones")
+      .delete({ count: "exact" })
+      .lt("created_at", cutoffDecisiones);
+
     const auditBorrados = audit.error ? -1 : (audit.data?.length ?? 0);
+    const decisionesBorradas = decisiones.error ? -1 : (decisiones.count ?? 0);
     const logsBorrados = logs.error ? -1 : (logs.data?.length ?? 0);
     const glosasAnonimizadas = glosa.error ? -1 : (glosa.data?.length ?? 0);
 
-    if (audit.error || logs.error || glosa.error) {
+    if (audit.error || logs.error || glosa.error || decisiones.error) {
       await recordOpsError({
         sb,
         severity: "error",
         source: "audit/cron",
         eventName: "retencion_purge_parcial",
         summary: "La purga de retención falló parcialmente",
-        error: audit.error ?? logs.error ?? glosa.error,
+        error: audit.error ?? logs.error ?? glosa.error ?? decisiones.error,
       });
     } else {
       await recordOpsEvent({
@@ -73,18 +82,19 @@ export async function GET(request: Request) {
         severity: "info",
         source: "audit/cron",
         eventName: "retencion_purge",
-        summary: `Retención: ${auditBorrados} audit_chunks + ${logsBorrados} parser_logs purgados (>${RETENCION_DIAS}d), ${glosasAnonimizadas} glosas anonimizadas (>${RETENCION_ANOS}a)`,
-        metadata: { cutoff, cutoffGlosa, auditBorrados, logsBorrados, glosasAnonimizadas },
+        summary: `Retención: ${auditBorrados} audit_chunks + ${logsBorrados} parser_logs purgados (>${RETENCION_DIAS}d), ${glosasAnonimizadas} glosas anonimizadas (>${RETENCION_ANOS}a), ${decisionesBorradas} decisiones purgadas (>${RETENCION_DECISIONES_DIAS}d)`,
+        metadata: { cutoff, cutoffGlosa, cutoffDecisiones, auditBorrados, logsBorrados, glosasAnonimizadas, decisionesBorradas },
       }).catch(() => {});
     }
 
     return NextResponse.json({
-      ok: !audit.error && !logs.error && !glosa.error,
+      ok: !audit.error && !logs.error && !glosa.error && !decisiones.error,
       cutoff,
       cutoff_glosa: cutoffGlosa,
       audit_chunks_borrados: auditBorrados,
       parser_logs_borrados: logsBorrados,
       glosas_anonimizadas: glosasAnonimizadas,
+      decisiones_purgadas: decisionesBorradas,
     });
   } catch (error) {
     await recordOpsError({

@@ -214,7 +214,7 @@ export default function CartolaEditor({
     setBusyBulk(true);
     try {
       const ids = [...sel];
-      const r = accion === "listo" ? await ponerListo(ids) : await rechazarPropuestas(ids);
+      const r = accion === "listo" ? await ponerListo(ids, undefined, "check_lote") : await rechazarPropuestas(ids, "check_lote");
       if (r.error) toast(r.error, "error");
       else {
         // Lote deliberado → las juzgadas SE MUDAN al grupo Sin boleta (el
@@ -329,7 +329,7 @@ export default function CartolaEditor({
       return;
     }
     setBusyBulk(true);
-    const r = await ponerListo(elegibles.map((p) => p.id));
+    const r = await ponerListo(elegibles.map((p) => p.id), undefined, "check_lote");
     if (r.error) toast(r.error, "error");
     else toast(saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`);
     onAction();
@@ -373,7 +373,7 @@ export default function CartolaEditor({
     setBusyBulk(true);
     try {
       const ids = [...selListas];
-      const r = accion === "pendiente" ? await volverAPendientes(ids) : await rechazarPropuestas(ids);
+      const r = accion === "pendiente" ? await volverAPendientes(ids, "check_lote") : await rechazarPropuestas(ids, "check_lote");
       if (r.error) toast(r.error, "error");
       // Lote deliberado → van al grupo Sin boleta (sin parking; ver bulkSel).
       // Lo ya emitido / a medias se queda donde está (incidente MH 2026-09-29): se avisa.

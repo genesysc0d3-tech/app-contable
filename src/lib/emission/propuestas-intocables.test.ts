@@ -189,10 +189,11 @@ describe("cierres de la revisión adversarial", () => {
   it("MCP devolver_a_revision pasa por el guard antes del update", () => {
     const src = readFileSync(join(__dirname, "../../app/api/mcp/route.ts"), "utf8");
     const i = src.indexOf("clasificarIntocables(ctx.svc, ctx.empresaId, ids)");
-    const j = src.indexOf('.update({ estado: "pendiente" })');
+    // (el payload lleva además el sello de decisión: ...sello("mcp", …), Fase 1 medición)
+    const j = src.indexOf('.update({ estado: "pendiente"');
     expect(i).toBeGreaterThan(0);
     expect(j).toBeGreaterThan(i);
-    expect(src.slice(j, j + 120)).toMatch(/\.in\("id", sep\.tocables\)/);
+    expect(src.slice(j, j + 220)).toMatch(/\.in\("id", sep\.tocables\)/);
   });
   it("los bulk avisan lo que se quedó", () => {
     expect(avisoSeQuedan(new Map([["a", "emitida"], ["b", "a_medias"]]))).toBe("1 ya emitida se queda · 1 a medias se queda (verifícala en A medias)");

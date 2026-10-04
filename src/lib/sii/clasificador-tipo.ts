@@ -393,18 +393,42 @@ export function decidirTipoDteAuto(
   clasif: ClasificacionResult,
   opts: { docHint: DocumentoHint; tipoContribuyente?: string | null },
 ): 39 | 41 | null {
-  if (opts.tipoContribuyente === "exento") return 41;
+  return decidirTipoDteAutoConMotivo(clasif, opts).tipo;
+}
+
+/** Por qué `decidirTipoDteAuto` decidió lo que decidió (Fase 1 medición: se graba
+ *  como `orig_tipo_dte_fuente = auto_<motivo>`). Lista cerrada, espejo del CHECK de
+ *  la migración 20261004140000. */
+export type MotivoTipoDteAuto =
+  | "empresa_exenta"        // emisor exento → siempre 41
+  | "no_firme"              // sin hint y confianza < 0.85 → a revisar
+  | "glosa_exenta"          // el clasificador dijo 41 con firmeza
+  | "sin_tipo"              // el clasificador no dijo ni 39 ni 41
+  | "contribuyente_afecto"  // emisor afecto → 39
+  | "glosa_afecta"          // keyword real de afecta en la glosa (peso ≥ 0,7)
+  | "hint_afecta"           // hint por-cartola servicios/ventas
+  | "sin_evidencia_afecta"; // candidato 39 sin evidencia → a revisar
+
+/** Misma decisión que `decidirTipoDteAuto`, más el motivo. `decidirTipoDteAuto` es
+ *  su envoltorio: hay UNA sola lógica. */
+export function decidirTipoDteAutoConMotivo(
+  clasif: ClasificacionResult,
+  opts: { docHint: DocumentoHint; tipoContribuyente?: string | null },
+): { tipo: 39 | 41 | null; motivo: MotivoTipoDteAuto } {
+  if (opts.tipoContribuyente === "exento") return { tipo: 41, motivo: "empresa_exenta" };
   const firme = opts.docHint != null || clasif.confianza >= 0.85;
-  if (!firme) return null;
-  if (clasif.tipo_dte === 41) return 41;
-  if (clasif.tipo_dte !== 39) return null;
+  if (!firme) return { tipo: null, motivo: "no_firme" };
+  if (clasif.tipo_dte === 41) return { tipo: 41, motivo: "glosa_exenta" };
+  if (clasif.tipo_dte !== 39) return { tipo: null, motivo: "sin_tipo" };
   // A partir de acá el candidato es un 39 (afecta): exigir evidencia.
-  if (opts.tipoContribuyente === "afecto") return 39;
+  if (opts.tipoContribuyente === "afecto") return { tipo: 39, motivo: "contribuyente_afecto" };
   // Incidente 2026-09-24 (415 filas P2P nacieron 39 en dos empresas 'auto'):
   // angleGlosa termina con un "default suave" transferencia→afecta (peso 0,35).
   // Esa etiqueta NO es evidencia: solo un keyword real (servicio/venta/comisión,
   // peso ≥ 0,7) corrobora un 39.
   const glosaCorroboraAfecta = clasif.angulos.glosa.veredicto === "afecta" && clasif.angulos.glosa.peso >= 0.7;
+  if (glosaCorroboraAfecta) return { tipo: 39, motivo: "glosa_afecta" };
   const hintAfectaExplicito = opts.docHint === "servicios" || opts.docHint === "ventas";
-  return glosaCorroboraAfecta || hintAfectaExplicito ? 39 : null;
+  if (hintAfectaExplicito) return { tipo: 39, motivo: "hint_afecta" };
+  return { tipo: null, motivo: "sin_evidencia_afecta" };
 }

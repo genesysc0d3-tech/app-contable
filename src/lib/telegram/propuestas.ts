@@ -14,6 +14,7 @@ import type { Database, Json } from "../database.types";
 import { parseFecha } from "../ai/fecha";
 import { sendMessage, type InlineKeyboardMarkup } from "./api";
 import { resolverMontoTelegram } from "./deterministico";
+import { sello } from "../propuestas/sello";
 
 function svc() {
   return createServiceClient<Database>(
@@ -262,6 +263,7 @@ async function crearPropuestaParaMovimiento(args: {
       estado: "pendiente",
       notas: args.notas,
       fuente_clasificacion: "telegram_manual",
+      orig_tipo_dte_fuente: "telegram_manual",
     })
     .select(SELECT_PROP)
     .single();
@@ -663,7 +665,7 @@ export async function aprobarBot(propId: string, empresaId: string): Promise<Apr
   const db = svc();
   const { count } = await db
     .from("propuestas_ia")
-    .update({ estado: "aprobado" }, { count: "exact" })
+    .update({ estado: "aprobado", ...sello("telegram", { usuarioId: null, loteN: 1 }) }, { count: "exact" })
     .eq("empresa_id", empresaId)
     .eq("id", propId)
     .in("estado", ["pendiente", "editado"]);
@@ -733,7 +735,7 @@ export async function editarCampoBot(
 
   const { error, count } = await db
     .from("propuestas_ia")
-    .update(update, { count: "exact" })
+    .update({ ...update, ...sello("telegram", { usuarioId: null, loteN: 1 }) }, { count: "exact" })
     .eq("empresa_id", empresaId)
     .eq("id", propId);
   if (error || !count) return { ok: false, error: "No pude guardar el cambio. Prueba de nuevo." };

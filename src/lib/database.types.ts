@@ -20,6 +20,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      resumen_propuestas_a_borrar: {
+        Args: {
+          p_documento_id: string | null
+          p_empresa_id: string
+          p_propuesta_id?: string | null
+        }
+        Returns: Json
+      }
       graphql: {
         Args: {
           extensions?: Json
@@ -1497,6 +1505,7 @@ export type Database = {
           email_sii: string | null
           emision_baseapi_sandbox: boolean
           emision_proveedor: string
+          es_prueba: boolean
           ext_last_seen_at: string | null
           ext_last_version: string | null
           facturas_emision_proveedor: string
@@ -1529,6 +1538,7 @@ export type Database = {
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          es_prueba?: boolean
           ext_last_seen_at?: string | null
           ext_last_version?: string | null
           facturas_emision_proveedor?: string
@@ -1561,6 +1571,7 @@ export type Database = {
           email_sii?: string | null
           emision_baseapi_sandbox?: boolean
           emision_proveedor?: string
+          es_prueba?: boolean
           ext_last_seen_at?: string | null
           ext_last_version?: string | null
           facturas_emision_proveedor?: string
@@ -2506,12 +2517,113 @@ export type Database = {
         }
         Relationships: []
       }
+      propuesta_decisiones: {
+        Row: {
+          abierta: boolean | null
+          accion: string
+          antes_con_receptor: boolean | null
+          antes_estado: string | null
+          antes_tipo_dte: number | null
+          antes_tipo_propuesto: string | null
+          canal: string
+          con_foto: boolean
+          created_at: string
+          despues_con_receptor: boolean | null
+          despues_estado: string | null
+          despues_tipo_dte: number | null
+          despues_tipo_propuesto: string | null
+          documento_id: string | null
+          empresa_id: string
+          id: number
+          lote_id: string | null
+          lote_n: number | null
+          mesa: string | null
+          orig_confianza: number | null
+          orig_fuente: string | null
+          orig_tipo_dte: number | null
+          orig_tipo_dte_fuente: string | null
+          propuesta_id: string
+          receptor_cambio: boolean
+          soporte: boolean | null
+          total_cambio: boolean
+          usuario_id: string | null
+        }
+        Insert: {
+          abierta?: boolean | null
+          accion: string
+          antes_con_receptor?: boolean | null
+          antes_estado?: string | null
+          antes_tipo_dte?: number | null
+          antes_tipo_propuesto?: string | null
+          canal: string
+          con_foto: boolean
+          created_at?: string
+          despues_con_receptor?: boolean | null
+          despues_estado?: string | null
+          despues_tipo_dte?: number | null
+          despues_tipo_propuesto?: string | null
+          documento_id?: string | null
+          empresa_id: string
+          lote_id?: string | null
+          lote_n?: number | null
+          mesa?: string | null
+          orig_confianza?: number | null
+          orig_fuente?: string | null
+          orig_tipo_dte?: number | null
+          orig_tipo_dte_fuente?: string | null
+          propuesta_id: string
+          receptor_cambio?: boolean
+          soporte?: boolean | null
+          total_cambio?: boolean
+          usuario_id?: string | null
+          id?: never
+        }
+        Update: {
+          abierta?: boolean | null
+          accion?: string
+          antes_con_receptor?: boolean | null
+          antes_estado?: string | null
+          antes_tipo_dte?: number | null
+          antes_tipo_propuesto?: string | null
+          canal?: string
+          con_foto?: boolean
+          created_at?: string
+          despues_con_receptor?: boolean | null
+          despues_estado?: string | null
+          despues_tipo_dte?: number | null
+          despues_tipo_propuesto?: string | null
+          documento_id?: string | null
+          empresa_id?: string
+          lote_id?: string | null
+          lote_n?: number | null
+          mesa?: string | null
+          orig_confianza?: number | null
+          orig_fuente?: string | null
+          orig_tipo_dte?: number | null
+          orig_tipo_dte_fuente?: string | null
+          propuesta_id?: string
+          receptor_cambio?: boolean
+          soporte?: boolean | null
+          total_cambio?: boolean
+          usuario_id?: string | null
+          id?: never
+        }
+        Relationships: []
+      }
       propuestas_ia: {
         Row: {
           cliente_id: string | null
           confianza: number | null
           created_at: string
+          decision_abierta: boolean | null
+          decision_canal: string | null
+          decision_lote: string | null
+          decision_lote_n: number | null
+          decision_por: string | null
+          decision_soporte: boolean | null
           detalle: string | null
+          editado_at: string | null
+          editado_canal: string | null
           empresa_id: string
           estado: string
           fuente_clasificacion: string | null
@@ -2524,6 +2636,17 @@ export type Database = {
           monto_neto: number | null
           movimiento_id: string
           notas: string | null
+          orig_capturada_at: string | null
+          orig_con_receptor: boolean | null
+          orig_confianza: number | null
+          orig_documento_id: string | null
+          orig_estado: string | null
+          orig_fuente: string | null
+          orig_mesa: string | null
+          orig_regla_id: string | null
+          orig_tipo_dte: number | null
+          orig_tipo_dte_fuente: string | null
+          orig_tipo_propuesto: string | null
           receptor_comuna: string | null
           receptor_direccion: string | null
           receptor_email: string | null
@@ -2544,7 +2667,15 @@ export type Database = {
           cliente_id?: string | null
           confianza?: number | null
           created_at?: string
+          decision_abierta?: boolean | null
+          decision_canal?: string | null
+          decision_lote?: string | null
+          decision_lote_n?: number | null
+          decision_por?: string | null
+          decision_soporte?: boolean | null
           detalle?: string | null
+          editado_at?: string | null
+          editado_canal?: string | null
           empresa_id: string
           estado?: string
           fuente_clasificacion?: string | null
@@ -2557,6 +2688,17 @@ export type Database = {
           monto_neto?: number | null
           movimiento_id: string
           notas?: string | null
+          orig_capturada_at?: string | null
+          orig_con_receptor?: boolean | null
+          orig_confianza?: number | null
+          orig_documento_id?: string | null
+          orig_estado?: string | null
+          orig_fuente?: string | null
+          orig_mesa?: string | null
+          orig_regla_id?: string | null
+          orig_tipo_dte?: number | null
+          orig_tipo_dte_fuente?: string | null
+          orig_tipo_propuesto?: string | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null
@@ -2577,7 +2719,15 @@ export type Database = {
           cliente_id?: string | null
           confianza?: number | null
           created_at?: string
+          decision_abierta?: boolean | null
+          decision_canal?: string | null
+          decision_lote?: string | null
+          decision_lote_n?: number | null
+          decision_por?: string | null
+          decision_soporte?: boolean | null
           detalle?: string | null
+          editado_at?: string | null
+          editado_canal?: string | null
           empresa_id?: string
           estado?: string
           fuente_clasificacion?: string | null
@@ -2590,6 +2740,17 @@ export type Database = {
           monto_neto?: number | null
           movimiento_id?: string
           notas?: string | null
+          orig_capturada_at?: string | null
+          orig_con_receptor?: boolean | null
+          orig_confianza?: number | null
+          orig_documento_id?: string | null
+          orig_estado?: string | null
+          orig_fuente?: string | null
+          orig_mesa?: string | null
+          orig_regla_id?: string | null
+          orig_tipo_dte?: number | null
+          orig_tipo_dte_fuente?: string | null
+          orig_tipo_propuesto?: string | null
           receptor_comuna?: string | null
           receptor_direccion?: string | null
           receptor_email?: string | null

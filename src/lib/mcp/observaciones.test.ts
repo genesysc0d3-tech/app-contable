@@ -51,7 +51,7 @@ describe("la ruta del MCP registra observaciones solo de lo que cambió", () => 
   const src = readFileSync(ROUTE, "utf8");
 
   it("las DOS escrituras piden las filas tocadas (.select('id')) y registran ESOS ids, no los pedidos", () => {
-    const bloques = src.match(/\.update\(\{ estado: "(aprobado|pendiente)" \}\)[\s\S]*?\.select\("id"\);[\s\S]*?const idsTocados = \(tocadas \?\? \[\]\)\.map\(\(r\) => r\.id\);[\s\S]*?await registrarObservaciones\("(dejar_en_emitir|devolver_a_revision)", idsTocados, motivo\)/g) ?? [];
+    const bloques = src.match(/\.update\(\{ estado: "(aprobado|pendiente)"(?:, \.\.\.sello\([^)]*\))? \}\)[\s\S]*?\.select\("id"\);[\s\S]*?const idsTocados = \(tocadas \?\? \[\]\)\.map\(\(r\) => r\.id\);[\s\S]*?await registrarObservaciones\("(dejar_en_emitir|devolver_a_revision)", idsTocados, motivo\)/g) ?? [];
     expect(bloques).toHaveLength(2);
   });
 

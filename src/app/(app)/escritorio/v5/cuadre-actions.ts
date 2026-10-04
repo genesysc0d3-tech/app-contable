@@ -71,8 +71,9 @@ export async function agregarFilasFaltantes(documentoId: string): Promise<Agrega
   const { error: errMov } = await sb.from("movimientos_raw").upsert(movs, { onConflict: "id", ignoreDuplicates: true });
   if (errMov) return { ok: false, error: "No se pudieron agregar los movimientos — intenta de nuevo" };
 
-  const props = plan.map((f) => propuestaRecuperada(cuadre.perdidas[f.idx], {
-    id: f.propuesta_id, movimientoId: f.movimiento_id, empresaId, mesa,
+  const props = plan.map((f) => ({
+    ...propuestaRecuperada(cuadre.perdidas[f.idx], { id: f.propuesta_id, movimientoId: f.movimiento_id, empresaId, mesa }),
+    orig_tipo_dte_fuente: "cuadre_cartola" as const, // Fase 1 medición: de dónde nació
   }));
   const { error: errProp } = await sb.from("propuestas_ia").upsert(props, { onConflict: "id", ignoreDuplicates: true });
   if (errProp) return { ok: false, error: "No se pudieron crear las propuestas — intenta de nuevo" };

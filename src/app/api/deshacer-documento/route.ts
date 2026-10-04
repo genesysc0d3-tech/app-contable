@@ -5,6 +5,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { cancelDocumentProcessingJob } from "@/lib/document-processing/queue";
 import { recordCuentaAudit } from "@/lib/audit/account";
+import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
 import {
   esErrorCandadoBD,
   MENSAJE_CANDADO_BD,
@@ -91,6 +92,7 @@ export async function POST(request: Request) {
   }
 
   const movIds = (movimientos ?? []).map((m) => m.id);
+  let propuestasResumen: Awaited<ReturnType<typeof resumenPropuestasABorrar>> = null;
 
   if (movIds.length > 0) {
     // CANDADO 1 (fail-closed, doble candado 2026-09-30). INTEGRIDAD TRIBUTARIA: si
@@ -118,6 +120,9 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
+
+    // Rastro del borrado (Fase 1 medición): SOLO conteos de lo que se va. Best-effort.
+    propuestasResumen = await resumenPropuestasABorrar(svc, { empresaId: usuario.empresa_id, documentoId: documento_id });
 
     // UNA sentencia: movimientos_raw → propuestas_ia es ON DELETE CASCADE, así que
     // el borrado es atómico (sin .in() gigante) y pasa por el trigger de la base
@@ -157,7 +162,10 @@ export async function POST(request: Request) {
     recursoTipo: "documento",
     recursoId: documento_id,
     resumen: `Documento "${documento.nombre_archivo}" deshecho (${movIds.length} movimientos)`,
-    metadata: { nombre_archivo: documento.nombre_archivo, movimientos: movIds.length },
+    metadata: {
+      nombre_archivo: documento.nombre_archivo, movimientos: movIds.length,
+      ...(propuestasResumen ? { propuestas_resumen: propuestasResumen } : {}),
+    },
   });
 
   return NextResponse.json({ ok: true });
