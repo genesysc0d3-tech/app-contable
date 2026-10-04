@@ -2,9 +2,12 @@
 -- nacer, abstención y FALSOS SEGUROS (cota inferior) por empresa × fuente × banda.
 -- Funciona con o sin la migración 20261004160000 (lee orig_* y es_prueba vía
 -- to_jsonb: si la columna no existe, cae al valor actual / false).
--- Exactitud: confianza, fuente_clasificacion y regla_id no los modifica ninguna
--- escritura después del insert → la banda "al nacer" es exacta. Los cambios
--- afecta↔exenta NO se ven (el valor quedó pisado): falsos seguros = COTA INFERIOR.
+-- Exactitud: la banda "al nacer" sale de orig_* (foto inmutable de la Fase 1) cuando
+-- existe → exacta. Sin foto (filas anteriores a 20261004160000) se usan los valores
+-- ACTUALES, que ya no son los del nacimiento: Deshacer una regla (Fase 3) re-evalúa
+-- confianza/fuente_clasificacion/regla_id y la propagación liga regla_id → aproximada.
+-- Los cambios afecta↔exenta sin foto NO se ven (el valor quedó pisado): falsos
+-- seguros = COTA INFERIOR.
 -- Población: abonos (tipo_flujo='entrada') de la mesa boleta, empresas no es_prueba.
 -- Salida: SOLO códigos y conteos; empresa_id lo seudonimiza el script (E1, E2…).
 with emp as (

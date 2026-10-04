@@ -29,6 +29,7 @@ export interface DecidirTipoDteInput {
   /**
    * La regla 39 ya fue CONFIRMADA por una persona sobre una cartola marcada P2P/forex
    * (eligió "Afecta" en una fila "¿?"): no se vuelve a preguntar → corta el loop.
+   * Viene de clasificacion_reglas.aprendida_bajo_marca (Fase 3; antes, confianza 0.99).
    */
   reglaConfirmadaEnMarca?: boolean;
 }
@@ -55,12 +56,6 @@ const HINTS_EXENTOS_POR_LEY: ReadonlySet<string> = new Set(["p2p_cripto", "forex
 export function esHintExentoPorLey(h: string | null | undefined): boolean {
   return h != null && HINTS_EXENTOS_POR_LEY.has(h);
 }
-
-/**
- * Confianza con que la regla aprendida queda marcada como "Afecta confirmada sobre
- * una cartola P2P/forex" (aprender-regla.ts). Las reglas de usuario normales usan 0.95.
- */
-export const CONFIANZA_REGLA_CONFIRMADA_EN_MARCA = 0.99;
 
 /** Techo de confianza de una fila "por decidir": bajo BULK_MIN_CONFIANZA (0.8) → no entra a "Poner listas". */
 export const CONFIANZA_MAX_POR_DECIDIR = 0.5;
@@ -120,15 +115,20 @@ export const AUTO_STAGE_THRESHOLD = 0.85;
  *  - viene de una regla REAL (regla_id) con confianza ≥ AUTO_STAGE_THRESHOLD, y
  *  - su destino es una VENTA (boleta/factura): un sobregiro / no_comercial / gasto de
  *    una regla global nunca nace "listo" (no hay nada que emitir; debe juzgarse), y
- *  - no hubo conflicto entre la regla y la marca de la cartola.
+ *  - no hubo conflicto entre la regla y la marca de la cartola, y
+ *  - la regla NO está a prueba (Fase 3: una regla nueva todavía no se ganó el "listo"
+ *    automático; la fila nace pendiente con el tipo pre-estampado).
  */
 export function decidirEstadoInicial(i: {
   confianza: number | null;
   reglaId: string | null | undefined;
   tipoPropuesto: string;
   conflictoMarcaCartola?: boolean;
+  /** La regla que calzó está a prueba / en disputa (regla-evidencia.ts). */
+  reglaAPrueba?: boolean;
 }): "listo" | "pendiente" {
-  return i.confianza != null
+  return !i.reglaAPrueba
+    && i.confianza != null
     && i.confianza >= AUTO_STAGE_THRESHOLD
     && i.reglaId != null
     && esVentaEmitible(i.tipoPropuesto)

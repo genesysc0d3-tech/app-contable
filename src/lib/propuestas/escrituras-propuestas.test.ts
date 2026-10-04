@@ -27,6 +27,7 @@ const INVENTARIO: Record<string, Record<string, number>> = {
   "src/app/api/mcp/route.ts": { update: 2 },
   "src/lib/ai/aprender-regla.ts": { update: 1 },
   "src/lib/ai/processor.ts": { insertInBatches: 1 },
+  "src/lib/ai/reglas-historial.ts": { update: 1 },
   "src/lib/facturas/procesar.ts": { insert: 1 },
   "src/lib/telegram/ingesta.ts": { insert: 2, update: 2 },
   "src/lib/telegram/propuestas.ts": { insert: 1, update: 2 },

@@ -43,7 +43,8 @@ export type CuentaAuditAction =
   | "cuadre_filas_agregadas"
   | "cartola_lectura_confirmada"
   | "cartola_no_es_cartola"
-  | "cartola_leer_como_cartola";
+  | "cartola_leer_como_cartola"
+  | "regla_deshecha";
 
 export async function recordCuentaAudit(args: {
   sb: Sb;
