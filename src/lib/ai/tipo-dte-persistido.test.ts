@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClasificacionResult } from "@/lib/sii/clasificador-tipo";
-import { decidirEstadoInicial, decidirTipoDtePersistido, type DecidirTipoDteInput } from "./tipo-dte-persistido";
+import { ajustarPorConflicto, decidirEstadoInicial, decidirTipoDtePersistido, type DecidirTipoDteInput } from "./tipo-dte-persistido";
+import { destinoPropuesta, FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 
 const neutral = { veredicto: "neutral" as const, peso: 0, razon: "" };
 function clasif(p: Partial<ClasificacionResult> = {}): ClasificacionResult {
@@ -79,5 +80,18 @@ describe("decidirEstadoInicial — solo una VENTA nace «listo»", () => {
     expect(decidirEstadoInicial({ confianza: 0.95, reglaId: null, tipoPropuesto: "boleta" })).toBe("pendiente");
     expect(decidirEstadoInicial({ confianza: 0.84, reglaId: "r", tipoPropuesto: "boleta" })).toBe("pendiente");
     expect(decidirEstadoInicial({ ...base, tipoPropuesto: "boleta", conflictoMarcaCartola: true })).toBe("pendiente");
+  });
+});
+
+describe("conflicto regla↔marca → la fila nace «¿?» DE HECHO (M1)", () => {
+  it("confianza bajo el bulk (0.8) y fuente de conflicto; destinoPropuesta = preguntar", () => {
+    const r = decidirTipoDtePersistido(entrada({ reglaTipoDte: 39, docHint: "p2p_cripto" }));
+    const aj = ajustarPorConflicto(r.conflictoMarcaCartola, { confianza: 0.95, fuente: "regla_usuario" });
+    expect(aj.confianza).toBeLessThan(0.8);
+    expect(aj.fuente).toBe(FUENTE_CONFLICTO_MARCA);
+    expect(destinoPropuesta({ tipo_propuesto: "boleta", tipo_dte: r.tipoDte, fuente_clasificacion: aj.fuente })).toBe("preguntar");
+  });
+  it("sin conflicto no cambia nada", () => {
+    expect(ajustarPorConflicto(false, { confianza: 0.95, fuente: "regla_usuario" })).toEqual({ confianza: 0.95, fuente: "regla_usuario" });
   });
 });

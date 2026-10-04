@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
 import { editarPropuesta } from "../../revisar/actions";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
-import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
+import { destino, esAfectoPorTipo, esExentoPorTipo } from "@/lib/sii/destino";
 import { fmt, type Propuesta } from "./revisar-shared";
 import GaleriaComprobante from "./GaleriaComprobante";
 
@@ -31,7 +31,8 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
   // fundador) — el bot de Telegram y las plantillas cojas dejan la factura
   // "incompleta" y este editor es donde se termina. El Giro solo existe en
   // facturas (la boleta no lo usa).
-  const esFactura = extra.mesa === "factura" || propuesta.tipo_propuesto === "factura_afecta" || propuesta.tipo_propuesto === "factura_exenta";
+  const enMesaFactura = extra.mesa === "factura";
+  const esFactura = enMesaFactura || destino(propuesta.tipo_propuesto) === "factura";
 
   // Tipo: lo decide PRIMERO la clasificación de la propuesta (tipo_dte persistido →
   // tipo_propuesto) y SOLO como desempate la sugerencia de la empresa. Un default de
@@ -50,12 +51,11 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
    */
   const emisorExento = empresaTipo === "exento";
   // Misma derivación que ExpandedDetail (revisar-shared).
-  const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
-          : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
+        : esExentoPorTipo(propuesta.tipo_propuesto) ? "exenta"
+          : esAfectoPorTipo(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipo === "exento" ? "exenta"
               : empresaTipo === "afecto" ? "afecta"
                 : "exenta"; // default seguro: nunca fabricar IVA sobre algo sin clasificar
@@ -154,8 +154,9 @@ export default function EditorAmpliado({ propuesta, documentoId, empresaTipo, or
     if (bloqueado || busy) return;
     setBusy(true);
     const r = await editarPropuesta(propuesta.id, {
-      tipo_propuesto: isAfecta ? "boleta" : "exenta",
-      tipo_dte: isAfecta ? 39 : 41,
+      // Misma regla que ExpandedDetail: la mesa manda (una factura sigue siendo factura).
+      tipo_propuesto: esFactura ? (isAfecta ? "factura_afecta" : "factura_exenta") : (isAfecta ? "boleta" : "exenta"),
+      tipo_dte: esFactura ? (isAfecta ? 33 : 34) : (isAfecta ? 39 : 41),
       total: Math.round(total),
       monto_neto: neto,
       iva,

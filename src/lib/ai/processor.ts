@@ -17,7 +17,7 @@ import { normalizarTipoPorEmisor, esVentaExentaEmisor, normalizarHonorariosPorEm
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { esTipoValido } from "@/lib/sii/destino";
 import { clasificarBoleta, type DocumentoHint } from "../sii/clasificador-tipo";
-import { decidirTipoDtePersistido, decidirEstadoInicial } from "./tipo-dte-persistido";
+import { decidirTipoDtePersistido, decidirEstadoInicial, ajustarPorConflicto, CONFIANZA_REGLA_CONFIRMADA_EN_MARCA } from "./tipo-dte-persistido";
 import { redactPiiHabilitado, maskRut } from "./egress";
 import { validarRut, formatRut } from "../rut";
 import { notasPropuestasONull, rutPropuestoONull, sanearCampoIdentidad } from "./saneo";
@@ -1508,6 +1508,9 @@ export async function procesarDocumento(
             tipoContribuyente: emp?.tipo_contribuyente,
             reglaTipoDte: enriched.__tipo_dte,
             emisorExento: exentoFinal || empExento,
+            // Regla 39 ya confirmada por una persona sobre cartola P2P/forex (ver
+            // aprender-regla.ts): su confianza lo marca; no se re-pregunta.
+            reglaConfirmadaEnMarca: enriched.__regla_id != null && (confianza ?? 0) >= CONFIANZA_REGLA_CONFIRMADA_EN_MARCA,
           });
           const tipoDteAuto = decisionTipo.tipoDteAuto;
           const tipoDtePersist = decisionTipo.tipoDte;
@@ -1518,10 +1521,15 @@ export async function procesarDocumento(
           // Techo por evidencia: auto-clasificado determinista SIN regla queda en
           // 0.8 — bulk-elegible (BULK_MIN_CONFIANZA) pero pinta "media", no el
           // verde de ALTA (0.85). El 0.9 anterior vestía un supuesto de análisis.
-          const confianzaFinal =
-            tipoDteAuto != null && enriched.__regla_id == null
-              ? Math.max(confianza ?? 0, 0.8)
-              : confianza;
+          // Conflicto regla↔marca → nace "por decidir" (confianza bajo el bulk + fuente).
+          const ajuste = ajustarPorConflicto(decisionTipo.conflictoMarcaCartola, {
+            confianza:
+              tipoDteAuto != null && enriched.__regla_id == null
+                ? Math.max(confianza ?? 0, 0.8)
+                : confianza,
+            fuente: enriched.__fuente ?? "ia_opencode",
+          });
+          const confianzaFinal = ajuste.confianza;
           return {
             empresa_id: empresaId,
             movimiento_id: savedIds[newIndex],
@@ -1569,7 +1577,7 @@ export async function procesarDocumento(
             // resucita la identidad vía `p.receptor_rut ?? cliente?.rut`. La normalización
             // exenta ya se calculó con el clienteId local (no depende del campo guardado).
             cliente_id: receptorObligatorio(total ?? 0, RECEPTOR_OBLIGATORIO_DESDE) ? clienteId : null,
-            fuente_clasificacion: enriched.__fuente ?? "ia_opencode",
+            fuente_clasificacion: ajuste.fuente,
             regla_id: enriched.__regla_id ?? null,
           };
         });

@@ -22,6 +22,7 @@
  *    el insert de propuestas según monto.
  */
 
+import { esHintExentoPorLey, CONFIANZA_REGLA_CONFIRMADA_EN_MARCA } from "./tipo-dte-persistido";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { detectaNoBoletar } from "../sii/clasificador-tipo";
@@ -187,6 +188,25 @@ export async function aprenderReglaDesdeResolucion(
     const tipoProp = args.tipoDte === 41 ? "exenta" : "boleta";
     const etiqueta = args.tipoDte === 41 ? "Exenta" : "Afecta";
 
+    // "Afecta" elegido por una persona sobre una cartola marcada P2P/forex (fila "¿?"
+    // por conflicto regla↔marca): la regla queda CONFIRMADA en esa marca → la próxima
+    // cartola P2P no vuelve a preguntar (corta el loop). Se marca con la confianza
+    // (sin columna nueva). Best-effort: si no se puede leer el hint, 0.95 normal.
+    let confianzaRegla = 0.95;
+    if (args.tipoDte === 39 && args.documentoId) {
+      try {
+        const { data: doc } = await sb
+          .from("documentos_subidos")
+          .select("tipo_operacion_hint")
+          .eq("id", args.documentoId)
+          .eq("empresa_id", args.empresaId)
+          .maybeSingle();
+        if (esHintExentoPorLey((doc as { tipo_operacion_hint?: string | null } | null)?.tipo_operacion_hint)) {
+          confianzaRegla = CONFIANZA_REGLA_CONFIRMADA_EN_MARCA;
+        }
+      } catch { /* sin hint → 0.95 normal */ }
+    }
+
     // Dedup por (empresa, patron, flujo). Sin unique constraint, tomamos la 1ª.
     const { data: prev } = await sb
       .from("clasificacion_reglas")
@@ -205,7 +225,7 @@ export async function aprenderReglaDesdeResolucion(
         .update({
           tipo_dte: args.tipoDte,
           tipo_propuesto: tipoProp,
-          confianza: 0.95,
+          confianza: confianzaRegla,
           activa: true,
           last_used_at: new Date().toISOString(),
           veces_aplicada: (existente.veces_aplicada ?? 0) + 1,
@@ -225,7 +245,7 @@ export async function aprenderReglaDesdeResolucion(
         tipo_flujo_match: args.tipoFlujo,
         tipo_propuesto: tipoProp,
         tipo_dte: args.tipoDte,
-        confianza: 0.95,
+        confianza: confianzaRegla,
         prioridad: 50, // convención: reglas de usuario ganan a las globales (80-110)
         created_by: args.userId,
       });

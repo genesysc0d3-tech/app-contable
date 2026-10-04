@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  destino, esAfectoPorTipo, esExentoPorTipo, esVentaEmitible, TIPOS_EMITIBLES,
+  destino, destinoPropuesta, FUENTE_CONFLICTO_MARCA, motivoNoEmitible, PG_OR_ES_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_TIPOS_POR_DECIDIR, TIPOS_VENTA,
+  esAfectoPorTipo, esExentoPorTipo, esVentaEmitible, TIPOS_EMITIBLES,
   TIPOS_POR_DECIDIR, TODOS_LOS_TIPOS, VERSION_REGLAS_TRIBUTARIAS,
 } from "./destino";
 
@@ -43,5 +44,34 @@ describe("destino único — reglas tributarias", () => {
   it("lleva versión", () => {
     expect(VERSION_REGLAS_TRIBUTARIAS).toMatch(/^\d{4}-\d{2}-\d{2}/);
     expect(TODOS_LOS_TIPOS.length).toBe(23);
+  });
+});
+
+describe("destinoPropuesta / motivoNoEmitible — la fila, no solo el tipo", () => {
+  const conflicto = { tipo_propuesto: "boleta", tipo_dte: null, fuente_clasificacion: FUENTE_CONFLICTO_MARCA };
+  it("conflicto regla↔marca sin decisión → preguntar; con tipo_dte (decisión humana) → boleta", () => {
+    expect(destinoPropuesta(conflicto)).toBe("preguntar");
+    expect(destinoPropuesta({ ...conflicto, tipo_dte: 39 })).toBe("boleta");
+    expect(destinoPropuesta({ ...conflicto, tipo_propuesto: "exenta", tipo_dte: 41 })).toBe("boleta");
+  });
+  it("arriendo con un 41 viejo del cable automático sigue «¿?» (no fue una persona)", () => {
+    expect(destinoPropuesta({ tipo_propuesto: "arriendo", tipo_dte: 41, fuente_clasificacion: "regla_global" })).toBe("preguntar");
+  });
+  it("motivoNoEmitible: «¿?» y no-ventas nunca se emiten; ventas sí", () => {
+    expect(motivoNoEmitible(conflicto)?.code).toBe("TIPO_POR_DECIDIR");
+    expect(motivoNoEmitible({ tipo_propuesto: "arriendo" })?.code).toBe("TIPO_POR_DECIDIR");
+    expect(motivoNoEmitible({ tipo_propuesto: "no_comercial", tipo_dte: 41 })?.code).toBe("NO_ES_VENTA");
+    expect(motivoNoEmitible({ tipo_propuesto: "gasto_egreso" })?.code).toBe("NO_ES_VENTA");
+    expect(motivoNoEmitible({ tipo_propuesto: "transferencia_p2p", tipo_dte: 41 })).toBeNull();
+    expect(motivoNoEmitible({ tipo_propuesto: "factura_afecta", tipo_dte: 33 })).toBeNull();
+  });
+  it("los filtros PostgREST describen lo mismo que destinoPropuesta", () => {
+    expect(PG_TIPOS_POR_DECIDIR).toBe("(arriendo,comision)");
+    expect(PG_OR_SIN_CONFLICTO_MARCA).toContain(`fuente_clasificacion.neq.${FUENTE_CONFLICTO_MARCA}`);
+    expect(PG_OR_ES_POR_DECIDIR).toContain(`and(fuente_clasificacion.eq.${FUENTE_CONFLICTO_MARCA},tipo_dte.is.null)`);
+  });
+  it("TIPOS_VENTA = boleta + factura", () => {
+    expect(TIPOS_VENTA).toHaveLength(8);
+    for (const t of TIPOS_VENTA) expect(["boleta", "factura"]).toContain(destino(t));
   });
 });

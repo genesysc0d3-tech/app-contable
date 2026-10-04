@@ -141,3 +141,20 @@ describe("evaluarEmision — motor de reglas", () => {
     expect(v.bloqueos.map((b) => b.code)).toContain("DETALLE_VACIO");
   });
 });
+
+// Destino único (revisión adversarial M3): una no-venta aprobada nunca queda "lista"
+// para emitir — los carriles (lote y jobs de la extensión) la rechazan igual.
+describe("evaluarEmision — una no-venta nunca se emite", () => {
+  it("no_comercial / gasto aprobados → bloqueadas con NO_ES_VENTA", () => {
+    for (const tipoPropuesto of ["no_comercial", "gasto_egreso", "impuesto"]) {
+      const v = evaluarEmision(baseInput({ tipoPropuesto, tipoDtePersistido: 41 }), empresaAfecta);
+      expect(v.balde).toBe("bloqueadas");
+      expect(v.puedeEmitir).toBe(false);
+      expect(v.bloqueos.some((b) => b.code === "NO_ES_VENTA")).toBe(true);
+    }
+  });
+  it("una venta aprobada no se toca", () => {
+    const v = evaluarEmision(baseInput({ tipoPropuesto: "boleta" }), empresaAfecta);
+    expect(v.bloqueos.some((b) => b.code === "NO_ES_VENTA")).toBe(false);
+  });
+});

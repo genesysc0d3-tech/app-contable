@@ -7,7 +7,7 @@
 
 import { useState, useEffect, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta, editarGlosaEmitible } from "../../revisar/actions";
+import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta, editarGlosaEmitible, decidirVenta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
 import { destino, esAfectoPorTipo, esExentoPorTipo } from "@/lib/sii/destino";
@@ -147,7 +147,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
                     >
                       <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"var(--accent)":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
-                      {(() => { const tm = tipoMeta(p.tipo_propuesto); return (
+                      {(() => { const tm = tipoMeta(p); return (
                         <span title={tm.label} style={{flexShrink:0,minWidth:38,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:tm.bg,color:tm.color}}>{tm.sigla}</span>
                       ); })()}
                       <div className="info" style={{flex:1,minWidth:0}}>
@@ -163,7 +163,18 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       {p.estado === "listo" && <span style={{fontSize:8,fontWeight:800,color:"var(--green)",flexShrink:0,letterSpacing:".05em"}}>LISTO</span>}
                       {enEmision && <span style={{fontSize:8,fontWeight:800,color:"var(--blue)",flexShrink:0,letterSpacing:".05em"}}>EN EMISIÓN</span>}
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
-                        {!enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
+                        {tipoMeta(p).destino === "preguntar" ? (
+                          /* «¿?»: en vez del ✓, las 3 respuestas (también si quedó aprobada). */
+                          <span role="group" aria-label="¿Es venta?" style={{display:"inline-flex",gap:3}}>
+                            {([["exenta","Exenta"],["afecta","Afecta"],["no_es_venta","No es venta"]] as const).map(([d,label]) => (
+                              <button key={d} onClick={async () => {
+                                const r = await decidirVenta([p.id], d, (p as unknown as { mesa?: string | null }).mesa === "factura" ? "factura" : "boleta");
+                                if (r.error) toast(r.error, "error"); else toast(d === "no_es_venta" ? "No es venta" : `Venta ${d}`);
+                                onAction();
+                              }} style={{fontSize:8.5,fontWeight:700,padding:"2px 7px",borderRadius:99,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+                            ))}
+                          </span>
+                        ) : !enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
                         <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />{/* EN EMISIÓN: abre el editor solo-glosa (corregir el Detalle sin degradar la boleta) */}
                         {!enEmision && (
                           <span className="rs-reject">

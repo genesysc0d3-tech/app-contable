@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { TIPOS_EMITIBLES, destino, MSG_TIPO_POR_DECIDIR } from "@/lib/sii/destino";
+import { TIPOS_EMITIBLES, destinoPropuesta, MSG_TIPO_POR_DECIDIR, type PropuestaParaDestino } from "@/lib/sii/destino";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
   const { data: propuestas, error: pErr } = await supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, tipo_dte, mesa, detalle, receptor_giro, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
+      id, tipo_propuesto, tipo_dte, fuente_clasificacion, mesa, detalle, receptor_giro, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna,
       receptor_email, receptor_telefono,
       medio_pago, notas, monto_neto, iva, total, estado,
       cliente_id,
@@ -267,17 +267,22 @@ export async function POST(request: Request) {
       results.push({ propuesta_id: pid, ok: false, error_code: "ESTADO_INVALIDO", error_message: `La propuesta está ${p.estado} — apruébala en Check antes de emitir` });
       continue;
     }
-    // "exenta" incluida (ya estaba en pendientes-emision): un contribuyente exento
-    // emite DTE 41; el tipo_dte real lo decide clasificarBoleta abajo, no este tipo.
-    // TIPOS_EMITIBLES viene del destino único (misma lista que la cola de pendientes).
-    // "Por decidir" (arriendo/comisión): no se adivina exenta ni afecta → la decide
-    // el cliente en Check. Código propio para que la UI lo distinga de un tipo inválido.
-    if (destino(p.tipo_propuesto) === "preguntar") {
+    // Destino único (@/lib/sii/destino). "Por decidir" (arriendo/comisión o conflicto
+    // regla↔marca): no se adivina exenta ni afecta → la decide el cliente en Check.
+    // Código propio para que la UI lo distinga de un tipo inválido.
+    const destinoFila = destinoPropuesta(p as PropuestaParaDestino);
+    if (destinoFila === "preguntar") {
       results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_POR_DECIDIR", error_message: MSG_TIPO_POR_DECIDIR });
       continue;
     }
-    if (!TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
-      results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como boleta` });
+    // Cada mesa con su destino. Antes el filtro de BOLETAS (TIPOS_EMITIBLES) corría
+    // también para la mesa de facturas, ANTES de su bloque: un lote mock de facturas
+    // (factura_afecta/factura_exenta) caía entero en TIPO_INVALIDO. Las facturas
+    // reales (sii_local) van por la extensión (/api/emision/jobs), no por acá.
+    // En boletas, "exenta" incluida: un contribuyente exento emite DTE 41; el
+    // tipo_dte real lo decide clasificarBoleta abajo, no este tipo.
+    if (p.mesa === "factura" ? destinoFila !== "factura" : !TIPOS_EMITIBLES.includes(p.tipo_propuesto)) {
+      results.push({ propuesta_id: pid, ok: false, error_code: "TIPO_INVALIDO", error_message: `Tipo ${p.tipo_propuesto} no se emite como ${p.mesa === "factura" ? "factura" : "boleta"}` });
       continue;
     }
 

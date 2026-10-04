@@ -1,4 +1,4 @@
-import { destino, esAfectoPorTipo, type Destino, type TipoPropuesto } from "@/lib/sii/destino";
+import { destinoPropuesta, esAfectoPorTipo, type Destino, type PropuestaParaDestino, type TipoPropuesto } from "@/lib/sii/destino";
 
 export interface TipoMeta { sigla: string; label: string; bg: string; color: string; destino: Destino }
 
@@ -19,8 +19,11 @@ const ETIQUETA_NO_VENTA: Partial<Record<TipoPropuesto, Omit<TipoMeta, "destino">
  * (@/lib/sii/destino): una no-venta nunca se ve EXE/AFE, y lo "por decidir"
  * (arriendo/comisión) se ve "¿?" hasta que el cliente decida.
  */
-export function tipoMeta(tipoPropuesto: string | null): TipoMeta {
-  const d = destino(tipoPropuesto);
+export function tipoMeta(entrada: string | null | PropuestaParaDestino): TipoMeta {
+  // Con la fila completa se respeta el conflicto regla↔marca ("¿?"); con solo el tipo, el destino del tipo.
+  const fila: PropuestaParaDestino = typeof entrada === "object" && entrada !== null ? entrada : { tipo_propuesto: entrada };
+  const tipoPropuesto = fila.tipo_propuesto;
+  const d = destinoPropuesta(fila);
   if (d === "preguntar") {
     return { sigla: "¿?", label: "¿Es venta? · decide tú", bg: "color-mix(in srgb, var(--accent) 10%, transparent)", color: "var(--accent)", destino: d };
   }

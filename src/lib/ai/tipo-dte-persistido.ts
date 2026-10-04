@@ -9,7 +9,7 @@
  * apartan aunque la cartola sea cripto).
  */
 import { decidirTipoDteAuto, type ClasificacionResult, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
-import { esExentoPorTipo, esVentaEmitible } from "@/lib/sii/destino";
+import { esExentoPorTipo, esVentaEmitible, FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 
 export interface DecidirTipoDteInput {
   /** tipo_flujo del movimiento ("entrada" | "salida"). */
@@ -25,6 +25,11 @@ export interface DecidirTipoDteInput {
   reglaTipoDte: number | null | undefined;
   /** El emisor (empresa o carril) es exento → nunca 39. */
   emisorExento: boolean;
+  /**
+   * La regla 39 ya fue CONFIRMADA por una persona sobre una cartola marcada P2P/forex
+   * (eligió "Afecta" en una fila "¿?"): no se vuelve a preguntar → corta el loop.
+   */
+  reglaConfirmadaEnMarca?: boolean;
 }
 
 export interface DecidirTipoDteResultado {
@@ -39,6 +44,33 @@ export interface DecidirTipoDteResultado {
 }
 
 const HINTS_EXENTOS_POR_LEY: ReadonlySet<string> = new Set(["p2p_cripto", "forex_divisas"]);
+
+/** La cartola está marcada como exenta por ley (P2P cripto / forex). */
+export function esHintExentoPorLey(h: string | null | undefined): boolean {
+  return h != null && HINTS_EXENTOS_POR_LEY.has(h);
+}
+
+/**
+ * Confianza con que la regla aprendida queda marcada como "Afecta confirmada sobre
+ * una cartola P2P/forex" (aprender-regla.ts). Las reglas de usuario normales usan 0.95.
+ */
+export const CONFIANZA_REGLA_CONFIRMADA_EN_MARCA = 0.99;
+
+/** Techo de confianza de una fila "por decidir": bajo BULK_MIN_CONFIANZA (0.8) → no entra a "Poner listas". */
+export const CONFIANZA_MAX_POR_DECIDIR = 0.5;
+
+/**
+ * Una fila en conflicto regla↔marca nace "por decidir" DE HECHO: fuente
+ * FUENTE_CONFLICTO_MARCA (destinoPropuesta → "preguntar": Check la muestra "¿?",
+ * Emitir y los jobs no la emiten) y confianza bajo el umbral del bulk.
+ */
+export function ajustarPorConflicto(
+  conflicto: boolean,
+  actual: { confianza: number | null; fuente: string },
+): { confianza: number | null; fuente: string } {
+  if (!conflicto) return actual;
+  return { confianza: Math.min(actual.confianza ?? 0, CONFIANZA_MAX_POR_DECIDIR), fuente: FUENTE_CONFLICTO_MARCA };
+}
 
 export function decidirTipoDtePersistido(i: DecidirTipoDteInput): DecidirTipoDteResultado {
   // GUARDARRAÍL DURO: nunca persistir tipo_dte sobre un no_boletar (préstamo/cuenta
@@ -62,7 +94,7 @@ export function decidirTipoDtePersistido(i: DecidirTipoDteInput): DecidirTipoDte
     if (i.emisorExento) return { tipoDte: 41, tipoDteAuto, conflictoMarcaCartola: false };
     // La marca de la cartola (P2P/forex, exenta por ley) protege contra una regla 39
     // vieja: no se emite afecta ni se adivina exenta → a revisar.
-    if (i.reglaTipoDte === 39 && i.docHint != null && HINTS_EXENTOS_POR_LEY.has(i.docHint)) {
+    if (i.reglaTipoDte === 39 && !i.reglaConfirmadaEnMarca && esHintExentoPorLey(i.docHint)) {
       return { tipoDte: null, tipoDteAuto, conflictoMarcaCartola: true };
     }
     return { tipoDte: i.reglaTipoDte, tipoDteAuto, conflictoMarcaCartola: false };

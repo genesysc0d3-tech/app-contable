@@ -23,7 +23,7 @@ const HINTS_OPERACION = new Set(["p2p_cripto", "forex_divisas", "servicios", "ve
 // Fuente única: destino único @/lib/sii/destino (compartida con emitir-lote). Se
 // re-exporta por compatibilidad con importadores existentes.
 export { TIPOS_EMITIBLES } from "@/lib/sii/tipos-propuesta";
-import { TIPOS_EMITIBLES, TIPOS_POR_DECIDIR, destino, tiposConDestino, MSG_TIPO_POR_DECIDIR } from "@/lib/sii/destino";
+import { TIPOS_EMITIBLES, TIPOS_POR_DECIDIR, destinoPropuesta, tiposConDestino, MSG_TIPO_POR_DECIDIR } from "@/lib/sii/destino";
 
 /**
  * Lista propuestas tipo boleta aprobadas/editadas que aún NO están emitidas,
@@ -47,7 +47,7 @@ export async function getPendientesEmision(
   let propsQuery = supabase
     .from("propuestas_ia")
     .select(`
-      id, tipo_propuesto, tipo_dte, mesa, detalle, receptor_giro, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, notas, monto_neto, iva, total, estado, created_at, cliente_id,
+      id, tipo_propuesto, tipo_dte, fuente_clasificacion, mesa, detalle, receptor_giro, receptor_nombre, receptor_rut, receptor_direccion, receptor_comuna, receptor_email, receptor_telefono, medio_pago, notas, monto_neto, iva, total, estado, created_at, cliente_id,
       clientes(id, nombre, rut),
       movimientos_raw(fecha, descripcion, monto, documentos_subidos(id, nombre_archivo, tipo_operacion_hint, created_at, glosa_comun, glosa_activa, medio_pago_comun))
     `)
@@ -180,8 +180,8 @@ export async function getPendientesEmision(
   // Destino único: un ingreso "por decidir" (arriendo/comisión — ¿es venta, exenta o
   // afecta?) NO entra a la cola de Emitir aunque esté aprobado: el lote lo rechazaría
   // (TIPO_POR_DECIDIR). Se cuenta APARTE con su texto, para que no desaparezca.
-  const porDecidir = noTerminadas.filter((p: PropuestaRaw) => destino(p.tipo_propuesto) === "preguntar");
-  const visibles = noTerminadas.filter((p: PropuestaRaw) => destino(p.tipo_propuesto) !== "preguntar");
+  const porDecidir = noTerminadas.filter((p: PropuestaRaw) => destinoPropuesta(p) === "preguntar");
+  const visibles = noTerminadas.filter((p: PropuestaRaw) => destinoPropuesta(p) !== "preguntar");
 
   // Umbral 135 UF con la UF del día (fallback a referencial si la API cae).
   const umbralIdentificacionClp = await getUmbralIdentificacionClp();
@@ -361,7 +361,7 @@ export async function getPendientesEmision(
     /** Ingresos aprobados que esperan la decisión "¿es venta?" en Check (fuera de la cola). */
     por_decidir: porDecidir.length,
     por_decidir_msg: porDecidir.length > 0
-      ? `${porDecidir.length === 1 ? "1 ingreso espera" : `${porDecidir.length} ingresos esperan`} tu decisión (arriendo o comisión). ${MSG_TIPO_POR_DECIDIR}`
+      ? `${porDecidir.length === 1 ? "1 ingreso espera" : `${porDecidir.length} ingresos esperan`} tu decisión («¿?»: arriendo, comisión o una regla que choca con la marca de la cartola). ${MSG_TIPO_POR_DECIDIR}`
       : null,
     monto_total: items.reduce((s, i) => s + i.monto_total, 0),
     monto_listo: items.filter((i) => i.balde === "listas").reduce((s, i) => s + i.monto_total, 0),
