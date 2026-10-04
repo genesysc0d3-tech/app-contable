@@ -20,7 +20,7 @@
 import { SUFIJO_SOCIETARIO } from "../ai/classifier";
 import { clasificarBoleta, type DocumentoHint, type EmpresaContext, type PatronContext } from "../sii/clasificador-tipo";
 import { validarBoleta } from "../sii/validation";
-import { esTipoPropuestoExento } from "../sii/tipos-propuesta";
+import { esExentoPorTipo } from "../sii/destino";
 
 /** Confianza mínima del clasificador (afecta/exenta) para auto-marcar como listo. */
 export const CONFIANZA_TIPO_MIN = 0.8;
@@ -102,7 +102,7 @@ export function evaluarEmision(input: EmisionInput, ctx: EmisionCtx): EmisionVer
   // dijera EXE. La categoría exenta por naturaleza manda sobre la heurística; solo
   // una decisión humana guardada (Paso P) puede contradecirla.
   let tipoDte: 39 | 41 | null =
-    input.tipoDtePersistido ?? (esTipoPropuestoExento(input.tipoPropuesto) ? 41 : clasif.tipo_dte);
+    input.tipoDtePersistido ?? (esExentoPorTipo(input.tipoPropuesto) ? 41 : clasif.tipo_dte);
 
   const bloqueos: Marca[] = [];
   const advertencias: Marca[] = [];

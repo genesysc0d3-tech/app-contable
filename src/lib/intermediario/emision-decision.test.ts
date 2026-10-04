@@ -141,3 +141,16 @@ describe("evaluarEmision — motor de reglas", () => {
     expect(v.bloqueos.map((b) => b.code)).toContain("DETALLE_VACIO");
   });
 });
+
+// Destino único, vuelta 2 (A1): decisión del fundador 2026-09-01 — "si las acepté, no
+// tiene sentido que me las bloquee". Una no-venta APROBADA sale con advertencia, no
+// bloqueada (el sistema nunca la deja "lista" solo; eso vive en decidirEstadoInicial).
+describe("evaluarEmision — una no-venta aprobada no se bloquea por su tipo", () => {
+  it("no_comercial / gasto / impuesto aprobados con decisión → sin bloqueo NO_ES_VENTA", () => {
+    for (const tipoPropuesto of ["no_comercial", "gasto_egreso", "impuesto"]) {
+      const v = evaluarEmision(baseInput({ tipoPropuesto, tipoDtePersistido: 41 }), empresaAfecta);
+      expect(v.bloqueos.some((b) => b.code === "NO_ES_VENTA")).toBe(false);
+      expect(v.balde).not.toBe("bloqueadas");
+    }
+  });
+});

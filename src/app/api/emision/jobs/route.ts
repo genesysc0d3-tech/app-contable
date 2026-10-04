@@ -14,6 +14,7 @@ import {
   type PropuestaDatos,
 } from "@/lib/emission/datos-job";
 import type { DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import { motivoNoEmitible } from "@/lib/sii/destino";
 import { revisarPostCandado, revisarPropuestaEmitible, revisarYaEmitida } from "@/lib/emission/propuesta-emitible";
 import { deleteRespetaSinRespuesta, estadoCierreSeguro } from "@/lib/emission/cierre-seguro";
 import { decidirAdopcion, origenAdopcion, type DecisionAdopcion } from "@/lib/emission/adopcion";
@@ -471,6 +472,17 @@ export async function POST(request: Request) {
         { ok: false, error: emitible.error, detalle: emitible.detalle, folio: emitible.folio ?? null, boleta_id: emitible.boletaId ?? null, boleta_created_at: emitible.boletaCreatedAt ?? null },
         { status: emitible.status },
       );
+    }
+    // Destino único (carril extensión, mismo criterio que emitir-lote): un «¿?» no se
+    // emite sin decidir. Una no-venta APROBADA sí (el humano manda, 2026-09-01). La
+    // verificación (adopción) no emite: queda fuera. Va DESPUÉS de "ya emitida / a
+    // medias" (esas se saltan sin frenar el lote) y ANTES de tomar el candado.
+    if (!cleanText(payload.adopta_job_id)) {
+      const p = (propDatos ?? {}) as { tipo_propuesto?: string | null; tipo_dte?: number | null; fuente_clasificacion?: string | null };
+      const noEmitible = motivoNoEmitible({ tipo_propuesto: p.tipo_propuesto ?? null, tipo_dte: p.tipo_dte ?? null, fuente_clasificacion: p.fuente_clasificacion ?? null });
+      if (noEmitible) {
+        return NextResponse.json({ ok: false, error: noEmitible.code, detalle: noEmitible.msg }, { status: 409 });
+      }
     }
 
     // EL SERVIDOR MANDA EN LOS DATOS (seguridad 2026-09-30, punto 2; datos-job.ts): lo

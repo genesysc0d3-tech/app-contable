@@ -59,3 +59,19 @@ describe("clasificarStartJob — DATOS_CAMBIARON con el texto del server tal cua
     if (f.tipo === "frenada") expect(f.motivo).not.toContain("No se emitió nada");
   });
 });
+
+describe("clasificarStartJob — destino único: «¿?» (TIPO_POR_DECIDIR)", () => {
+  it("409 TIPO_POR_DECIDIR → frena con el detalle del server, no el error genérico", () => {
+    const detalle = "Dinos en Check si este ingreso es venta exenta, afecta o no es venta.";
+    const r = clasificarStartJob(409, { ok: false, error: "TIPO_POR_DECIDIR", detalle });
+    expect(r).toEqual({ tipo: "frenada", motivo: detalle });
+  });
+  it("sin detalle → texto propio que dice qué hacer", () => {
+    const r = clasificarStartJob(409, { ok: false, error: "TIPO_POR_DECIDIR" });
+    expect(r.tipo).toBe("frenada");
+    if (r.tipo === "frenada") expect(r.motivo).toContain("decidas en Check");
+  });
+  it("NO_ES_VENTA (por si queda algún camino) también se explica", () => {
+    expect(clasificarStartJob(409, { error: "NO_ES_VENTA", detalle: "No es venta." })).toEqual({ tipo: "frenada", motivo: "No es venta." });
+  });
+});

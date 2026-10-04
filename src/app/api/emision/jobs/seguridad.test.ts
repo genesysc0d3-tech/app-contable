@@ -85,7 +85,7 @@ import { PATCH, POST } from "./route";
 
 const PROP = "11111111-1111-4111-8111-111111111111";
 const propuesta = {
-  id: PROP, empresa_id: "E1", estado: "aprobado", mesa: "boleta", tipo_dte: 41, total: 10000,
+  id: PROP, empresa_id: "E1", estado: "aprobado", mesa: "boleta", tipo_propuesto: "transferencia_p2p", tipo_dte: 41, total: 10000,
   notas: null, detalle: null, receptor_rut: null, clientes: null,
   movimientos_raw: { monto: 10000, documentos_subidos: { glosa_comun: null, glosa_activa: false } },
 };
@@ -266,5 +266,36 @@ describe("PATCH — carrera con /result (rev 2 M3)", () => {
     const res = await PATCH(req("PATCH", { job_id: "J1", status: "result_awaiting_ack" }));
     expect(res.status).toBe(200);
     expect((await res.json()).closed).toBe(true);
+  });
+});
+
+// Destino único: el carril de la extensión no emite un «¿?» aunque esté aprobado (antes
+// de tomar el candado). Una no-venta aprobada sí sale: el humano manda (2026-09-01).
+describe("POST /api/emision/jobs — destino único", () => {
+  const lote = { provider: "sii_local", tipo_dte: 41, origin: "emision_lote", propuesta_id: PROP, datos: { monto: 10000, receptor_rut: null, glosa: "Venta exenta" } };
+  const conTipo = (extra: Record<string, unknown>) =>
+    escenario((l) => (l.tabla === "propuestas_ia" ? { data: { ...propuesta, ...extra }, error: null } : undefined));
+
+  it("arriendo aprobado → 409 TIPO_POR_DECIDIR y NO toma el candado", async () => {
+    conTipo({ tipo_propuesto: "arriendo" });
+    const res = await POST(req("POST", lote));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("TIPO_POR_DECIDIR");
+    expect(estado.acquire).not.toHaveBeenCalled();
+  });
+  it("conflicto regla↔marca sin decisión → TIPO_POR_DECIDIR", async () => {
+    conTipo({ tipo_propuesto: "boleta", tipo_dte: null, fuente_clasificacion: "conflicto_marca_cartola" });
+    expect((await (await POST(req("POST", lote))).json()).error).toBe("TIPO_POR_DECIDIR");
+  });
+  it("no_comercial APROBADO → sí abre el job (el humano manda, 2026-09-01)", async () => {
+    conTipo({ tipo_propuesto: "no_comercial" });
+    const res = await POST(req("POST", lote));
+    expect(res.status).toBe(200);
+    expect(estado.acquire).toHaveBeenCalledTimes(1);
+  });
+  it("ya emitida va antes: un arriendo ya emitido se salta como PROPUESTA_YA_EMITIDA", async () => {
+    conTipo({ tipo_propuesto: "arriendo" });
+    estado.emitible = { ok: false, status: 409, error: "PROPUESTA_YA_EMITIDA", detalle: "ya", folio: 7 };
+    expect((await (await POST(req("POST", lote))).json()).error).toBe("PROPUESTA_YA_EMITIDA");
   });
 });

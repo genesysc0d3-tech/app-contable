@@ -7,6 +7,7 @@
  * (`tipo_contribuyente`, editable con /config); acá solo se muestra.
  */
 
+import { destino, destinoPropuesta, PG_OR_SIN_CONFLICTO_MARCA, PG_TIPOS_POR_DECIDIR } from "@/lib/sii/destino";
 import { enmascararCuenta, enmascararRut, iniciales, minimizarTexto } from "./minimizar";
 import { createHash } from "crypto";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
@@ -134,8 +135,15 @@ function toBot(r: RowConMov): PropuestaBot {
   };
 }
 
+// Destino único: "boleteable" = todo lo que NO es una no-venta (ventas y «¿?» por
+// decidir). Antes era una lista suelta de 4 tipos (gasto/no_comercial/…); impuestos,
+// remuneraciones, honorarios, etc. tampoco son ventas.
+function esTipoBoleteable(tipo: string | null | undefined): boolean {
+  return destino(tipo) !== "no_es_venta";
+}
+
 function esPropuestaBoleteable(p: PropuestaBot): boolean {
-  return !["gasto", "gasto_egreso", "no_comercial", "ignorar"].includes(p.tipo_propuesto);
+  return esTipoBoleteable(p.tipo_propuesto);
 }
 
 function duplicateFingerprint(d: Pick<DuplicadoDetalle, "fecha" | "descripcion" | "monto" | "tipo_flujo" | "n_documento">): string {
@@ -315,7 +323,7 @@ export async function movimientosSinPropuestaDeDocumento(documentoId: string, em
     .in("movimiento_id", rows.map((m) => m.id));
   const conProp = new Set(
     (props ?? [])
-      .filter((p) => !["gasto", "gasto_egreso", "no_comercial", "ignorar"].includes(p.tipo_propuesto))
+      .filter((p) => esTipoBoleteable(p.tipo_propuesto))
       .map((p) => p.movimiento_id),
   );
   return rows.filter((m) => !conProp.has(m.id));
@@ -656,7 +664,7 @@ export function valorActual(p: PropuestaBot, codigo: string): string {
   return "";
 }
 
-export type AprobarBotResult = "aprobado" | "ya_aprobado" | "estado_invalido" | "no_encontrada";
+export type AprobarBotResult = "aprobado" | "ya_aprobado" | "estado_invalido" | "no_encontrada" | "por_decidir";
 
 /** Aprueba la propuesta (queda en Agregados). No emite al SII. Idempotente. */
 export async function aprobarBot(propId: string, empresaId: string): Promise<AprobarBotResult> {
@@ -666,17 +674,21 @@ export async function aprobarBot(propId: string, empresaId: string): Promise<Apr
     .update({ estado: "aprobado" }, { count: "exact" })
     .eq("empresa_id", empresaId)
     .eq("id", propId)
-    .in("estado", ["pendiente", "editado"]);
+    .in("estado", ["pendiente", "editado"])
+    // Destino único: un «¿?» no se aprueba sin decir si es venta.
+    .not("tipo_propuesto", "in", PG_TIPOS_POR_DECIDIR)
+    .or(PG_OR_SIN_CONFLICTO_MARCA);
   if ((count ?? 0) > 0) return "aprobado";
 
   const { data } = await db
     .from("propuestas_ia")
-    .select("estado")
+    .select("estado, tipo_propuesto, tipo_dte, fuente_clasificacion")
     .eq("empresa_id", empresaId)
     .eq("id", propId)
     .maybeSingle();
   if (!data) return "no_encontrada";
   if (data.estado === "aprobado") return "ya_aprobado";
+  if (destinoPropuesta(data) === "preguntar") return "por_decidir";
   return "estado_invalido";
 }
 
@@ -1034,7 +1046,7 @@ export async function ignorarMovimientoSalidaBot(
     .select("id, tipo_propuesto")
     .eq("empresa_id", empresaId)
     .eq("movimiento_id", movId)
-  const boleteables = (props ?? []).filter((p) => !["gasto", "gasto_egreso", "no_comercial", "ignorar"].includes(p.tipo_propuesto));
+  const boleteables = (props ?? []).filter((p) => esTipoBoleteable(p.tipo_propuesto));
   if (boleteables.length > 0) return "con_propuesta";
   // Doble candado (2026-09-30): UNA sentencia sobre movimientos_raw; la cascada
   // se lleva sus propuestas (todas no boleteables, revisado arriba) pasando por el

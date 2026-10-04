@@ -1,5 +1,6 @@
 "use server";
 
+import { TIPOS_VENTA } from "@/lib/sii/destino";
 import { revalidatePath } from "next/cache";
 import { createHash, randomBytes } from "crypto";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
@@ -154,7 +155,9 @@ async function contarComprobantesTelegramUtiles(
     .select("id, movimientos_raw!inner(origen)", { count: "exact", head: true })
     .in("empresa_id", empresaIds)
     .in("estado", ["pendiente", "aprobado", "editado"])
-    .in("tipo_propuesto", ["boleta", "factura"])
+    // Comprobante "útil" = una VENTA (destino único). Antes solo boleta y factura
+    // dejaba fuera exentas, P2P, cripto, forex y factura_afecta/exenta.
+    .in("tipo_propuesto", TIPOS_VENTA)
     .eq("movimientos_raw.origen", "telegram")
     .gte("created_at", desdeIso)
     .lt("created_at", hastaIso);

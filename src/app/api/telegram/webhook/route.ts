@@ -1,3 +1,4 @@
+import { MSG_DECIDE_SI_ES_VENTA } from "@/lib/sii/destino";
 import { NextResponse, after } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
@@ -890,6 +891,7 @@ async function handleCallback(cq: TelegramCallbackQuery) {
       status === "aprobado" ? "✅ Aprobada — está en Agregados" :
       status === "ya_aprobado" ? "Ya estaba aprobada" :
       status === "estado_invalido" ? "Esta boleta ya no está pendiente" :
+      status === "por_decidir" ? MSG_DECIDE_SI_ES_VENTA :
       "No encontré la boleta";
     await answerCallbackQuery(cq.id, answer);
     return;

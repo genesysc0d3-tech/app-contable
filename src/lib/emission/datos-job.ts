@@ -27,7 +27,7 @@ import { evaluarEmision } from "@/lib/intermediario/emision-decision";
 import type { DocumentoHint, EmpresaContext } from "@/lib/sii/clasificador-tipo";
 
 export const SELECT_PROPUESTA_DATOS =
-  "id, empresa_id, estado, mesa, tipo_dte, tipo_propuesto, total, notas, detalle, receptor_rut, receptor_nombre, created_at, clientes(rut, nombre), movimientos_raw(monto, fecha, descripcion, documentos_subidos(glosa_comun, glosa_activa, tipo_operacion_hint))";
+  "id, empresa_id, estado, mesa, tipo_dte, tipo_propuesto, fuente_clasificacion, total, notas, detalle, receptor_rut, receptor_nombre, created_at, clientes(rut, nombre), movimientos_raw(monto, fecha, descripcion, documentos_subidos(glosa_comun, glosa_activa, tipo_operacion_hint))";
 
 type Uno<T> = T | T[] | null | undefined;
 const uno = <T>(v: Uno<T>): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
@@ -37,6 +37,7 @@ export type PropuestaDatos = {
   tipo_dte: number | null;
   estado?: string | null;
   tipo_propuesto?: string | null;
+  fuente_clasificacion?: string | null;
   total: number | string | null;
   notas: string | null;
   detalle: string | null;
