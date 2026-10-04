@@ -92,3 +92,13 @@ describe("purga de cuenta — el derecho de supresión también borra los binari
     expect(filasBorradas).toEqual([]);
   });
 });
+
+describe("purga de cuenta — log de decisiones del clasificador (sin FK a empresas)", () => {
+  it("★ borra propuesta_decisiones de la empresa DESPUÉS de las empresas (segunda llave ARCO)", async () => {
+    const { sb } = fakeSb([]);
+    await purgarCuentaCompleta(sb, "c1");
+    const iEmpresas = secuencia.indexOf("delete:empresas");
+    const iLog = secuencia.indexOf("delete:propuesta_decisiones");
+    expect(iLog).toBeGreaterThan(iEmpresas);
+  });
+});

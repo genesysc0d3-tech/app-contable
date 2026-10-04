@@ -5,7 +5,7 @@ import { ROLES_EMISION } from "@/lib/auth/roles";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
-import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
+import { getDevSupportMode, getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
@@ -13,6 +13,8 @@ import { derivarMontosDte } from "@/lib/sii/montos-dte";
 import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
 import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
+import { canalDeOrigen, nuevoLote, sello, type CanalDecision } from "@/lib/propuestas/sello";
+import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
 
 const BATCH_SIZE = 50;
 
@@ -77,7 +79,29 @@ async function getEmpresaAndService() {
   if (!url || !key) return { error: "Backend mal configurado" } as const;
 
   const sb = createServiceClient(url, key);
-  return { empresaId: usuario.empresa_id, userId: user.id, sb } as const;
+  return { empresaId: usuario.empresa_id, userId: user.id, sb, soporte: await enIntervencionDeSoporte() } as const;
+}
+
+/** ¿La escritura la hace un operador en una intervención de soporte autorizada?
+ *  (getDevSupportWriteBlock ya la dejó pasar). Va al sello: decision_soporte.
+ *  Sin la cookie de soporte no consulta la base. null = no se pudo saber. */
+async function enIntervencionDeSoporte(): Promise<boolean | null> {
+  try {
+    const modo = await getDevSupportMode();
+    return modo?.ok === true;
+  } catch {
+    return null;
+  }
+}
+
+type Ctx = { userId: string; soporte: boolean | null };
+/** Un lote que llega como argumento (server action = endpoint público): solo un uuid. */
+function loteValido(l: unknown): string | undefined {
+  return typeof l === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l) ? l : undefined;
+}
+/** Sello de esta acción (Fase 1 medición). `lote` compartido entre trozos del mismo gesto. */
+function selloDe(ctx: Ctx, canal: CanalDecision, loteN: number, lote?: string) {
+  return sello(canal, { usuarioId: ctx.userId, loteN, lote, soporte: ctx.soporte });
 }
 
 /**
@@ -109,7 +133,7 @@ export async function aprobarPropuesta(
 
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ estado: "aprobado", cliente_id: clienteId ?? null }, { count: "exact" })
+    .update({ estado: "aprobado", cliente_id: clienteId ?? null, ...selloDe(ctx, "check_detalle", 1) }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId)
     // Guard de estado (seguridad 2026-09-30, punto 4): con una vista vieja se
@@ -187,7 +211,7 @@ export async function descartarPropuesta(propuestaId: string) {
   if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ estado: "descartado" }, { count: "exact" })
+    .update({ estado: "descartado", ...selloDe(ctx, "check_fila", 1) }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
   if (error) return { error: error.message };
@@ -210,7 +234,7 @@ export async function ocultarPropuesta(propuestaId: string) {
   if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ estado: "oculto" }, { count: "exact" })
+    .update({ estado: "oculto", ...selloDe(ctx, "check_fila", 1) }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
   if (error) return { error: error.message };
@@ -228,7 +252,7 @@ export async function restaurarPropuesta(propuestaId: string) {
   if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ estado: "pendiente" }, { count: "exact" })
+    .update({ estado: "pendiente", ...selloDe(ctx, "check_fila", 1) }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
   if (error) return { error: error.message };
@@ -245,22 +269,29 @@ export async function restaurarPropuesta(propuestaId: string) {
  * pendiente/editado (jamás degrada una 'listo' staged ni toca 'aprobado').
  */
 export async function rechazarPropuestas(
-  propuestaIds: string[]
+  propuestaIds: string[],
+  /** Desde dónde (check_fila | check_detalle | check_lote). Validado: fuera de lista se deduce. */
+  origen?: string,
+  /** Lote del gesto que la llama (decidirVenta). Validado como uuid; si no, uno nuevo. */
+  loteGesto?: string,
 ): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const gestoN = propuestaIds.length; // tamaño del gesto (sello), antes del guard
   // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
   const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
   if ("error" in sepR) return { error: sepR.error, count: 0 };
   const tocables = sepR.tocables;
   if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
   let marcadas = 0;
+  const lote = loteValido(loteGesto) ?? nuevoLote();
+  const canal = canalDeOrigen(origen, gestoN);
   for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
     const batch = tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "rechazado" }, { count: "exact" })
+      .update({ estado: "rechazado", ...selloDe(ctx, canal, gestoN, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       // 'listo' incluido (2026-09-02): una lista también puede juzgarse sin
@@ -298,10 +329,15 @@ export async function cambiarTipoPropuestas(
   propuestaIds: string[],
   destino: "afecta" | "exenta",
   mesa: "boleta" | "factura" = "boleta",
+  /** Desde dónde (check_fila | check_detalle | check_lote). Sin origen: check_lote. */
+  origen?: string,
+  /** Lote del gesto que la llama (decidirVenta). Validado como uuid; si no, uno nuevo. */
+  loteGesto?: string,
 ): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const gestoN = propuestaIds.length; // tamaño del gesto (sello), antes del guard
   // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
   const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
   if ("error" in sepR) return { error: sepR.error, count: 0 };
@@ -330,6 +366,8 @@ export async function cambiarTipoPropuestas(
 
   let cambiadas = 0;
   const movIdsCambiados: string[] = [];
+  const lote = loteValido(loteGesto) ?? nuevoLote();
+  const canal = origen === undefined ? "check_lote" : canalDeOrigen(origen, gestoN);
   for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
     const batch = tocables.slice(i, i + BATCH_SIZE);
     // Se lee el total de CADA una: el reparto neto/IVA depende de su monto, así
@@ -347,7 +385,7 @@ export async function cambiarTipoPropuestas(
       const { neto, iva } = derivarMontosDte(Number(fila.total ?? 0), afecta);
       const { error, count } = await ctx.sb
         .from("propuestas_ia")
-        .update({ tipo_propuesto: tipoPropuesto, tipo_dte: tipoDte, monto_neto: neto, iva, estado: "editado" }, { count: "exact" })
+        .update({ tipo_propuesto: tipoPropuesto, tipo_dte: tipoDte, monto_neto: neto, iva, estado: "editado", ...selloDe(ctx, canal, gestoN, lote) }, { count: "exact" })
         .eq("empresa_id", ctx.empresaId)
         .eq("id", fila.id)
         .in("estado", ["pendiente", "editado", "listo"]);
@@ -423,16 +461,25 @@ export async function decidirVenta(
   propuestaIds: string[],
   decision: "exenta" | "afecta" | "no_es_venta",
   mesa: "boleta" | "factura" = "boleta",
+  /** Desde dónde (check_fila | check_detalle | check_lote). Validado: fuera de lista se deduce. */
+  origen?: string,
 ): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  // El reset a pendiente y la decisión (rechazar / cambiar tipo) van con lotes
+  // DISTINTOS: el trigger toma "mismo lote que la escritura anterior" como escritura
+  // sin sellar, así que compartirlo dejaba la decisión real como sin_sello
+  // (revisión adversarial de la integración, 2026-10-04). Mismo canal.
+  const canal = canalDeOrigen(origen, propuestaIds.length);
+  const loteReset = nuevoLote();
+  const lote = nuevoLote();
   const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
   if ("error" in sepR) return { error: sepR.error, count: 0 };
   for (let i = 0; i < sepR.tocables.length; i += BATCH_SIZE) {
     const { error } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "pendiente" })
+      .update({ estado: "pendiente", ...selloDe(ctx, canal, propuestaIds.length, loteReset) })
       .eq("empresa_id", ctx.empresaId)
       .in("id", sepR.tocables.slice(i, i + BATCH_SIZE))
       .eq("estado", "aprobado")
@@ -440,18 +487,18 @@ export async function decidirVenta(
     if (error) return { error: error.message, count: 0 };
   }
   return decision === "no_es_venta"
-    ? rechazarPropuestas(propuestaIds)
-    : cambiarTipoPropuestas(propuestaIds, decision, mesa);
+    ? rechazarPropuestas(propuestaIds, canal, lote)
+    : cambiarTipoPropuestas(propuestaIds, decision, mesa, canal, lote);
 }
 
-export async function rechazarPropuesta(propuestaId: string) {
+export async function rechazarPropuesta(propuestaId: string, origen?: string) {
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error };
   const bloqueo = await bloqueoRetroceso(ctx.sb, ctx.empresaId, propuestaId);
   if (bloqueo) return { error: bloqueo };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ estado: "rechazado" }, { count: "exact" })
+    .update({ estado: "rechazado", ...selloDe(ctx, canalDeOrigen(origen, 1), 1) }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId);
   if (error) return { error: error.message };
@@ -520,7 +567,7 @@ export async function editarPropuesta(
   // Allowlist explícita: las server actions son endpoints públicos y el tipo
   // TS no limita el payload en runtime. Con service role, un spread directo
   // permitiría setear cualquier columna (empresa_id, estado, confianza...).
-  const update: Record<string, string | number | null> = { estado: "editado" };
+  const update: Record<string, string | number | boolean | null> = { estado: "editado" };
   const strField = (v: unknown): string | null => (v === null ? null : String(v));
   const numField = (v: unknown): number | null => {
     const n = Number(v);
@@ -594,9 +641,10 @@ export async function editarPropuesta(
     }
   }
 
+  const selloEdicion = selloDe(ctx, "check_detalle", 1);
   const doUpdate = () => ctx.sb
     .from("propuestas_ia")
-    .update(update, { count: "exact" })
+    .update({ ...update, ...selloEdicion }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId)
     // Guard de estado (auditoría #21): NO editar una 'aprobado' (ya comprometida a
@@ -644,6 +692,7 @@ export async function aprobarTodas(
   if ("error" in ctx) return { error: ctx.error, count: 0 };
 
   let aprobadas = 0;
+  const lote = nuevoLote();
 
   // Batch in chunks of BATCH_SIZE to avoid PostgREST URL length limit
   // (.in() puts all IDs in the query string — 659 UUIDs = 24KB, exceeds limit)
@@ -651,7 +700,7 @@ export async function aprobarTodas(
     const batch = propuestaIds.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "aprobado" }, { count: "exact" })
+      .update({ estado: "aprobado", ...selloDe(ctx, "check_lote", propuestaIds.length, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       // Guard de estado en la propia consulta (seguridad 2026-09-30, punto 4): las que
@@ -703,7 +752,9 @@ export async function aprobarTodas(
 // queda fuera hasta que `aprobarCartola` las promueve. Es el lote atómico.
 export async function ponerListo(
   propuestaIds: string[],
-  clienteId?: string | null
+  clienteId?: string | null,
+  /** Desde dónde (check_fila | check_detalle | check_lote). Validado: fuera de lista se deduce. */
+  origen?: string,
 ): Promise<{ ok?: boolean; error?: string; count: number; porDecidir?: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
@@ -713,11 +764,13 @@ export async function ponerListo(
   const patch: { estado: string; cliente_id?: string | null } =
     clienteId === undefined ? { estado: "listo" } : { estado: "listo", cliente_id: clienteId };
   let listas = 0;
+  const lote = nuevoLote();
+  const canal = canalDeOrigen(origen, propuestaIds.length);
   for (let i = 0; i < propuestaIds.length; i += BATCH_SIZE) {
     const batch = propuestaIds.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update(patch, { count: "exact" })
+      .update({ ...patch, ...selloDe(ctx, canal, propuestaIds.length, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       // Guard de estado (auditoría #25/#29): solo se stagea desde estados PRE-emisión.
@@ -761,7 +814,7 @@ export async function editarGlosaEmitible(
   if (yaEmitida) return { error: "Esta boleta ya se emitió: su detalle ya está en el SII y no se puede cambiar." };
   const { error, count } = await ctx.sb
     .from("propuestas_ia")
-    .update({ notas: glosa }, { count: "exact" })
+    .update({ notas: glosa, ...selloDe(ctx, "check_detalle", 1) }, { count: "exact" })
     .eq("id", propuestaId)
     .eq("empresa_id", ctx.empresaId)
     .in("estado", ["aprobado", "listo"]); // solo emitibles; NO cambia estado
@@ -779,22 +832,27 @@ export async function editarGlosaEmitible(
 // cambiar de estado). Des-stagea listas — el juicio se re-abre sin perder nada.
 // Guard: solo desde 'listo' (jamás degrada aprobadas ni resucita juzgadas acá).
 export async function volverAPendientes(
-  propuestaIds: string[]
+  propuestaIds: string[],
+  /** Desde dónde (check_fila | check_detalle | check_lote). Validado: fuera de lista se deduce. */
+  origen?: string,
 ): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const gestoN = propuestaIds.length; // tamaño del gesto (sello), antes del guard
   // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
   const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
   if ("error" in sepR) return { error: sepR.error, count: 0 };
   const tocables = sepR.tocables;
   if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
   let devueltas = 0;
+  const lote = nuevoLote();
+  const canal = canalDeOrigen(origen, gestoN);
   for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
     const batch = tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "pendiente" }, { count: "exact" })
+      .update({ estado: "pendiente", ...selloDe(ctx, canal, gestoN, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .eq("estado", "listo");
@@ -816,17 +874,20 @@ export async function restaurarPropuestas(
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const gestoN = propuestaIds.length; // tamaño del gesto (sello), antes del guard
   // Guard de retroceso (incidente MH 2026-09-29): lo emitido / a medias / en vuelo no se mueve.
   const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
   if ("error" in sepR) return { error: sepR.error, count: 0 };
   const tocables = sepR.tocables;
   if (tocables.length === 0) return { error: resumenRetroceso(0, "movidas", sepR.intocables), count: 0 };
   let restauradas = 0;
+  const lote = nuevoLote();
+  const canal = canalDeOrigen(undefined, gestoN);
   for (let i = 0; i < tocables.length; i += BATCH_SIZE) {
     const batch = tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "pendiente" }, { count: "exact" })
+      .update({ estado: "pendiente", ...selloDe(ctx, canal, gestoN, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .in("estado", ["rechazado", "descartado"]);
@@ -875,11 +936,12 @@ export async function devolverCartola(
   if ("error" in sep) return { error: sep.error, count: 0 };
   const seQuedan = contarIntocables(sep.intocables);
   let devueltas = 0;
+  const lote = nuevoLote();
   for (let i = 0; i < sep.tocables.length; i += BATCH_SIZE) {
     const batch = sep.tocables.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "listo" }, { count: "exact" })
+      .update({ estado: "listo", ...selloDe(ctx, "devolver_cartola", ids.length, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       // Guard: solo degrada 'aprobado'. Jamás toca emitidas/rechazadas.
@@ -968,11 +1030,12 @@ export async function aprobarCartola(
   if ("error" in sep) return { error: sep.error, count: 0 };
   const ids = sep.tocables;
   let aprobadas = 0;
+  const lote = nuevoLote();
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
     const { error, count } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "aprobado" }, { count: "exact" })
+      .update({ estado: "aprobado", ...selloDe(ctx, "aprobar_cartola", todas.length, lote) }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
       .eq("estado", "listo")
@@ -1048,7 +1111,7 @@ export async function editarMovimientoPropuesta(
 
   // Cualquier edición de campos emitibles degrada la propuesta a 'editado' → exige
   // re-aprobación antes de emitir (coherente con editarPropuesta).
-  const propUpdate: Record<string, string | number | null> = { estado: "editado" };
+  const propUpdate: Record<string, string | number | boolean | null> = { estado: "editado" };
   if (campos.tipo_propuesto !== undefined) propUpdate.tipo_propuesto = campos.tipo_propuesto;
   if (campos.receptor_nombre !== undefined) propUpdate.receptor_nombre = campos.receptor_nombre;
   if (campos.receptor_rut !== undefined) propUpdate.receptor_rut = campos.receptor_rut;
@@ -1056,7 +1119,7 @@ export async function editarMovimientoPropuesta(
 
   const { error: propErr, count } = await sb
     .from("propuestas_ia")
-    .update(propUpdate, { count: "exact" })
+    .update({ ...propUpdate, ...selloDe(ctx, "check_detalle", 1) }, { count: "exact" })
     .eq("empresa_id", ctx.empresaId)
     .eq("id", propuestaId)
     .in("estado", ["pendiente", "editado", "listo"]);
@@ -1085,6 +1148,9 @@ export async function devolverAOmitidos(propuestaId: string) {
 
   if (!prop) return { error: "Propuesta no encontrada" };
 
+  // Rastro del borrado (Fase 1 medición): solo conteos, antes de que se vaya.
+  const resumen = await resumenPropuestasABorrar(ctx.sb, { empresaId: ctx.empresaId, propuestaId });
+
   const { error: propErr } = await ctx.sb
     .from("propuestas_ia")
     .delete()
@@ -1100,6 +1166,13 @@ export async function devolverAOmitidos(propuestaId: string) {
     .delete()
     .eq("empresa_id", ctx.empresaId)
     .eq("id", prop.movimiento_id);
+
+  await recordCuentaAudit({
+    sb: ctx.sb, empresaId: ctx.empresaId, usuarioId: ctx.userId,
+    accion: "propuesta_devuelta_a_omitidos", recursoTipo: "propuesta_ia", recursoId: propuestaId,
+    resumen: "Propuesta devuelta a omitidos (borrada con su movimiento)",
+    metadata: resumen ? { propuestas_resumen: resumen } : {},
+  });
 
   revalidatePath("/revisar");
   revalidatePath("/escritorio");

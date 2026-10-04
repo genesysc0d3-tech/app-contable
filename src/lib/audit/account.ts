@@ -34,6 +34,8 @@ export type CuentaAuditAction =
   | "documento_eliminado"
   | "documento_deshecho"
   | "documento_cancelado"
+  | "documento_reprocesado_limpieza"
+  | "propuesta_devuelta_a_omitidos"
   | "plan_cambiado_dev"
   | "trial_cortesia_cambiado"
   | "trial_reiniciado"

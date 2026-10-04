@@ -26,6 +26,7 @@ import { esHintExentoPorLey, CONFIANZA_REGLA_CONFIRMADA_EN_MARCA } from "./tipo-
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { detectaNoBoletar } from "../sii/clasificador-tipo";
+import { sello } from "../propuestas/sello";
 
 type SB = SupabaseClient<Database>;
 
@@ -279,6 +280,7 @@ export async function aprenderReglaDesdeResolucion(
           tipoFlujo: args.tipoFlujo,
           tipoDte: args.tipoDte,
           tipoPropuesto: tipoProp,
+          usuarioId: args.userId,
         })
       : 0;
 
@@ -304,6 +306,8 @@ async function propagarEnCartola(
     tipoFlujo: "entrada" | "salida";
     tipoDte: 39 | 41;
     tipoPropuesto: string;
+    /** Quién gatilló la propagación (va al sello: decision_por). */
+    usuarioId: string | null;
   },
 ): Promise<number> {
   // `patron` es solo-letras+espacios (lo limpió extraerPatronContraparte), así
@@ -328,12 +332,14 @@ async function propagarEnCartola(
   if (movIds.length === 0) return 0;
 
   let total = 0;
+  // Un gesto = un lote (todos los trozos comparten el uuid). A ciegas: abierta=false.
+  const selloPropagacion = sello("propagacion", { usuarioId: args.usuarioId, loteN: movIds.length, abierta: false });
   for (let i = 0; i < movIds.length; i += 50) {
     const batch = movIds.slice(i, i + 50);
     const { count, error: updErr } = await sb
       .from("propuestas_ia")
       .update(
-        { tipo_dte: args.tipoDte, tipo_propuesto: args.tipoPropuesto },
+        { tipo_dte: args.tipoDte, tipo_propuesto: args.tipoPropuesto, ...selloPropagacion },
         { count: "exact" },
       )
       .eq("empresa_id", args.empresaId)

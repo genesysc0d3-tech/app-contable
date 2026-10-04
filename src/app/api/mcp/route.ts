@@ -9,6 +9,7 @@ import { chileDateString } from "@/lib/chile-date";
 import { traerTodasLasFilas } from "@/lib/supabase/paginar";
 import { recordOpsEvent } from "@/lib/ops/events";
 import { clasificarIntocables, contarIntocables } from "@/lib/emission/propuestas-intocables";
+import { sello } from "@/lib/propuestas/sello";
 import { LIMITE_FILAS_LECTURA, LIMITE_ESCRITURAS_POR_DIA, MESES_HACIA_ATRAS_MAX, PAGINA_MAX, frenarEscritura, frenarLectura, mensajeDeFreno, paginaAOffset, ventanaDelMes, type Freno } from "@/lib/mcp/manguera";
 
 // Conector MCP de massDTE — copiloto de revisión (lee y ORDENA; no emite).
@@ -244,7 +245,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         // aprendizaje (la IA externa no alimenta el sistema de reglas).
         const { data: tocadas, error } = await ctx.svc
           .from("propuestas_ia")
-          .update({ estado: "aprobado" })
+          .update({ estado: "aprobado", ...sello("mcp", { usuarioId: ctx.usuarioId, loteN: ids.length }) })
           .in("id", ids)
           .eq("empresa_id", ctx.empresaId)
           .in("estado", ["pendiente", "editado", "listo"])
@@ -350,7 +351,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
         // pendiente no se tocan (idempotente por construcción).
         const { data: tocadas, error } = await ctx.svc
           .from("propuestas_ia")
-          .update({ estado: "pendiente" })
+          .update({ estado: "pendiente", ...sello("mcp", { usuarioId: ctx.usuarioId, loteN: ids.length }) })
           .in("id", sep.tocables)
           .eq("empresa_id", ctx.empresaId)
           .in("estado", ["aprobado", "listo"])

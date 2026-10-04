@@ -14,6 +14,9 @@ const TABLAS_EMPRESA = [
   "documentos_subidos",
   "movimientos_raw",
   "propuestas_ia",
+  // Log de decisiones del clasificador (Fase 1 medición): sin PII de terceros, pero
+  // es dato del titular (qué decidió, cuándo). Solo filas de SUS empresas.
+  "propuesta_decisiones",
   "documentos_tributarios",
   "gastos",
 ] as const;

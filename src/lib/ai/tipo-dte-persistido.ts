@@ -8,7 +8,8 @@
  * `@/lib/sii/destino`) y NUNCA sobre no_boletar (préstamo/cuenta propia/sueldo se
  * apartan aunque la cartola sea cripto).
  */
-import { decidirTipoDteAuto, type ClasificacionResult, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import { decidirTipoDteAutoConMotivo, type ClasificacionResult, type DocumentoHint } from "@/lib/sii/clasificador-tipo";
+import type { FuenteTipoDte } from "./tipo-dte-fuente";
 import { esExentoPorTipo, esVentaEmitible, FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 
 export interface DecidirTipoDteInput {
@@ -41,6 +42,11 @@ export interface DecidirTipoDteResultado {
    * estampa nada y la fila queda a revisar (familia del incidente 2026-09-24).
    */
   conflictoMarcaCartola: boolean;
+  /**
+   * Qué rama decidió (Fase 1 medición): se graba como orig_tipo_dte_fuente, la foto
+   * inmutable al nacer. Sale de ESTA función, así nunca se desalinea de la decisión.
+   */
+  fuente: FuenteTipoDte;
 }
 
 const HINTS_EXENTOS_POR_LEY: ReadonlySet<string> = new Set(["p2p_cripto", "forex_divisas"]);
@@ -82,24 +88,28 @@ export function decidirTipoDtePersistido(i: DecidirTipoDteInput): DecidirTipoDte
   const esVentaCandidata = puedePersistirTipo && esVentaEmitible(i.tipoBase);
   // Política de auto-persistencia: el default de cuenta NO cortocircuita, y un 39
   // exige evidencia real. El hint por-cartola y el exento sí son autoritativos.
-  const tipoDteAuto: 39 | 41 | null = !esVentaCandidata
+  const auto = !esVentaCandidata
     ? null
-    : decidirTipoDteAuto(i.clasif, { docHint: i.docHint, tipoContribuyente: i.tipoContribuyente });
+    : decidirTipoDteAutoConMotivo(i.clasif, { docHint: i.docHint, tipoContribuyente: i.tipoContribuyente });
+  const tipoDteAuto: 39 | 41 | null = auto?.tipo ?? null;
+  const r = (tipoDte: 39 | 41 | null, fuente: FuenteTipoDte, conflictoMarcaCartola = false): DecidirTipoDteResultado =>
+    ({ tipoDte, tipoDteAuto, conflictoMarcaCartola, fuente });
 
-  if (!esVentaCandidata) return { tipoDte: null, tipoDteAuto, conflictoMarcaCartola: false };
+  if (!puedePersistirTipo) return r(null, "salida_o_no_boletar");
+  if (!esVentaCandidata || !auto) return r(null, "no_venta");
   // Incidente 2026-09-24: una categoría EXENTA por naturaleza jamás nace 39.
-  if (esExentoPorTipo(i.tipoBase)) return { tipoDte: 41, tipoDteAuto, conflictoMarcaCartola: false };
+  if (esExentoPorTipo(i.tipoBase)) return r(41, "categoria_exenta");
   // Precedencia: la regla de usuario manda; el emisor exento se fuerza a 41.
   if (i.reglaTipoDte === 39 || i.reglaTipoDte === 41) {
-    if (i.emisorExento) return { tipoDte: 41, tipoDteAuto, conflictoMarcaCartola: false };
+    if (i.emisorExento) return r(41, i.reglaTipoDte === 39 ? "regla_forzada_exenta" : "regla");
     // La marca de la cartola (P2P/forex, exenta por ley) protege contra una regla 39
     // vieja: no se emite afecta ni se adivina exenta → a revisar.
     if (i.reglaTipoDte === 39 && !i.reglaConfirmadaEnMarca && esHintExentoPorLey(i.docHint)) {
-      return { tipoDte: null, tipoDteAuto, conflictoMarcaCartola: true };
+      return r(null, "conflicto_marca_cartola", true);
     }
-    return { tipoDte: i.reglaTipoDte, tipoDteAuto, conflictoMarcaCartola: false };
+    return r(i.reglaTipoDte, "regla");
   }
-  return { tipoDte: tipoDteAuto, tipoDteAuto, conflictoMarcaCartola: false };
+  return r(tipoDteAuto, `auto_${auto.motivo}`);
 }
 
 /** Pre-stageo: banda ALTA del visor. */

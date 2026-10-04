@@ -159,6 +159,14 @@ export async function purgarCuentaCompleta(sb: Sb, cuentaId: string): Promise<Pu
     if (error) throw new Error(`No se pudieron borrar empresas: ${error.message}`);
   }
 
+  // 5b. Log de decisiones del clasificador (propuesta_decisiones): SIN FK a empresas
+  // a propósito (el trigger de borrado salta si la empresa ya no existe), así que
+  // la cascada no lo alcanza. Segunda llave: se borra explícito.
+  for (const batch of enBloques(empresaIds, CHUNK)) {
+    const { error } = await sb.from("propuesta_decisiones").delete().in("empresa_id", batch);
+    if (error) throw new Error(`No se pudo borrar el log de decisiones: ${error.message}`);
+  }
+
   // 6. La cuenta (cascade lleva miembros/suscripciones/refills/addons/auditoría).
   const { error: cuErr } = await sb.from("cuentas").delete().eq("id", cuentaId);
   if (cuErr) throw new Error(`No se pudo borrar la cuenta: ${cuErr.message}`);
