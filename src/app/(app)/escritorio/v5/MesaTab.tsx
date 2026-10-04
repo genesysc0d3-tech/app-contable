@@ -25,6 +25,12 @@ const CartolaEditor = dynamic(() => import("./CartolaEditor"), { ssr: false });
 // liviano (cuenta las preguntas para el visor); la pantalla baja recién al abrirla.
 const PreguntasGrupo = dynamic(() => import("./PreguntasGrupo"), { ssr: false });
 import { armarPreguntas, filaDePropuesta } from "./preguntas-grupo";
+
+// Check agrupado APAGADO (fundador 2026-10-04): la pregunta en grupo descansa en lo que
+// NOSOTROS supusimos (agrupación + clasificación) y la clienta solo confirma sí/no sin poder
+// verificarlo — es un "aprobar todo" con mejor cara. Check vuelve a abrir en "Una por una".
+// El motor y la acción quedan en el código; no se borran hasta rediseñar.
+const CHECK_AGRUPADO_ACTIVO = false;
 import { aprobarCartola } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import BoletaVisor, { type BoletaEmitida } from "./BoletaVisor";
@@ -241,7 +247,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
   // Check agrupado: cuántas preguntas en grupo tiene la cartola seleccionada (motor puro,
   // sobre lo que la mesa ya trae). Solo mesa de boletas; se apaga si la mesa vino truncada.
   const preguntasSel = useMemo(() => {
-    if (!selDoc || mesa.mesaActiva === "factura") return 0;
+    if (!CHECK_AGRUPADO_ACTIVO || !selDoc || mesa.mesaActiva === "factura") return 0;
     return armarPreguntas(selProps.map((p) => filaDePropuesta(p, aMediasIds)), {
       mesa: mesa.mesaActiva,
       truncada: mesa.propuestasTruncadas,
@@ -517,7 +523,7 @@ export default function MesaTab({ mesa, clientes, empresaId, empresaGiro, empres
                 </>
               ) : (
                 <>
-                  {mesa.mesaActiva !== "factura" ? (
+                  {CHECK_AGRUPADO_ACTIVO && mesa.mesaActiva !== "factura" ? (
                     <PildorasPantalla actual={editarScreen === "preguntas" ? "preguntas" : "editar"} onCambiar={setEditarScreen} />
                   ) : (
                     <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 99, padding: "3px 10px" }}>Editar</span>
