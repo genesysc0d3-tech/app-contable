@@ -332,6 +332,9 @@ export async function aprenderReglaDesdeResolucion(
           tipoDte: args.tipoDte,
           tipoPropuesto: tipoProp,
           usuarioId: args.userId,
+          // Solo si la regla dice LO MISMO que se propaga (nació, se re-acuñó igual o
+          // renació): una regla viva con otro tipo no se pisa ni se le cuelgan filas.
+          reglaId,
         })
       : 0;
 
@@ -359,6 +362,12 @@ async function propagarEnCartola(
     tipoPropuesto: string;
     /** Quién gatilló la propagación (va al sello: decision_por). */
     usuarioId: string | null;
+    /**
+     * Regla que dice este tipo: las hermanas quedan LIGADAS a ella (regla_id), así una
+     * corrección posterior sobre una hermana corrige la regla y Deshacer las re-evalúa.
+     * La evidencia no las cuenta como confirmación (canal propagacion).
+     */
+    reglaId?: string | null;
   },
 ): Promise<number> {
   // `patron` es solo-letras+espacios (lo limpió extraerPatronContraparte), así
@@ -390,7 +399,7 @@ async function propagarEnCartola(
     const { count, error: updErr } = await sb
       .from("propuestas_ia")
       .update(
-        { tipo_dte: args.tipoDte, tipo_propuesto: args.tipoPropuesto, ...selloPropagacion },
+        { tipo_dte: args.tipoDte, tipo_propuesto: args.tipoPropuesto, ...(args.reglaId ? { regla_id: args.reglaId } : {}), ...selloPropagacion },
         { count: "exact" },
       )
       .eq("empresa_id", args.empresaId)

@@ -15,8 +15,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { aprenderSpy, corregirSpy, RESP } = vi.hoisted(() => ({
+const { aprenderSpy, corregirSpy, buscarSpy, RESP } = vi.hoisted(() => ({
   corregirSpy: vi.fn(async () => ({ efectos: new Map(), avisos: [] as string[] })),
+  buscarSpy: vi.fn(async (): Promise<string | null> => null),
   aprenderSpy: vi.fn(async () => ({ creada: true, actualizada: false, propagadas: 0, patron: "x" })),
   RESP: {} as Record<string, { select?: unknown; update?: unknown }>,
 }));
@@ -35,7 +36,7 @@ vi.mock("@/lib/ai/aprender-regla", async () => {
   return { ...actual, aprenderReglaDesdeResolucion: aprenderSpy };
 });
 
-vi.mock("@/lib/ai/reglas-historial", () => ({ registrarCorrecciones: corregirSpy }));
+vi.mock("@/lib/ai/reglas-historial", () => ({ registrarCorrecciones: corregirSpy, buscarReglaPorContraparte: buscarSpy }));
 
 // Cliente de AUTH: usuario válido con rol de emisión ("r", que casa con el mock de ROLES_EMISION).
 vi.mock("@/lib/supabase/server", () => ({
@@ -74,6 +75,8 @@ import { cambiarTipoPropuestas, editarPropuesta } from "./actions";
 beforeEach(() => {
   aprenderSpy.mockClear();
   corregirSpy.mockClear();
+  buscarSpy.mockReset();
+  buscarSpy.mockResolvedValue(null);
   for (const k of Object.keys(RESP)) delete RESP[k];
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://x");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "k");
@@ -140,7 +143,42 @@ describe("Fase 3 — correcciones desde Check", () => {
     expect(r.aviso).toContain("Ya no estoy seguro de Juan Perez");
   });
 
-  it("sin reglas detrás → no corrige", async () => {
+  it("ALTO 1: fila SIN regla_id (hermana propagada / IA previa) → se busca la regla viva por la contraparte y se corrige con el tipo de la fila", async () => {
+    RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
+    RESP["propuestas_ia"] = { select: { data: [
+      { id: "p1", total: 1000, movimiento_id: "m1", regla_id: null, tipo_dte: 41 },
+      { id: "p2", total: 1000, movimiento_id: "m2", regla_id: null, tipo_dte: 41 },
+    ] }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: [
+      { id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" },
+      { id: "m2", descripcion: "ABONO JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" },
+    ] } };
+    buscarSpy.mockResolvedValue("r7");
+    await cambiarTipoPropuestas(["p1", "p2"], "afecta", "boleta", "check_fila");
+    expect(buscarSpy).toHaveBeenCalledTimes(1); // una consulta por contraparte, no por fila
+    expect(buscarSpy).toHaveBeenCalledWith(expect.anything(), { empresaId: "E1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipoFlujo: "entrada" });
+    expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      tipoNuevo: 39, mirada: true,
+      filas: [
+        { reglaId: "r7", tipoFila: 41, documentoId: "d1", glosa: "TRANSFERENCIA DE JUAN PEREZ" },
+        { reglaId: "r7", tipoFila: 41, documentoId: "d1", glosa: "ABONO JUAN PEREZ" },
+      ],
+    }));
+  });
+
+  it("ALTO 1: editarPropuesta sobre una fila sin regla_id → corrige la regla viva de la contraparte", async () => {
+    RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
+    RESP["propuestas_ia"] = { select: { data: { tipo_dte: 41, movimiento_id: "m1", regla_id: null } }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: { descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" } } };
+    buscarSpy.mockResolvedValue("r7");
+    await editarPropuesta("p1", { tipo_dte: 39 });
+    expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), {
+      empresaId: "E1", tipoNuevo: 39, mirada: true,
+      filas: [{ reglaId: "r7", documentoId: "d1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ" }],
+    });
+  });
+
+  it("sin regla_id NI regla viva de esa contraparte → no corrige", async () => {
     RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
     RESP["propuestas_ia"] = { select: { data: [{ id: "p1", total: 1000, movimiento_id: "m1", regla_id: null }] }, update: { error: null, count: 1 } };
     RESP["movimientos_raw"] = { select: { data: [{ id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" }] } };

@@ -1,7 +1,9 @@
 /**
  * Nombre legible de la contraparte a partir de una glosa VIVA de la cartola
  * ("TRANSFERENCIA DE JUAN PEREZ" → "Juan Perez"). Lo usan "Lo que aprendí" y los avisos
- * de Check. Nunca sale del nombre de la regla (que ya no lleva al tercero).
+ * de Check. Nunca sale del nombre de la regla (que ya no lleva al tercero). Sin un
+ * nombre reconocible devuelve null: la glosa CRUDA no se muestra (puede traer RUT,
+ * números de operación…); el que llama pone "esta contraparte".
  */
 import { extraerPatronContraparte } from "./aprender-regla";
 
@@ -13,6 +15,5 @@ export function contraparteVisible(glosa: string | null | undefined): string | n
   const g = String(glosa ?? "").trim();
   if (!g) return null;
   const p = extraerPatronContraparte(g);
-  if (p) return titulo(p.patron);
-  return g.length > 48 ? `${g.slice(0, 47)}…` : g;
+  return p ? titulo(p.patron) : null;
 }

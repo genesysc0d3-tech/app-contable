@@ -459,6 +459,7 @@ export type Database = {
           tipo_propuesto: string
           veces_aplicada: number
           aprendida_bajo_marca: boolean
+          corregida_at: string | null
           corregidas_en_ventana: number
           disputa_eleccion: number | null
           disputa_racha: number
@@ -493,6 +494,7 @@ export type Database = {
           tipo_propuesto: string
           veces_aplicada?: number
           aprendida_bajo_marca?: boolean
+          corregida_at?: string | null
           corregidas_en_ventana?: number
           disputa_eleccion?: number | null
           disputa_racha?: number
@@ -527,6 +529,7 @@ export type Database = {
           tipo_propuesto?: string
           veces_aplicada?: number
           aprendida_bajo_marca?: boolean
+          corregida_at?: string | null
           corregidas_en_ventana?: number
           disputa_eleccion?: number | null
           disputa_racha?: number

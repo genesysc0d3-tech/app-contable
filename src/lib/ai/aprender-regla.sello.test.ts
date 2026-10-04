@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { aprenderReglaDesdeResolucion } from "./aprender-regla";
 
-function sbCaptura(siblings: Array<{ id: string; descripcion: string }>) {
+function sbCaptura(siblings: Array<{ id: string; descripcion: string }>, reglaInsertada: { id: string } | null = null) {
   const updates: Array<Record<string, unknown>> = [];
   const make = (table: string) => {
     let op = "select";
@@ -19,7 +19,7 @@ function sbCaptura(siblings: Array<{ id: string; descripcion: string }>) {
     b.update = (p: Record<string, unknown>) => { op = "update"; if (table === "propuestas_ia") updates.push(p); return b; };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     b.then = (resolve: any) => {
-      const val = op === "insert" ? { error: null }
+      const val = op === "insert" ? { data: table === "clasificacion_reglas" ? reglaInsertada : null, error: null }
         : op === "update" ? { error: null, count: 50 }
         : table === "movimientos_raw" ? { data: siblings, error: null }
         : { data: [], error: null };
@@ -48,5 +48,14 @@ describe("propagación sellada", () => {
         decision_por: "U1", decision_lote_n: 120,
       });
     }
+  });
+  it("ALTO 1: la propagación LIGA las hermanas a la regla que dice ese tipo (regla_id), con el sello de propagación", async () => {
+    const siblings = [{ id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ 1" }];
+    const { sb, updates } = sbCaptura(siblings, { id: "rNueva" });
+    await aprenderReglaDesdeResolucion(sb, {
+      empresaId: "E1", userId: "U1", documentoId: "D1",
+      descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipoFlujo: "entrada", tipoDte: 41,
+    });
+    expect(updates[0]).toMatchObject({ regla_id: "rNueva", tipo_dte: 41, decision_canal: "propagacion" });
   });
 });

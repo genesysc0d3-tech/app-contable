@@ -53,6 +53,7 @@ alter table public.clasificacion_reglas
   add column if not exists aprendida_bajo_marca boolean not null default false,
   add column if not exists evidencia_desde      timestamptz,
   add column if not exists corregidas_en_ventana integer not null default 0,
+  add column if not exists corregida_at         timestamptz,
   add column if not exists disputa_eleccion     smallint,
   add column if not exists disputa_racha        integer not null default 0,
   add column if not exists ligada_a_cartolas    boolean not null default false;
@@ -106,6 +107,8 @@ comment on column public.clasificacion_reglas.evidencia_desde is
   'Solo cuentan confirmaciones de filas nacidas DESPUÉS de esto (la última corrección). NULL = toda la historia.';
 comment on column public.clasificacion_reglas.corregidas_en_ventana is
   'Correcciones dentro de la ventana de evidencia actual (se reinicia con evidencia_desde). 2 → en_disputa.';
+comment on column public.clasificacion_reglas.corregida_at is
+  'Última corrección registrada. Una cartola que confirma con filas nacidas después vence la ventana (corregidas_en_ventana = 0).';
 comment on column public.clasificacion_reglas.disputa_eleccion is
   'En disputa: la última elección MIRADA de la persona (39/41). La misma 2 veces seguidas (disputa_racha) → sale con ese tipo.';
 comment on column public.clasificacion_reglas.ligada_a_cartolas is
@@ -243,6 +246,7 @@ returns table (
   confirmadas_miradas integer,
   aciertos integer,
   soportes integer,
+  confirmadas_tras_correccion integer,
   documentos_confirman uuid[],
   glosa text
 )
@@ -252,7 +256,7 @@ security invoker
 set search_path = public, pg_temp
 as $$
   with r as (
-    select cr.id, cr.tipo_dte, cr.evidencia_desde
+    select cr.id, cr.tipo_dte, cr.evidencia_desde, cr.corregida_at
       from public.clasificacion_reglas cr
      where cr.empresa_id = p_empresa_id
        and (p_regla_ids is null or cr.id = any(p_regla_ids))
@@ -270,6 +274,7 @@ as $$
   ),
   ok as (
     select p.id, p.regla_id, p.documento_id,
+           p.created_at > coalesce(r.corregida_at, 'infinity'::timestamptz) as tras_correccion,
            exists (
              select 1 from public.propuesta_decisiones d
               where d.propuesta_id = p.id
@@ -292,9 +297,16 @@ as $$
                 and d.canal in ('check_fila', 'check_detalle', 'check_lote', 'mcp', 'telegram')
                 and d.antes_tipo_dte is distinct from d.despues_tipo_dte
            )
+       -- una hermana que la PROPAGACIÓN ligó a la regla (misma cartola que la enseñó, a
+       -- ciegas) no es evidencia independiente
+       and not exists (
+             select 1 from public.propuesta_decisiones d
+              where d.propuesta_id = p.id and d.canal = 'propagacion'
+           )
   ),
   docs as (
-    select ok.regla_id, ok.documento_id, bool_or(ok.mirada) as mirada, count(*)::int as filas
+    select ok.regla_id, ok.documento_id, bool_or(ok.mirada) as mirada, count(*)::int as filas,
+           bool_or(ok.tras_correccion) as tras_correccion
       from ok
      where ok.documento_id is not null
      group by 1, 2
@@ -320,6 +332,7 @@ as $$
          coalesce((select count(*) from docs where docs.regla_id = r.id and docs.mirada), 0)::int,
          coalesce((select sum(filas) from docs where docs.regla_id = r.id), 0)::int,
          coalesce((select count(*) from public.clasificacion_regla_soportes s where s.regla_id = r.id), 0)::int,
+         coalesce((select count(*) from docs where docs.regla_id = r.id and docs.tras_correccion), 0)::int,
          coalesce((select array_agg(docs.documento_id order by docs.documento_id) from docs where docs.regla_id = r.id), '{}'::uuid[]),
          coalesce((select gs.descripcion from glosa_soporte gs where gs.regla_id = r.id),
                   (select gp.descripcion from glosa_propuesta gp where gp.regla_id = r.id))

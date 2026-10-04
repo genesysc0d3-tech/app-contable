@@ -14,6 +14,8 @@ export interface ReglaAprendida {
 }
 
 export const SIN_CONTRAPARTE = "Contraparte de una cartola borrada";
+/** La cartola sigue, pero su glosa no trae un nombre legible (no se muestra cruda). */
+export const SIN_NOMBRE = "Contraparte sin nombre";
 export const VACIO_LO_QUE_APRENDI = "Todavía no aprendo nada. Cuando corrijas un tipo en Check, lo recuerdo aquí.";
 
 export { contraparteVisible } from "@/lib/ai/contraparte-visible";

@@ -6,6 +6,8 @@ describe("Lo que aprendí — piezas puras", () => {
     expect(contraparteVisible("TRANSFERENCIA DE JUAN PEREZ 14:02")).toBe("Juan Perez");
     expect(contraparteVisible(null)).toBeNull();
     expect(contraparteVisible("  ")).toBeNull();
+    // sin nombre reconocible NO se muestra la glosa cruda
+    expect(contraparteVisible("TRANSFERENCIA 12.345.678-9 OP 99881")).toBeNull();
   });
   it("orden: no estoy seguro → aprendiendo → segura; más aciertos arriba", () => {
     const r = (id: string, estado: ReglaAprendida["estado"], aciertos: number): ReglaAprendida => ({ id, contraparte: null, tipo: "Exenta", aciertos, estado });

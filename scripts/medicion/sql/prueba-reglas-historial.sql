@@ -269,6 +269,18 @@ begin
   end loop;
   select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
   if e.confirmadas <> 5 then raise exception '[9] FALLA: antes de corregir esperaba 5, hay %', e.confirmadas; end if;
+  -- ventana que vence: corrección hace 20 días, filas de hace 10 → las 5 son posteriores
+  update public.clasificacion_reglas set corregida_at = now() - interval '20 days' where id = v_regla;
+  select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
+  if e.confirmadas_tras_correccion <> 5 then raise exception '[9] FALLA: tras_correccion=% (esperaba 5)', e.confirmadas_tras_correccion; end if;
+  update public.clasificacion_reglas set corregida_at = now() where id = v_regla;
+  select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
+  if e.confirmadas_tras_correccion <> 0 then raise exception '[9] FALLA: tras_correccion=% (esperaba 0)', e.confirmadas_tras_correccion; end if;
+  -- una hermana ligada por la PROPAGACIÓN no es evidencia independiente
+  update public.propuestas_ia set decision_canal = 'propagacion', decision_lote = gen_random_uuid(), decision_lote_n = 1, estado = 'listo'
+   where id = '00000000-0000-4000-8000-000000009110';
+  select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
+  if e.confirmadas <> 4 then raise exception '[9] FALLA: con una propagada esperaba 4, hay %', e.confirmadas; end if;
   update public.clasificacion_reglas set estado = 'en_disputa', veces_corregida = 1, evidencia_desde = now() where id = v_regla;
   select * into e from public.evidencia_reglas('00000000-0000-4000-8000-0000000000f1', array[v_regla]);
   if e.confirmadas <> 0 or e.glosa is null then raise exception '[9] FALLA: tras corregir confirmadas=% glosa=%', e.confirmadas, e.glosa; end if;
@@ -276,7 +288,7 @@ begin
      (select count(*) from public.clasificacion_reglas where empresa_id = '00000000-0000-4000-8000-0000000000f1') then
     raise exception '[9] FALLA: evidencia_reglas_lote no trae una entrada por regla';
   end if;
-  raise notice '[9] OK: 5 cartolas emitidas confirman; tras la corrección cuentan 0 (la glosa sigue); el lote jsonb trae todas las reglas';
+  raise notice '[9] OK: 5 cartolas emitidas confirman (4 si una vino por propagación); la ventana vence con evidencia posterior a la corrección; tras la corrección cuentan 0 (la glosa sigue); el lote jsonb trae todas las reglas';
 end $$;
 
 -- [10] escala E1: 500 reglas VIEJAS; ligarlas por error a una cartola (bug B2) y borrar

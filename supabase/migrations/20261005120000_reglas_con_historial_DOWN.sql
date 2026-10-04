@@ -30,7 +30,7 @@ begin
       create table public.%I as
       select id, empresa_id, estado, veces_acunada, veces_confirmada, veces_corregida,
              nacio_hint, nacio_carril, documento_origen_id, estado_cambiado_at, deshecha_por,
-             aprendida_bajo_marca, evidencia_desde, corregidas_en_ventana, disputa_eleccion,
+             aprendida_bajo_marca, evidencia_desde, corregidas_en_ventana, corregida_at, disputa_eleccion,
              disputa_racha, ligada_a_cartolas, confianza
       from public.clasificacion_reglas$q$, v_tabla);
     execute format('alter table public.%I enable row level security', v_tabla);
@@ -88,6 +88,7 @@ alter table public.clasificacion_reglas
   drop column if exists aprendida_bajo_marca,
   drop column if exists evidencia_desde,
   drop column if exists corregidas_en_ventana,
+  drop column if exists corregida_at,
   drop column if exists disputa_eleccion,
   drop column if exists disputa_racha,
   drop column if exists ligada_a_cartolas;

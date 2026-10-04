@@ -6,7 +6,7 @@
  *  - reevaluarSinRegla (pura): la próxima regla manda (con su estado); sin regla → Check.
  */
 import { describe, expect, it } from "vitest";
-import { deshacerRegla, recalcularEstadoReglas, reevaluarSinRegla, registrarCorrecciones, FUENTE_REGLA_DESHECHA } from "./reglas-historial";
+import { buscarReglaPorContraparte, deshacerRegla, recalcularEstadoReglas, reevaluarSinRegla, registrarCorrecciones, FUENTE_REGLA_DESHECHA } from "./reglas-historial";
 import type { ClasificacionRegla } from "./classifier";
 
 type Llamada = { tabla: string; op: string; payload?: unknown; filtros: Record<string, unknown> };
@@ -97,6 +97,18 @@ describe("registrarCorrecciones", () => {
   });
 });
 
+describe("buscarReglaPorContraparte", () => {
+  it("misma clave que acuñar: patrón regex de la contraparte + flujo, solo reglas vivas de la empresa", async () => {
+    const { sb, llamadas } = fakeSb((l) => (l.tabla === "clasificacion_reglas" ? { data: [{ id: "r7" }] } : undefined));
+    const id = await buscarReglaPorContraparte(sb, { empresaId: "E1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipoFlujo: "entrada" });
+    expect(id).toBe("r7");
+    expect(llamadas[0].filtros).toMatchObject({
+      "eq:empresa_id": "E1", "eq:patron": "(^|[^a-zà-ÿ])juan perez([^a-zà-ÿ]|$)", "eq:tipo_flujo_match": "entrada", "eq:activa": true,
+    });
+    expect(await buscarReglaPorContraparte(sb, { empresaId: "E1", descripcion: "SOBREGIRO CTE", tipoFlujo: "entrada" })).toBeNull();
+  });
+});
+
 describe("recalcularEstadoReglas", () => {
   it("a prueba con 2 cartolas (1 mirada) → firme; deja soportes confirmo; una firme sin evidencia no baja", async () => {
     const { sb, llamadas } = fakeSb((l) => {
@@ -113,7 +125,8 @@ describe("recalcularEstadoReglas", () => {
     const upd = llamadas.filter((l) => l.tabla === "clasificacion_reglas" && l.op === "update");
     expect(upd).toHaveLength(1);
     expect(upd[0].payload).toMatchObject({ estado: "firme", veces_confirmada: 2 });
-    expect(upd[0].filtros).toMatchObject({ "eq:id": "r1", "eq:estado": "a_prueba" });
+    // condicionado a estado Y veces_corregida (una corrección en paralelo gana)
+    expect(upd[0].filtros).toMatchObject({ "eq:id": "r1", "eq:estado": "a_prueba", "eq:veces_corregida": 0 });
     const sop = llamadas.find((l) => l.tabla === "clasificacion_regla_soportes");
     expect(sop?.payload).toEqual([
       { regla_id: "r1", documento_id: "D1", empresa_id: "E1", rol: "confirmo" },

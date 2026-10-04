@@ -6,14 +6,9 @@ import { getEmpresaAndService } from "@/lib/auth/contexto-empresa";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
-import { registrarCorrecciones } from "@/lib/ai/reglas-historial";
+import { buscarReglaPorContraparte, registrarCorrecciones } from "@/lib/ai/reglas-historial";
 import { esDecisionMirada } from "@/lib/ai/regla-evidencia";
 
-/** La fila mostraba un tipo que NO decidió la regla: conflicto con la marca P2P (sin
- *  tipo) o emisor exento que forzó 41 sobre una regla 39. Cambiarlo no corrige la regla. */
-function tipoNoEsDeLaRegla(f: { fuente_clasificacion?: string | null; orig_tipo_dte_fuente?: string | null }): boolean {
-  return f.fuente_clasificacion === FUENTE_CONFLICTO_MARCA || f.orig_tipo_dte_fuente === "regla_forzada_exenta";
-}
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
 import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR, FUENTE_CONFLICTO_MARCA } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
@@ -24,6 +19,12 @@ import { canalDeOrigen, nuevoLote, sello, type CanalDecision } from "@/lib/propu
 import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
 
 const BATCH_SIZE = 50;
+
+/** La fila mostraba un tipo que NO decidió la regla: conflicto con la marca P2P (sin
+ *  tipo) o emisor exento que forzó 41 sobre una regla 39. Cambiarlo no corrige la regla. */
+function tipoNoEsDeLaRegla(f: { fuente_clasificacion?: string | null; orig_tipo_dte_fuente?: string | null }): boolean {
+  return f.fuente_clasificacion === FUENTE_CONFLICTO_MARCA || f.orig_tipo_dte_fuente === "regla_forzada_exenta";
+}
 
 /** Desde dónde se puede aprobar (mismo allowlist que editarPropuesta y ponerListo). */
 const ESTADOS_APROBABLES = ["pendiente", "listo", "editado"];
@@ -328,7 +329,8 @@ export async function cambiarTipoPropuestas(
   let cambiadas = 0;
   const movIdsCambiados: string[] = [];
   // Filas cambiadas que venían de una regla: la corrección se registra UNA vez por regla.
-  const reglaPorMov = new Map<string, { reglaId: string; tipoFila: number | null }>();
+  // Filas cambiadas que pueden corregir una regla (regla_id, o se busca por contraparte).
+  const reglaPorMov = new Map<string, { reglaId: string | null; tipoFila: number | null }>();
   let avisosRegla: string[] = [];
   const lote = loteValido(loteGesto) ?? nuevoLote();
   const canal = origen === undefined ? "check_lote" : canalDeOrigen(origen, gestoN);
@@ -360,7 +362,9 @@ export async function cambiarTipoPropuestas(
         // (M2). Una «¿?» por conflicto con la marca P2P o un 41 forzado por emisor exento
         // no hablan de la regla. El tipo previo se compara contra la regla en
         // registrarCorrecciones (esCorreccionDeRegla).
-        if (fila.regla_id && !tipoNoEsDeLaRegla(fila)) reglaPorMov.set(fila.movimiento_id, { reglaId: fila.regla_id, tipoFila: fila.tipo_dte ?? null });
+        // Sin regla_id (hermana propagada antes de ligarse, o fila IA anterior a la regla):
+        // se busca la regla viva por la contraparte más abajo.
+        if (!tipoNoEsDeLaRegla(fila)) reglaPorMov.set(fila.movimiento_id, { reglaId: fila.regla_id ?? null, tipoFila: fila.tipo_dte ?? null });
       }
       cambiadas += count ?? 0;
     }
@@ -394,18 +398,28 @@ export async function cambiarTipoPropuestas(
       // Fase 3: la persona cambió el tipo de filas que una regla clasificó → UNA
       // corrección por regla (no por fila). Baja de nivel, no pisa (reglas-historial.ts).
       // ANTES de acuñar: si la regla a prueba se da vuelta, el acuñar de abajo la refuerza.
-      if (reglaPorMov.size > 0) {
+      const porContraparte = new Map<string, string | null>(); // patrón|flujo → regla (una consulta por contraparte)
+      const filasCorregidas: Array<{ reglaId: string; tipoFila: number | null; documentoId: string | null; glosa: string | null }> = [];
+      for (const m of movs) {
+        const r = reglaPorMov.get(m.id);
+        if (!r) continue;
+        let reglaId = r.reglaId;
+        if (!reglaId) {
+          const clave = `${extraerPatronContraparte(m.descripcion)?.patron ?? ""}|${m.tipo_flujo}`;
+          if (!porContraparte.has(clave)) {
+            porContraparte.set(clave, await buscarReglaPorContraparte(ctx.sb, { empresaId: ctx.empresaId, descripcion: m.descripcion, tipoFlujo: m.tipo_flujo }));
+          }
+          reglaId = porContraparte.get(clave) ?? null;
+        }
+        if (reglaId) filasCorregidas.push({ reglaId, tipoFila: r.tipoFila, documentoId: m.documento_id, glosa: m.descripcion });
+      }
+      if (filasCorregidas.length > 0) {
         const { avisos } = await registrarCorrecciones(ctx.sb, {
           empresaId: ctx.empresaId,
           tipoNuevo: tipoDte,
           // Mirada = una fila / el detalle, o un lote chico (≤ 25): lo mismo que la evidencia.
           mirada: esDecisionMirada({ canal, lote_n: gestoN }),
-          filas: movs.filter((m) => reglaPorMov.has(m.id)).map((m) => ({
-            reglaId: reglaPorMov.get(m.id)!.reglaId,
-            tipoFila: reglaPorMov.get(m.id)!.tipoFila,
-            documentoId: m.documento_id,
-            glosa: m.descripcion,
-          })),
+          filas: filasCorregidas,
         });
         avisosRegla = avisos;
       }
@@ -620,25 +634,32 @@ export async function editarPropuesta(
       .eq("id", propuestaId)
       .maybeSingle();
     const aportaSenal = p != null && (p.tipo_dte == null || p.tipo_dte !== campos.tipo_dte);
-    if (p && p.movimiento_id && aportaSenal) {
-      const { data: m } = await ctx.sb
-        .from("movimientos_raw")
-        .select("descripcion, tipo_flujo, documento_id")
-        .eq("id", p.movimiento_id)
-        .maybeSingle();
-      if (m && (m.tipo_flujo === "entrada" || m.tipo_flujo === "salida")) {
-        previo = {
-          descripcion: m.descripcion ?? "",
-          tipo_flujo: m.tipo_flujo,
-          documento_id: m.documento_id,
-          movimiento_id: p.movimiento_id,
-        };
-      }
+    // El movimiento se lee siempre: aprender lo necesita si hay señal, y la corrección de
+    // la regla también sin señal (en disputa, repetir el tipo mirado arma la racha).
+    const { data: m } = p?.movimiento_id
+      ? await ctx.sb
+          .from("movimientos_raw")
+          .select("descripcion, tipo_flujo, documento_id")
+          .eq("id", p.movimiento_id)
+          .maybeSingle()
+      : { data: null };
+    if (p && p.movimiento_id && aportaSenal && m && (m.tipo_flujo === "entrada" || m.tipo_flujo === "salida")) {
+      previo = {
+        descripcion: m.descripcion ?? "",
+        tipo_flujo: m.tipo_flujo,
+        documento_id: m.documento_id,
+        movimiento_id: p.movimiento_id,
+      };
     }
     const pr = p as { regla_id?: string | null; tipo_dte?: number | null; fuente_clasificacion?: string | null; orig_tipo_dte_fuente?: string | null } | null;
-    const reglaId = pr && !tipoNoEsDeLaRegla(pr) ? pr.regla_id : null;
-    if (reglaId) {
-      reglaPrevia = { reglaId, documentoId: previo?.documento_id ?? null, tipoFila: pr?.tipo_dte ?? null, glosa: previo?.descripcion ?? null };
+    if (pr && !tipoNoEsDeLaRegla(pr)) {
+      // Sin regla_id (hermana propagada antes de ligarse, fila IA anterior a la regla):
+      // la regla viva de esa contraparte, con la misma clave que acuñar.
+      const reglaId = pr.regla_id
+        ?? (m ? await buscarReglaPorContraparte(ctx.sb, { empresaId: ctx.empresaId, descripcion: m.descripcion, tipoFlujo: m.tipo_flujo }) : null);
+      if (reglaId) {
+        reglaPrevia = { reglaId, documentoId: m?.documento_id ?? null, tipoFila: pr.tipo_dte ?? null, glosa: m?.descripcion ?? null };
+      }
     }
   }
 

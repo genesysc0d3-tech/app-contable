@@ -19,6 +19,7 @@ import {
   aplicarCorreccion,
   avisoCorreccion,
   esCorreccionDeRegla,
+  resumirAvisos,
   recalcularEstado,
   type EfectoCorreccion,
   type ReglaConHistorial,
@@ -34,6 +35,7 @@ import { clasificarIntocables } from "@/lib/emission/propuestas-intocables";
 import { nuevoLote, sello } from "@/lib/propuestas/sello";
 import type { MovimientoExtraido } from "./types";
 import { contraparteVisible } from "./contraparte-visible";
+import { extraerPatronContraparte, regexContraparte } from "./aprender-regla";
 
 type SB = SupabaseClient<Database>;
 const TROZO = 50;
@@ -47,6 +49,7 @@ export interface EvidenciaFila {
   confirmadas_miradas: number;
   aciertos: number;
   soportes: number;
+  confirmadas_tras_correccion?: number;
   documentos_confirman: string[] | null;
   glosa: string | null;
 }
@@ -97,8 +100,8 @@ export async function registrarCorrecciones(
   args: { empresaId: string; tipoNuevo: number; mirada: boolean; filas: FilaCorregida[] },
 ): Promise<ResultadoCorrecciones> {
   const efectos = new Map<string, EfectoCorreccion>();
-  const avisos: string[] = [];
-  if (args.tipoNuevo !== 39 && args.tipoNuevo !== 41) return { efectos, avisos };
+  const conAviso: Array<{ efecto: EfectoCorreccion; texto: string }> = [];
+  if (args.tipoNuevo !== 39 && args.tipoNuevo !== 41) return { efectos, avisos: [] };
   const porRegla = new Map<string, FilaCorregida[]>();
   for (const f of args.filas) {
     if (!f.reglaId) continue;
@@ -108,13 +111,13 @@ export async function registrarCorrecciones(
     try {
       const r = await registrarCorreccion(sb, { empresaId: args.empresaId, reglaId, tipoNuevo: args.tipoNuevo, mirada: args.mirada, filas });
       efectos.set(reglaId, r.efecto);
-      const aviso = avisoCorreccion(r.efecto, contraparteVisible(r.glosa), r.tipoDte);
-      if (aviso) avisos.push(aviso);
+      const texto = avisoCorreccion(r.efecto, contraparteVisible(r.glosa), r.tipoDte);
+      if (texto) conAviso.push({ efecto: r.efecto, texto });
     } catch {
       efectos.set(reglaId, "ninguno");
     }
   }
-  return { efectos, avisos };
+  return { efectos, avisos: resumirAvisos(conAviso) };
 }
 
 async function registrarCorreccion(
@@ -147,6 +150,7 @@ async function registrarCorreccion(
       disputa_eleccion: res.disputa_eleccion,
       disputa_racha: res.disputa_racha,
       aprendida_bajo_marca: res.aprendida_bajo_marca,
+      corregida_at: new Date().toISOString(),
     };
     if (res.reiniciaVentana) {
       // Lo confirmado ANTES de este cambio era del tipo corregido / en disputa: no puede
@@ -174,9 +178,34 @@ async function registrarCorreccion(
         );
       } catch { /* best-effort */ }
     }
-    return { efecto: res.efecto, tipoDte: res.tipo_dte, glosa: fila.glosa ?? null };
+    // El aviso habla del tipo que quedó o, en la racha de disputa, del que eligió.
+    const tipoAviso = res.efecto === "racha_disputa" || res.efecto === "disputa_a_ciegas" ? a.tipoNuevo : res.tipo_dte;
+    return { efecto: res.efecto, tipoDte: tipoAviso, glosa: fila.glosa ?? null };
   }
   return nada;
+}
+
+/**
+ * La regla de usuario VIVA de esta contraparte (misma clave que acuñar: patrón regex de
+ * extraerPatronContraparte + flujo). Para corregir filas SIN regla_id: hermanas que la
+ * propagación acomodó antes de ligarlas, o filas de la IA anteriores a la regla.
+ */
+export async function buscarReglaPorContraparte(
+  sb: SB,
+  a: { empresaId: string; descripcion: string | null | undefined; tipoFlujo: string | null | undefined },
+): Promise<string | null> {
+  if (a.tipoFlujo !== "entrada" && a.tipoFlujo !== "salida") return null;
+  const extra = extraerPatronContraparte(a.descripcion);
+  if (!extra) return null;
+  const { data } = await sb
+    .from("clasificacion_reglas")
+    .select("id")
+    .eq("empresa_id", a.empresaId)
+    .eq("patron", regexContraparte(extra.patron))
+    .eq("tipo_flujo_match", a.tipoFlujo)
+    .eq("activa", true)
+    .limit(1);
+  return (data as Array<{ id: string }> | null)?.[0]?.id ?? null;
 }
 
 // ── Recalcular el estado derivado ───────────────────────────────────────────────
@@ -221,17 +250,23 @@ export async function recalcularEstadoReglas(
   const escrituras: Array<() => Promise<number>> = [];
   for (const r of reglas) {
     const e = ev.get(r.id);
-    const rec = recalcularEstado(r, { confirmadas: e?.confirmadas ?? 0, confirmadasMiradas: e?.confirmadas_miradas ?? 0 });
-    const cambiaEstado = rec.estado !== (r.estado ?? "firme");
+    const rec = recalcularEstado(r, {
+      confirmadas: e?.confirmadas ?? 0,
+      confirmadasMiradas: e?.confirmadas_miradas ?? 0,
+      confirmadasTrasCorreccion: e?.confirmadas_tras_correccion ?? 0,
+    });
+    const cambiaEstado = rec.estado !== (r.estado ?? "firme") || rec.corregidas_en_ventana !== (r.corregidas_en_ventana ?? 0);
     if (rec.cambio && (cambiaEstado || !opts.soloEstado)) {
       escrituras.push(async () => {
         const { count } = await sb
           .from("clasificacion_reglas")
-          .update({ estado: rec.estado, veces_confirmada: rec.veces_confirmada }, { count: "exact" })
+          .update({ estado: rec.estado, veces_confirmada: rec.veces_confirmada, corregidas_en_ventana: rec.corregidas_en_ventana }, { count: "exact" })
           .eq("id", r.id)
           .eq("empresa_id", empresaId)
-          // condicional al estado leído: una corrección en paralelo gana.
-          .eq("estado", String(r.estado ?? "firme"));
+          // condicional a lo leído: una corrección en paralelo (cambia estado o
+          // veces_corregida) gana sobre el recálculo.
+          .eq("estado", String(r.estado ?? "firme"))
+          .eq("veces_corregida", r.veces_corregida ?? 0);
         return cambiaEstado ? count ?? 0 : 0;
       });
     }

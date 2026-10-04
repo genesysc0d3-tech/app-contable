@@ -453,8 +453,10 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
     const avisoRegla = e && "aviso" in e && e.aviso ? ` · ${e.aviso}` : "";
     if (r.error) toast(r.error, "error");
     else if (ap && ap.propagadas > 0) toast(`Lista · acomodé ${ap.propagadas} más de la misma contraparte${avisoRegla}`);
-    else if (ap && (ap.creada || ap.actualizada)) toast(`Lista · aprendí esta contraparte${avisoRegla}`);
-    else toast(`Lista${avisoRegla}`);
+    // El aviso de la regla ya dice qué aprendí: no repetir "aprendí esta contraparte".
+    else if (avisoRegla) toast(`Lista${avisoRegla}`);
+    else if (ap && (ap.creada || ap.actualizada)) toast("Lista · aprendí esta contraparte");
+    else toast("Lista");
     onAction();
     setBusy(false);
     onClose();

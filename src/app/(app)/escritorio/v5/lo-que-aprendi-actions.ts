@@ -13,7 +13,7 @@ import type { Database } from "@/lib/database.types";
 import { getEmpresaAndService } from "@/lib/auth/contexto-empresa";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { deshacerRegla, leerEvidencia, recalcularEstadoReglas } from "@/lib/ai/reglas-historial";
-import { contraparteVisible, mensajeDeshacer, ordenarAprendidas, type ReglaAprendida } from "./lo-que-aprendi-util";
+import { contraparteVisible, mensajeDeshacer, ordenarAprendidas, SIN_NOMBRE, type ReglaAprendida } from "./lo-que-aprendi-util";
 import type { EstadoRegla } from "@/lib/ai/regla-evidencia";
 
 // Mismo guard que Check (rol, vetado, empresa activa, bloqueo de escritura del modo
@@ -50,7 +50,9 @@ export async function listarLoQueAprendi(): Promise<{ reglas: ReglaAprendida[] }
     const e = ev.get(r.id);
     return {
       id: r.id,
-      contraparte: contraparteVisible(e?.glosa ?? null),
+      // Sin glosa viva → null ("de una cartola borrada"); con glosa sin nombre legible,
+      // un rótulo (nunca la glosa cruda).
+      contraparte: e?.glosa ? (contraparteVisible(e.glosa) ?? SIN_NOMBRE) : null,
       tipo: r.tipo_dte === 41 ? "Exenta" : r.tipo_dte === 39 ? "Afecta" : null,
       aciertos: e?.aciertos ?? 0,
       estado: r.estado as EstadoRegla,
