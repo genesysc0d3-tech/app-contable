@@ -159,14 +159,24 @@ describe("sello en cada acción de Check", () => {
     await A.devolverCartola("D1");
     exigirSello("devolver_cartola", 7, false);
   });
-  it("decidirVenta («¿?»): reset a pendiente + decisión comparten UN lote y canal", async () => {
+  it("decidirVenta («¿?»): reset a pendiente y decisión van selladas con el mismo canal y lotes DISTINTOS", async () => {
+    // Lotes distintos: el trigger toma "mismo lote que la escritura anterior" como sin sello.
+    const revisar = () => {
+      const us = updates();
+      expect(us.length).toBeGreaterThanOrEqual(2);
+      for (const u of us) {
+        expect(u.decision_canal).toBe("check_fila");
+        expect(u.decision_por).toBe("U1");
+        expect(u.decision_lote).toMatch(/^[0-9a-f-]{36}$/);
+      }
+      expect(new Set(us.map((u) => u.decision_lote)).size).toBe(2);
+    };
     estado.selectPropuestas = [{ id: "P1", total: 1000, movimiento_id: null }];
     await A.decidirVenta(["P1"], "exenta", "boleta");
-    expect(updates().length).toBeGreaterThanOrEqual(2);
-    exigirSello("check_fila", 1, false);
+    revisar();
     estado.llamadas = [];
     await A.decidirVenta(["P1"], "no_es_venta", "boleta");
-    exigirSello("check_fila", 1, false);
+    revisar();
   });
   it("un lote que llega del navegador y no es uuid se ignora", async () => {
     await A.rechazarPropuestas(["P1", "P2"], "check_lote", "no-es-uuid");

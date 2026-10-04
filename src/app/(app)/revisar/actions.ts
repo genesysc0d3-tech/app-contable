@@ -467,16 +467,19 @@ export async function decidirVenta(
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
-  // UN gesto = UN lote: el reset a pendiente y la decisión (rechazar / cambiar tipo)
-  // comparten uuid y canal (Fase 1 medición).
+  // El reset a pendiente y la decisión (rechazar / cambiar tipo) van con lotes
+  // DISTINTOS: el trigger toma "mismo lote que la escritura anterior" como escritura
+  // sin sellar, así que compartirlo dejaba la decisión real como sin_sello
+  // (revisión adversarial de la integración, 2026-10-04). Mismo canal.
   const canal = canalDeOrigen(origen, propuestaIds.length);
+  const loteReset = nuevoLote();
   const lote = nuevoLote();
   const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
   if ("error" in sepR) return { error: sepR.error, count: 0 };
   for (let i = 0; i < sepR.tocables.length; i += BATCH_SIZE) {
     const { error } = await ctx.sb
       .from("propuestas_ia")
-      .update({ estado: "pendiente", ...selloDe(ctx, canal, propuestaIds.length, lote) })
+      .update({ estado: "pendiente", ...selloDe(ctx, canal, propuestaIds.length, loteReset) })
       .eq("empresa_id", ctx.empresaId)
       .in("id", sepR.tocables.slice(i, i + BATCH_SIZE))
       .eq("estado", "aprobado")
