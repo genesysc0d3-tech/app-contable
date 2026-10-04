@@ -63,5 +63,6 @@ describe("barrido exhaustivo: fuente coherente con la decisión", () => {
                           n++;
                         }
     expect(n).toBeGreaterThan(50000);
-  });
+    // Barrido de >50.000 combinaciones: en CI tarda más que el tope por defecto (5 s).
+  }, 60_000);
 });
