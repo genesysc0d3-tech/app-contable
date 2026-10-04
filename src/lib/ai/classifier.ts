@@ -35,6 +35,37 @@ export interface ClasificacionRegla {
    * "listas" en vez de rebotar a Check (ver aprender-regla.ts).
    */
   tipo_dte: number | null;
+  /** Desempate final del orden determinista (más antigua primero). */
+  created_at?: string | null;
+}
+
+/**
+ * ORDEN DETERMINISTA de las reglas (antes lo decidía Postgres en los empates de
+ * `prioridad`: dos reglas con la misma prioridad podían ganar distinto entre
+ * corridas). Se ordena EN CÓDIGO, siempre igual:
+ *   1. regla de usuario (empresa_id) antes que global (seed);
+ *   2. prioridad ascendente (menor número = manda);
+ *   3. patrón más largo primero (más específico);
+ *   4. created_at ascendente (la más antigua);
+ *   5. id (desempate total).
+ * No muta la entrada.
+ */
+export function ordenarReglas<T extends Pick<ClasificacionRegla, "empresa_id" | "prioridad" | "patron" | "id"> & { created_at?: string | null }>(
+  reglas: readonly T[],
+): T[] {
+  return [...reglas].sort((a, b) => {
+    const ua = a.empresa_id ? 0 : 1;
+    const ub = b.empresa_id ? 0 : 1;
+    if (ua !== ub) return ua - ub;
+    if (a.prioridad !== b.prioridad) return a.prioridad - b.prioridad;
+    const la = (a.patron ?? "").length;
+    const lb = (b.patron ?? "").length;
+    if (la !== lb) return lb - la;
+    const ca = a.created_at ?? "";
+    const cb = b.created_at ?? "";
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
 }
 
 export interface ClassifierResult {
@@ -64,9 +95,8 @@ function getServiceClient() {
 }
 
 /**
- * Load active rules for an empresa (user rules + global rules). Returns them
- * sorted by prioridad ascending — lower number = higher priority, user rules
- * by convention use prioridad 50, globals use 80-110.
+ * Load active rules for an empresa (user rules + global rules), en el orden
+ * determinista de `ordenarReglas` (usuario > global, prioridad, largo, antigüedad, id).
  */
 export async function loadReglas(empresaId: string): Promise<ClasificacionRegla[]> {
   try {
@@ -79,7 +109,7 @@ export async function loadReglas(empresaId: string): Promise<ClasificacionRegla[
       .eq("activa", true)
       .order("prioridad", { ascending: true });
     if (error || !data) return [];
-    return data as ClasificacionRegla[];
+    return ordenarReglas(data as ClasificacionRegla[]);
   } catch {
     return [];
   }
@@ -192,7 +222,7 @@ export const SUFIJO_SOCIETARIO = /\b(spa|ltda\.?|limitada|eirl|e\.i\.r\.l\.?|s\.
 /**
  * Classify a batch of movimientos using the loaded rules.
  *
- * For each movimiento, the first matching rule (by prioridad ascending)
+ * For each movimiento, the first matching rule (orden de `ordenarReglas`)
  * wins. Movimientos without any matching rule go to `noClasificados`.
  */
 export function classifyWithRules(
@@ -201,10 +231,13 @@ export function classifyWithRules(
 ): ClassifierResult {
   const clasificados: ClassifierResult["clasificados"] = [];
   const noClasificados: ClassifierResult["noClasificados"] = [];
+  // Orden determinista en código: el que llama puede pasar las reglas en cualquier
+  // orden y gana siempre la misma.
+  const ordenadas = ordenarReglas(reglas);
 
   for (let i = 0; i < movimientos.length; i++) {
     const mov = movimientos[i];
-    const matchingRule = reglas.find((r) => ruleMatches(mov, r));
+    const matchingRule = ordenadas.find((r) => ruleMatches(mov, r));
     if (matchingRule) {
       const propuesta = buildPropuestaFromRule(mov, i, matchingRule);
       clasificados.push({

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/Toast";
+import { destino, destinoPropuesta, esAfectoPorTipo, MSG_DECIDE_SI_ES_VENTA } from "@/lib/sii/destino";
 import { aprobarPropuesta, editarPropuesta } from "../../revisar/actions";
 import { fmt, fmtShort, type Propuesta, type ClienteResumen } from "./revisar-shared";
 import EditorAmpliado from "./EditorAmpliado";
@@ -182,10 +183,13 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
   // defecto en vez de bloquear pidiendo "elige el tipo" (eso hacía DESAPARECER el botón
   // Aprobar al (re)seleccionar el doc). El usuario puede cambiar a afecta si corresponde.
   const tipoBase = propuesta.tipo_propuesto;
-  const defaultTipo = (tipoBase === "boleta" || tipoBase === "factura") && Number(propuesta.iva ?? 0) === 0 ? "exenta" : tipoBase;
+  // Destino único: «¿?» (arriendo/comisión o conflicto regla↔marca) no se pinta ni
+  // afecta ni exenta hasta que la persona elija; una no-venta va a la vista "no se emite".
+  const porDecidir = !ov && destinoPropuesta(propuesta) === "preguntar";
+  const defaultTipo = !porDecidir && esAfectoPorTipo(tipoBase) && Number(propuesta.iva ?? 0) === 0 ? "exenta" : tipoBase;
   const tipo = ov?.tipo ?? defaultTipo;
-  const isAfecta = tipo === "boleta" || tipo === "factura" || tipo === "factura_afecta";
-  const noBoletea = tipo === "gasto_egreso" || tipo === "no_comercial";
+  const isAfecta = esAfectoPorTipo(tipo);
+  const noBoletea = destino(tipo) === "no_es_venta";
   const neto = ov?.neto ?? propuesta.monto_neto ?? Math.round((propuesta.total ?? 0) / 1.19);
   const iva = ov?.iva ?? propuesta.iva ?? Math.round(neto * 0.19);
   const total = ov?.total ?? propuesta.total ?? neto + iva;
@@ -226,7 +230,11 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
       setBusy(false);
     }
   };
-  const aprobar = () => commit(() => aprobarPropuesta(propuesta.id, selClienteId || null), "Aprobada", isAfecta ? 39 : 41);
+  const aprobar = () => {
+    // Un «¿?» no se aprueba con un 41 adivinado: primero Exenta o Afecta (o Eliminar si no es venta).
+    if (porDecidir) { toast(`${MSG_DECIDE_SI_ES_VENTA} Marca Exenta o Afecta arriba; si no es venta, elimínala de la mesa.`, "error"); return; }
+    return commit(() => aprobarPropuesta(propuesta.id, selClienteId || null), "Aprobada", isAfecta ? 39 : 41);
+  };
   const registrar = () => commit(() => aprobarPropuesta(propuesta.id, null), "Registrada", null);
 
   // Baja confianza = gris (mismo criterio que las listas de revisar/CartolaEditor):
@@ -296,7 +304,7 @@ export default function VeredictoCard({ propuesta, clientes, empresaId: _empresa
                 <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: "0.7em" }}>
                   <div style={{ display: "flex", width: "fit-content", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
                     {([["exenta", "Exenta · sin IVA · 41", "var(--blue)"], ["boleta", "Afecta · con IVA · 39", "var(--accent)"]] as const).map(([k, lbl, c]) => {
-                      const active = k === "boleta" ? isAfecta : !isAfecta;
+                      const active = !porDecidir && (k === "boleta" ? isAfecta : !isAfecta);
                       return (
                         <button key={k} onClick={() => { if (!active || conflicto) setTipo(k); }} disabled={busy}
                           style={{ fontSize: "0.9em", fontWeight: 700, padding: "0.55em 1.15em", border: "none", cursor: (active && !conflicto) ? "default" : "pointer", background: active ? `color-mix(in srgb, ${c} 25%, transparent)` : "transparent", color: active ? c : "var(--text3)", transition: "all .12s" }}>{lbl}</button>

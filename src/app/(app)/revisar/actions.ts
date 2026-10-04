@@ -2,12 +2,13 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { ROLES_EMISION } from "@/lib/auth/roles";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { getDevSupportWriteBlock } from "@/lib/dev/support-mode";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
+import { avisoPorDecidir, MSG_TIPO_POR_DECIDIR, PG_TIPOS_POR_DECIDIR, PG_OR_SIN_CONFLICTO_MARCA, PG_OR_ES_POR_DECIDIR } from "@/lib/sii/destino";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
 import { confirmarMapaPorCheck } from "@/lib/cartola/confirmacion-mapa";
 import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
@@ -19,6 +20,26 @@ const BATCH_SIZE = 50;
 const ESTADOS_APROBABLES = ["pendiente", "listo", "editado"];
 const MENSAJE_NO_APROBABLE =
   "Este movimiento cambió mientras lo mirabas (otra persona lo aprobó, rechazó o emitió). Recarga para ver cómo quedó.";
+
+/** Cuántas de estas filas son «¿?» (destino "preguntar"). Best-effort: 0 si falla. */
+async function contarPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[]): Promise<number> {
+  let n = 0;
+  try {
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const { count } = await sb
+        .from("propuestas_ia")
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .in("id", ids.slice(i, i + BATCH_SIZE))
+        .or(PG_OR_ES_POR_DECIDIR);
+      n += count ?? 0;
+    }
+  } catch { /* el aviso es informativo */ }
+  return n;
+}
+async function hayPorDecidir(sb: SupabaseClient, empresaId: string, ids: string[]): Promise<boolean> {
+  return (await contarPorDecidir(sb, empresaId, ids)) > 0;
+}
 
 /**
  * Fetches the current user's empresa_id (with auth) and returns a service-role
@@ -95,10 +116,17 @@ export async function aprobarPropuesta(
     // resucitaba a `aprobado` lo que otra persona había rechazado/descartado (volvía a
     // Emitir) o se le cambiaba el cliente a una ya aprobada/emitida. Filtro EN la
     // misma consulta (atómico), mismo allowlist que editarPropuesta.
-    .in("estado", ESTADOS_APROBABLES);
+    .in("estado", ESTADOS_APROBABLES)
+    // Destino único: un «¿?» (arriendo/comisión, conflicto regla↔marca) no se aprueba
+    // sin decidir si es venta exenta, afecta o no es venta.
+    .not("tipo_propuesto", "in", PG_TIPOS_POR_DECIDIR)
+    .or(PG_OR_SIN_CONFLICTO_MARCA);
 
   if (error) return { error: error.message };
-  if (!count) return { error: MENSAJE_NO_APROBABLE };
+  if (!count) {
+    if (await hayPorDecidir(ctx.sb, ctx.empresaId, [propuestaId])) return { error: MSG_TIPO_POR_DECIDIR };
+    return { error: MENSAJE_NO_APROBABLE };
+  }
   await recordCuentaAudit({
     sb: ctx.sb,
     empresaId: ctx.empresaId,
@@ -369,6 +397,8 @@ export async function cambiarTipoPropuestas(
           descripcion: m.descripcion ?? "",
           tipoFlujo: m.tipo_flujo,
           tipoDte: tipoDte as 39 | 41,
+          // Tamaño del gesto: un "Afecta" en lote grande no confirma la regla contra la marca P2P.
+          tamanoLote: cambiadas,
         });
       }
     } catch {
@@ -380,6 +410,38 @@ export async function cambiarTipoPropuestas(
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
   return { ok: true, count: cambiadas, aviso: avisoSeQuedan(sepR.intocables) || undefined };
+}
+
+/**
+ * Decisión de un «¿?» (destino "preguntar"): ¿es venta exenta, afecta o no es venta?
+ * Reutiliza cambiarTipoPropuestas / rechazarPropuestas. Un «¿?» que quedó APROBADO
+ * (de antes del destino único, o por otro canal) nunca se pudo emitir — el lote y los
+ * jobs lo rechazan — así que primero vuelve a 'pendiente' para poder decidirlo. Lo
+ * emitido / a medias / en vuelo no se toca (clasificarIntocables).
+ */
+export async function decidirVenta(
+  propuestaIds: string[],
+  decision: "exenta" | "afecta" | "no_es_venta",
+  mesa: "boleta" | "factura" = "boleta",
+): Promise<{ ok?: boolean; error?: string; count: number; aviso?: string }> {
+  if (propuestaIds.length === 0) return { ok: true, count: 0 };
+  const ctx = await getEmpresaAndService();
+  if ("error" in ctx) return { error: ctx.error, count: 0 };
+  const sepR = await clasificarIntocables(ctx.sb, ctx.empresaId, propuestaIds);
+  if ("error" in sepR) return { error: sepR.error, count: 0 };
+  for (let i = 0; i < sepR.tocables.length; i += BATCH_SIZE) {
+    const { error } = await ctx.sb
+      .from("propuestas_ia")
+      .update({ estado: "pendiente" })
+      .eq("empresa_id", ctx.empresaId)
+      .in("id", sepR.tocables.slice(i, i + BATCH_SIZE))
+      .eq("estado", "aprobado")
+      .or(PG_OR_ES_POR_DECIDIR);
+    if (error) return { error: error.message, count: 0 };
+  }
+  return decision === "no_es_venta"
+    ? rechazarPropuestas(propuestaIds)
+    : cambiarTipoPropuestas(propuestaIds, decision, mesa);
 }
 
 export async function rechazarPropuesta(propuestaId: string) {
@@ -575,7 +637,7 @@ export async function editarPropuesta(
 
 export async function aprobarTodas(
   propuestaIds: string[]
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; porDecidir?: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
 
   const ctx = await getEmpresaAndService();
@@ -594,7 +656,10 @@ export async function aprobarTodas(
       .in("id", batch)
       // Guard de estado en la propia consulta (seguridad 2026-09-30, punto 4): las que
       // otra persona rechazó/descartó o que ya están aprobadas no se tocan.
-      .in("estado", ESTADOS_APROBABLES);
+      .in("estado", ESTADOS_APROBABLES)
+      // Los «¿?» se quedan: primero hay que decir si son venta.
+      .not("tipo_propuesto", "in", PG_TIPOS_POR_DECIDIR)
+      .or(PG_OR_SIN_CONFLICTO_MARCA);
 
     if (error) {
       return {
@@ -608,6 +673,7 @@ export async function aprobarTodas(
   // If we tried to approve N but updated 0, surface as error so the optimistic
   // UI can roll back instead of silently lying to the user.
   if (aprobadas === 0 && propuestaIds.length > 0) {
+    if (await hayPorDecidir(ctx.sb, ctx.empresaId, propuestaIds)) return { error: MSG_TIPO_POR_DECIDIR, count: 0 };
     return {
       error: "No se actualizó ninguna propuesta — verifica permisos o que las propuestas existan",
       count: 0,
@@ -625,10 +691,11 @@ export async function aprobarTodas(
     metadata: { cantidad: aprobadas },
   });
 
+  const porDecidir = aprobadas < propuestaIds.length ? await contarPorDecidir(ctx.sb, ctx.empresaId, propuestaIds) : 0;
   revalidatePath("/revisar");
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: aprobadas };
+  return { ok: true, count: aprobadas, ...(porDecidir > 0 ? { porDecidir, aviso: avisoPorDecidir(porDecidir) } : {}) };
 }
 
 // "Poner listo" (staged): marca propuestas como preparadas SIN mandarlas a Emitir.
@@ -637,7 +704,7 @@ export async function aprobarTodas(
 export async function ponerListo(
   propuestaIds: string[],
   clienteId?: string | null
-): Promise<{ ok?: boolean; error?: string; count: number }> {
+): Promise<{ ok?: boolean; error?: string; count: number; porDecidir?: number; aviso?: string }> {
   if (propuestaIds.length === 0) return { ok: true, count: 0 };
   const ctx = await getEmpresaAndService();
   if ("error" in ctx) return { error: ctx.error, count: 0 };
@@ -656,14 +723,19 @@ export async function ponerListo(
       // Guard de estado (auditoría #25/#29): solo se stagea desde estados PRE-emisión.
       // Nunca degradar una 'aprobado' (ya en la cola de Emitir) ni resucitar una
       // 'rechazado'/emitida a 'listo'.
-      .in("estado", ["pendiente", "editado", "listo"]);
+      .in("estado", ["pendiente", "editado", "listo"])
+      // Destino único: lo "por decidir" (arriendo/comisión) no se stagea a ciegas.
+      .not("tipo_propuesto", "in", PG_TIPOS_POR_DECIDIR)
+      .or(PG_OR_SIN_CONFLICTO_MARCA);
     if (error) return { error: `Error en batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`, count: listas };
     listas += count ?? 0;
   }
-  if (listas === 0 && propuestaIds.length > 0) return { error: "No se marcó ninguna propuesta como lista", count: 0 };
+  if (listas === 0 && propuestaIds.length > 0) return { error: `No se marcó ninguna propuesta como lista. Si es un «¿?»: ${MSG_TIPO_POR_DECIDIR}`, count: 0 };
+  // B1: si algunas no se movieron por ser «¿?», se dice cuántas (no desaparecen en silencio).
+  const porDecidir = listas < propuestaIds.length ? await contarPorDecidir(ctx.sb, ctx.empresaId, propuestaIds) : 0;
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  return { ok: true, count: listas };
+  return { ok: true, count: listas, ...(porDecidir > 0 ? { porDecidir, aviso: avisoPorDecidir(porDecidir) } : {}) };
 }
 
 // Edita SOLO la glosa (notas) de una boleta ya EN EMISIÓN ('aprobado') o 'listo', SIN
@@ -903,7 +975,10 @@ export async function aprobarCartola(
       .update({ estado: "aprobado" }, { count: "exact" })
       .eq("empresa_id", ctx.empresaId)
       .in("id", batch)
-      .eq("estado", "listo");
+      .eq("estado", "listo")
+      // Un «¿?» que quedó 'listo' (de antes del destino único) no viaja a Emitir.
+      .not("tipo_propuesto", "in", PG_TIPOS_POR_DECIDIR)
+      .or(PG_OR_SIN_CONFLICTO_MARCA);
     if (error) return { error: error.message, count: aprobadas };
     aprobadas += count ?? 0;
   }
@@ -916,7 +991,8 @@ export async function aprobarCartola(
   // A4): aprobar todo sin mirar no es prueba. Solo la aprobación fila a fila.
   revalidatePath("/escritorio");
   revalidatePath("/massdte");
-  const aviso = avisoSeQuedan(sep.intocables);
+  const porDecidir = aprobadas < ids.length ? await contarPorDecidir(ctx.sb, ctx.empresaId, ids) : 0;
+  const aviso = [avisoSeQuedan(sep.intocables), porDecidir > 0 ? avisoPorDecidir(porDecidir) : ""].filter(Boolean).join(" · ");
   return { ok: true, count: aprobadas, ...(aviso ? { aviso } : {}) };
 }
 

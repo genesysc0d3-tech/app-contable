@@ -73,6 +73,9 @@ interface PendientesResponse {
     bloqueadas: number;
     /** Boletas que el SII emitió pero sin folio registrado (lápida revision_pendiente). */
     a_medias?: number;
+    /** Ingresos aprobados "por decidir" (arriendo/comisión): fuera de la cola, contados aparte. */
+    por_decidir?: number;
+    por_decidir_msg?: string | null;
     monto_total: number;
     monto_listo: number;
     // Proveedor de boletas de la empresa (viaja en totales — Mesa.tsx arma este
@@ -149,7 +152,18 @@ function goToCheck(item: { documento_id: string | null; documento_created_at: st
   window.dispatchEvent(new CustomEvent("massdte:open-doc", { detail: { documentoId: item.documento_id, month } }));
 }
 
-function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; otrosTipos?: Record<string, number> }) {
+/** Aviso único de los ingresos "por decidir" (texto del destino único, viene del server). */
+function AvisoPorDecidir({ msg }: { msg?: string | null }) {
+  if (!msg) return null;
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 10px", padding:"10px 13px", borderRadius:10, background:"color-mix(in srgb, var(--accent) 7%, transparent)", border:"1px solid color-mix(in srgb, var(--accent) 24%, transparent)", textAlign:"left" }}>
+      <span style={{fontSize:12,fontWeight:800,color:"var(--accent)"}}>¿?</span>
+      <span style={{fontSize:11.5,color:"var(--text)",flex:1,lineHeight:1.4}}>{msg}</span>
+    </div>
+  );
+}
+
+function EmitirEmpty({ loading = false, otrosTipos = {}, porDecidirMsg = null }: { loading?: boolean; otrosTipos?: Record<string, number>; porDecidirMsg?: string | null }) {
   const otros = Object.values(otrosTipos).reduce((s, n) => s + n, 0);
   return (
     <div className="r-scroll" style={{display:"grid",placeItems:"center",minHeight:320,padding:"42px 18px",textAlign:"center",color:"var(--text2)"}}>
@@ -167,6 +181,7 @@ function EmitirEmpty({ loading = false, otrosTipos = {} }: { loading?: boolean; 
             Estás viendo solo el período del calendario. Si aprobaste en otra fecha, cambia el día, semana o mes arriba.
           </div>
         )}
+        {!loading && porDecidirMsg && <div style={{margin:"14px auto 0",maxWidth:300}}><AvisoPorDecidir msg={porDecidirMsg} /></div>}
         {!loading && otros > 0 && (
           <div style={{margin:"14px auto 0",maxWidth:300,padding:"10px 12px",borderRadius:11,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"var(--amber)",fontSize:10,lineHeight:1.5,textAlign:"left"}}>
             {otros === 1 ? "1 propuesta aprobada quedó" : `${otros} propuestas aprobadas quedaron`} como gasto u otro tipo, por eso no se {otros === 1 ? "emite" : "emiten"} como boleta. Si corresponde boletear, cambia el tipo a Boleta en Check.
@@ -566,7 +581,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
   // Con boletas a medias NO hay retorno temprano: la pestaña "A medias" tiene
   // que verse aunque la cola del período esté vacía (LC 2026-09-25).
   if (totalCount === 0 && aMedias.length === 0) {
-    return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} />;
+    return <EmitirEmpty otrosTipos={data?.aprobadas_otros_tipos ?? {}} porDecidirMsg={data?.totales.por_decidir_msg ?? null} />;
   }
 
   async function verificarItemAMedias(it: ItemAMedias, donde: "a_medias" | "barra"): Promise<ResultadoVerificacion | null> {
@@ -857,6 +872,7 @@ export default function EmitirTabContent({ initial = null, empresaId, mesa = "bo
             }}
           />
         )}
+        <AvisoPorDecidir msg={data?.totales.por_decidir_msg ?? null} />
         {/* Plan/cupo agotado: el 402 del metering aterriza acá con su copy y un
             botón real a Planes (no solo la sugerencia en texto). */}
         {planCta && (
