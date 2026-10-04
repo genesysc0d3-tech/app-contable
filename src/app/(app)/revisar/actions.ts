@@ -6,7 +6,7 @@ import { getEmpresaAndService } from "@/lib/auth/contexto-empresa";
 import { revalidatePath } from "next/cache";
 import { recordCuentaAudit } from "@/lib/audit/account";
 import { aprenderReglaDesdeResolucion, extraerPatronContraparte, type AprenderResultado } from "@/lib/ai/aprender-regla";
-import { buscarReglaPorContraparte, registrarCorrecciones } from "@/lib/ai/reglas-historial";
+import { buscarReglaPorContraparte, buscarReglasPorContrapartes, claveContraparte, registrarCorrecciones } from "@/lib/ai/reglas-historial";
 import { esDecisionMirada } from "@/lib/ai/regla-evidencia";
 
 import { carrilEsExento } from "@/lib/sii/tipo-por-carril";
@@ -330,7 +330,7 @@ export async function cambiarTipoPropuestas(
   const movIdsCambiados: string[] = [];
   // Filas cambiadas que venían de una regla: la corrección se registra UNA vez por regla.
   // Filas cambiadas que pueden corregir una regla (regla_id, o se busca por contraparte).
-  const reglaPorMov = new Map<string, { reglaId: string | null; tipoFila: number | null }>();
+  const reglaPorMov = new Map<string, { reglaId: string | null; tipoFila: number | null; propuestaId: string }>();
   let avisosRegla: string[] = [];
   const lote = loteValido(loteGesto) ?? nuevoLote();
   const canal = origen === undefined ? "check_lote" : canalDeOrigen(origen, gestoN);
@@ -364,7 +364,7 @@ export async function cambiarTipoPropuestas(
         // registrarCorrecciones (esCorreccionDeRegla).
         // Sin regla_id (hermana propagada antes de ligarse, o fila IA anterior a la regla):
         // se busca la regla viva por la contraparte más abajo.
-        if (!tipoNoEsDeLaRegla(fila)) reglaPorMov.set(fila.movimiento_id, { reglaId: fila.regla_id ?? null, tipoFila: fila.tipo_dte ?? null });
+        if (!tipoNoEsDeLaRegla(fila)) reglaPorMov.set(fila.movimiento_id, { reglaId: fila.regla_id ?? null, tipoFila: fila.tipo_dte ?? null, propuestaId: fila.id });
       }
       cambiadas += count ?? 0;
     }
@@ -398,20 +398,17 @@ export async function cambiarTipoPropuestas(
       // Fase 3: la persona cambió el tipo de filas que una regla clasificó → UNA
       // corrección por regla (no por fila). Baja de nivel, no pisa (reglas-historial.ts).
       // ANTES de acuñar: si la regla a prueba se da vuelta, el acuñar de abajo la refuerza.
-      const porContraparte = new Map<string, string | null>(); // patrón|flujo → regla (una consulta por contraparte)
-      const filasCorregidas: Array<{ reglaId: string; tipoFila: number | null; documentoId: string | null; glosa: string | null }> = [];
+      // Las filas sin regla_id buscan su regla viva por contraparte en UNA consulta.
+      const sinRegla = movs.filter((m) => reglaPorMov.has(m.id) && !reglaPorMov.get(m.id)!.reglaId);
+      const porContraparte = sinRegla.length > 0
+        ? await buscarReglasPorContrapartes(ctx.sb, ctx.empresaId, sinRegla.map((m) => ({ descripcion: m.descripcion, tipoFlujo: m.tipo_flujo })))
+        : new Map<string, string>();
+      const filasCorregidas: Array<{ reglaId: string; tipoFila: number | null; documentoId: string | null; glosa: string | null; propuestaId: string }> = [];
       for (const m of movs) {
         const r = reglaPorMov.get(m.id);
         if (!r) continue;
-        let reglaId = r.reglaId;
-        if (!reglaId) {
-          const clave = `${extraerPatronContraparte(m.descripcion)?.patron ?? ""}|${m.tipo_flujo}`;
-          if (!porContraparte.has(clave)) {
-            porContraparte.set(clave, await buscarReglaPorContraparte(ctx.sb, { empresaId: ctx.empresaId, descripcion: m.descripcion, tipoFlujo: m.tipo_flujo }));
-          }
-          reglaId = porContraparte.get(clave) ?? null;
-        }
-        if (reglaId) filasCorregidas.push({ reglaId, tipoFila: r.tipoFila, documentoId: m.documento_id, glosa: m.descripcion });
+        const reglaId = r.reglaId ?? porContraparte.get(claveContraparte(m.descripcion, m.tipo_flujo) ?? "") ?? null;
+        if (reglaId) filasCorregidas.push({ reglaId, tipoFila: r.tipoFila, documentoId: m.documento_id, glosa: m.descripcion, propuestaId: r.propuestaId });
       }
       if (filasCorregidas.length > 0) {
         const { avisos } = await registrarCorrecciones(ctx.sb, {
@@ -625,7 +622,7 @@ export async function editarPropuesta(
     | { descripcion: string; tipo_flujo: "entrada" | "salida"; documento_id: string | null; movimiento_id: string }
     | null = null;
   // Regla que clasificó la fila (Fase 3): si la persona le cambia el tipo, es una corrección.
-  let reglaPrevia: { reglaId: string; documentoId: string | null; tipoFila: number | null; glosa: string | null } | null = null;
+  let reglaPrevia: { reglaId: string; documentoId: string | null; tipoFila: number | null; glosa: string | null; propuestaId: string; explicita: boolean } | null = null;
   if (campos.tipo_dte === 39 || campos.tipo_dte === 41) {
     const { data: p } = await ctx.sb
       .from("propuestas_ia")
@@ -658,7 +655,12 @@ export async function editarPropuesta(
       const reglaId = pr.regla_id
         ?? (m ? await buscarReglaPorContraparte(ctx.sb, { empresaId: ctx.empresaId, descripcion: m.descripcion, tipoFlujo: m.tipo_flujo }) : null);
       if (reglaId) {
-        reglaPrevia = { reglaId, documentoId: m?.documento_id ?? null, tipoFila: pr.tipo_dte ?? null, glosa: m?.descripcion ?? null };
+        reglaPrevia = {
+          reglaId, documentoId: m?.documento_id ?? null, tipoFila: pr.tipo_dte ?? null, glosa: m?.descripcion ?? null,
+          propuestaId,
+          // "Lista" sin tocar el selector sobre una fila que ya traía tipo NO es elegir.
+          explicita: pr.tipo_dte == null || pr.tipo_dte !== campos.tipo_dte,
+        };
       }
     }
   }

@@ -54,7 +54,7 @@ export interface EvidenciaFila {
   glosa: string | null;
 }
 
-const COLS_REGLA = "id, empresa_id, estado, tipo_dte, tipo_propuesto, veces_confirmada, veces_corregida, corregidas_en_ventana, disputa_eleccion, disputa_racha, aprendida_bajo_marca";
+const COLS_REGLA = "id, empresa_id, estado, tipo_dte, tipo_propuesto, veces_confirmada, veces_corregida, corregidas_en_ventana, disputa_eleccion, disputa_racha, disputa_ultima_propuesta, aprendida_bajo_marca";
 type ReglaFila = ReglaConHistorial & { id: string; tipo_propuesto?: string | null };
 
 /**
@@ -81,6 +81,13 @@ export interface FilaCorregida {
   tipoFila?: number | null;
   /** Glosa de la fila: de ahí sale la contraparte del aviso. */
   glosa?: string | null;
+  /** La propuesta (fila): en disputa, la misma fila no suma dos veces a la racha. */
+  propuestaId?: string | null;
+  /**
+   * ¿La persona ELIGIÓ un tipo? Un botón Exenta/Afecta sí; un "Lista" en el detalle sin
+   * tocar el selector, sobre una fila que ya traía tipo, no (default true).
+   */
+  explicita?: boolean;
 }
 
 export interface ResultadoCorrecciones {
@@ -137,11 +144,13 @@ async function registrarCorreccion(
     const regla = r as ReglaFila | null;
     if (!regla || regla.empresa_id == null) return nada;
     // M2: solo filas que mostraban el tipo de la regla (o, en disputa, sin tipo).
-    const fila = a.filas.find((f) => esCorreccionDeRegla(regla, { tipoFila: f.tipoFila ?? null, tipoNuevo: a.tipoNuevo }));
+    const califican = a.filas.filter((f) => esCorreccionDeRegla(regla, { tipoFila: f.tipoFila ?? null, tipoNuevo: a.tipoNuevo, explicita: f.explicita }));
+    // En disputa, preferir una fila distinta a la que sumó la última vez a la racha.
+    const fila = califican.find((f) => !f.propuestaId || f.propuestaId !== regla.disputa_ultima_propuesta) ?? califican[0];
     if (!fila) return nada;
     const ev = await leerEvidencia(sb, a.empresaId, [a.reglaId]);
     const confirmadas = ev?.get(a.reglaId)?.confirmadas ?? regla.veces_confirmada ?? 0;
-    const res = aplicarCorreccion(regla, { tipoNuevo: a.tipoNuevo, confirmadas, mirada: a.mirada });
+    const res = aplicarCorreccion(regla, { tipoNuevo: a.tipoNuevo, confirmadas, mirada: a.mirada, propuestaId: fila.propuestaId ?? null });
     if (res.efecto === "ninguno") return nada;
     const cambios: Record<string, unknown> = {
       estado: res.estado,
@@ -149,6 +158,7 @@ async function registrarCorreccion(
       corregidas_en_ventana: res.corregidas_en_ventana,
       disputa_eleccion: res.disputa_eleccion,
       disputa_racha: res.disputa_racha,
+      disputa_ultima_propuesta: res.disputa_ultima_propuesta,
       aprendida_bajo_marca: res.aprendida_bajo_marca,
       corregida_at: new Date().toISOString(),
     };
@@ -194,18 +204,43 @@ export async function buscarReglaPorContraparte(
   sb: SB,
   a: { empresaId: string; descripcion: string | null | undefined; tipoFlujo: string | null | undefined },
 ): Promise<string | null> {
-  if (a.tipoFlujo !== "entrada" && a.tipoFlujo !== "salida") return null;
-  const extra = extraerPatronContraparte(a.descripcion);
-  if (!extra) return null;
-  const { data } = await sb
-    .from("clasificacion_reglas")
-    .select("id")
-    .eq("empresa_id", a.empresaId)
-    .eq("patron", regexContraparte(extra.patron))
-    .eq("tipo_flujo_match", a.tipoFlujo)
-    .eq("activa", true)
-    .limit(1);
-  return (data as Array<{ id: string }> | null)?.[0]?.id ?? null;
+  const m = await buscarReglasPorContrapartes(sb, a.empresaId, [{ descripcion: a.descripcion, tipoFlujo: a.tipoFlujo }]);
+  return m.get(claveContraparte(a.descripcion, a.tipoFlujo) ?? "") ?? null;
+}
+
+/** Clave (patrón regex | flujo) con que acuñar guarda una regla; null si no hay contraparte. */
+export function claveContraparte(descripcion: string | null | undefined, tipoFlujo: string | null | undefined): string | null {
+  if (tipoFlujo !== "entrada" && tipoFlujo !== "salida") return null;
+  const extra = extraerPatronContraparte(descripcion);
+  return extra ? `${regexContraparte(extra.patron)}|${tipoFlujo}` : null;
+}
+
+/**
+ * Lo mismo para MUCHAS filas en UNA consulta (`.in("patron", …)`, en trozos de 50 por el
+ * largo de URL). Devuelve clave → id de la regla viva (la más antigua si hubiera dos).
+ */
+export async function buscarReglasPorContrapartes(
+  sb: SB,
+  empresaId: string,
+  filas: Array<{ descripcion: string | null | undefined; tipoFlujo: string | null | undefined }>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const claves = new Set(filas.map((f) => claveContraparte(f.descripcion, f.tipoFlujo)).filter((c): c is string => !!c));
+  const patrones = [...new Set([...claves].map((c) => c.slice(0, c.lastIndexOf("|"))))];
+  for (let i = 0; i < patrones.length; i += TROZO) {
+    const { data } = await sb
+      .from("clasificacion_reglas")
+      .select("id, patron, tipo_flujo_match, created_at")
+      .eq("empresa_id", empresaId)
+      .eq("activa", true)
+      .in("patron", patrones.slice(i, i + TROZO))
+      .order("created_at", { ascending: true });
+    for (const r of (data ?? []) as Array<{ id: string; patron: string; tipo_flujo_match: string | null }>) {
+      const k = `${r.patron}|${r.tipo_flujo_match}`;
+      if (claves.has(k) && !out.has(k)) out.set(k, r.id);
+    }
+  }
+  return out;
 }
 
 // ── Recalcular el estado derivado ───────────────────────────────────────────────

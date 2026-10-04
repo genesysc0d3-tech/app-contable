@@ -6,7 +6,7 @@
  *  - reevaluarSinRegla (pura): la próxima regla manda (con su estado); sin regla → Check.
  */
 import { describe, expect, it } from "vitest";
-import { buscarReglaPorContraparte, deshacerRegla, recalcularEstadoReglas, reevaluarSinRegla, registrarCorrecciones, FUENTE_REGLA_DESHECHA } from "./reglas-historial";
+import { buscarReglaPorContraparte, buscarReglasPorContrapartes, claveContraparte, deshacerRegla, recalcularEstadoReglas, reevaluarSinRegla, registrarCorrecciones, FUENTE_REGLA_DESHECHA } from "./reglas-historial";
 import type { ClasificacionRegla } from "./classifier";
 
 type Llamada = { tabla: string; op: string; payload?: unknown; filtros: Record<string, unknown> };
@@ -99,13 +99,27 @@ describe("registrarCorrecciones", () => {
 
 describe("buscarReglaPorContraparte", () => {
   it("misma clave que acuñar: patrón regex de la contraparte + flujo, solo reglas vivas de la empresa", async () => {
-    const { sb, llamadas } = fakeSb((l) => (l.tabla === "clasificacion_reglas" ? { data: [{ id: "r7" }] } : undefined));
+    const { sb, llamadas } = fakeSb((l) => (l.tabla === "clasificacion_reglas" ? { data: [{ id: "r7", patron: "(^|[^a-zà-ÿ])juan perez([^a-zà-ÿ]|$)", tipo_flujo_match: "entrada" }] } : undefined));
     const id = await buscarReglaPorContraparte(sb, { empresaId: "E1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipoFlujo: "entrada" });
     expect(id).toBe("r7");
     expect(llamadas[0].filtros).toMatchObject({
-      "eq:empresa_id": "E1", "eq:patron": "(^|[^a-zà-ÿ])juan perez([^a-zà-ÿ]|$)", "eq:tipo_flujo_match": "entrada", "eq:activa": true,
+      "eq:empresa_id": "E1", "in:patron": ["(^|[^a-zà-ÿ])juan perez([^a-zà-ÿ]|$)"], "eq:activa": true,
     });
     expect(await buscarReglaPorContraparte(sb, { empresaId: "E1", descripcion: "SOBREGIRO CTE", tipoFlujo: "entrada" })).toBeNull();
+  });
+  it("BAJO costo: muchas filas sin regla_id → UNA consulta .in(patron); el flujo tiene que calzar", async () => {
+    const { sb, llamadas } = fakeSb((l) => (l.tabla === "clasificacion_reglas" ? { data: [
+      { id: "rJ", patron: "(^|[^a-zà-ÿ])juan perez([^a-zà-ÿ]|$)", tipo_flujo_match: "entrada" },
+      { id: "rM", patron: "(^|[^a-zà-ÿ])maria soto([^a-zà-ÿ]|$)", tipo_flujo_match: "salida" },
+    ] } : undefined));
+    const m = await buscarReglasPorContrapartes(sb, "E1", [
+      { descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipoFlujo: "entrada" },
+      { descripcion: "ABONO JUAN PEREZ", tipoFlujo: "entrada" },
+      { descripcion: "PAGO MARIA SOTO", tipoFlujo: "entrada" },
+    ]);
+    expect(llamadas.filter((l) => l.tabla === "clasificacion_reglas")).toHaveLength(1);
+    expect(m.get(claveContraparte("ABONO JUAN PEREZ", "entrada")!)).toBe("rJ");
+    expect(m.get(claveContraparte("PAGO MARIA SOTO", "entrada")!)).toBeUndefined(); // la regla es de salida
   });
 });
 

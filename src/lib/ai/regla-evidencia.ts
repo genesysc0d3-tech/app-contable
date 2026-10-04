@@ -77,6 +77,8 @@ export interface ReglaConHistorial {
   /** En disputa: la última elección mirada de la persona y cuántas veces seguidas. */
   disputa_eleccion?: number | null;
   disputa_racha?: number | null;
+  /** Propuesta que sumó la última vez a la racha: la misma fila no cuenta dos veces. */
+  disputa_ultima_propuesta?: string | null;
   aprendida_bajo_marca?: boolean | null;
 }
 
@@ -154,6 +156,7 @@ export interface ResultadoCorreccion {
   corregidas_en_ventana: number;
   disputa_eleccion: number | null;
   disputa_racha: number;
+  disputa_ultima_propuesta: string | null;
   aprendida_bajo_marca: boolean;
   /** La ventana de evidencia vuelve a empezar (evidencia_desde = ahora, confirmadas 0). */
   reiniciaVentana: boolean;
@@ -181,7 +184,7 @@ export const RACHA_SALE_DE_DISPUTA = 2;
  */
 export function aplicarCorreccion(
   r: ReglaConHistorial,
-  c: { tipoNuevo: number; confirmadas: number; mirada: boolean },
+  c: { tipoNuevo: number; confirmadas: number; mirada: boolean; propuestaId?: string | null },
 ): ResultadoCorreccion {
   const antes = estadoDe(r);
   const base: ResultadoCorreccion = {
@@ -192,6 +195,7 @@ export function aplicarCorreccion(
     corregidas_en_ventana: r.corregidas_en_ventana ?? 0,
     disputa_eleccion: r.disputa_eleccion ?? null,
     disputa_racha: r.disputa_racha ?? 0,
+    disputa_ultima_propuesta: r.disputa_ultima_propuesta ?? null,
     aprendida_bajo_marca: r.aprendida_bajo_marca === true,
     reiniciaVentana: false,
   };
@@ -200,15 +204,20 @@ export function aplicarCorreccion(
 
   if (antes === "en_disputa") {
     if (!c.mirada) return { ...base, efecto: "disputa_a_ciegas", veces_corregida: corregidas, corregidas_en_ventana: base.corregidas_en_ventana + 1 };
+    // La racha se arma con filas DISTINTAS: repetir sobre la misma no enseña nada nuevo.
+    if (c.propuestaId && c.propuestaId === base.disputa_ultima_propuesta) return base;
     const racha = base.disputa_eleccion === c.tipoNuevo ? base.disputa_racha + 1 : 1;
     if (racha >= RACHA_SALE_DE_DISPUTA) {
       return {
         ...base, efecto: "sale_de_disputa", estado: "a_prueba", tipo_dte: c.tipoNuevo, veces_corregida: corregidas,
-        corregidas_en_ventana: 0, disputa_eleccion: null, disputa_racha: 0,
+        corregidas_en_ventana: 0, disputa_eleccion: null, disputa_racha: 0, disputa_ultima_propuesta: null,
         aprendida_bajo_marca: c.tipoNuevo === r.tipo_dte ? base.aprendida_bajo_marca : false, reiniciaVentana: true,
       };
     }
-    return { ...base, efecto: "racha_disputa", veces_corregida: corregidas, corregidas_en_ventana: base.corregidas_en_ventana + 1, disputa_eleccion: c.tipoNuevo, disputa_racha: racha };
+    return {
+      ...base, efecto: "racha_disputa", veces_corregida: corregidas, corregidas_en_ventana: base.corregidas_en_ventana + 1,
+      disputa_eleccion: c.tipoNuevo, disputa_racha: racha, disputa_ultima_propuesta: c.propuestaId ?? null,
+    };
   }
 
   if (r.tipo_dte == null || r.tipo_dte === c.tipoNuevo) return base;
@@ -227,7 +236,7 @@ export function aplicarCorreccion(
   if (c.mirada || enDisputaPorCorrecciones(enVentana, confirmadas)) {
     return {
       ...base, efecto: "en_disputa", estado: "en_disputa", veces_corregida: corregidas,
-      corregidas_en_ventana: enVentana, disputa_eleccion: null, disputa_racha: 0, reiniciaVentana: true,
+      corregidas_en_ventana: enVentana, disputa_eleccion: null, disputa_racha: 0, disputa_ultima_propuesta: null, reiniciaVentana: true,
     };
   }
   return { ...base, efecto: "suma", veces_corregida: corregidas, corregidas_en_ventana: enVentana };
@@ -238,14 +247,16 @@ export function aplicarCorreccion(
  * clienta en la fila (su tipo_dte), no contra el tipo guardado en la regla: una fila
  * cuyo tipo no era el de la regla (lo forzó el emisor exento, lo cambió antes una
  * persona…) no habla de la regla. En disputa la regla no estampa tipo y la fila puede
- * traer el del auto (p. ej. 41 por la marca P2P): CUALQUIER elección sobre una fila
- * de esa regla cuenta para la racha de salida, sea cual sea el tipo de la fila.
+ * traer el del auto (p. ej. 41 por la marca P2P): una ELECCIÓN EXPLÍCITA sobre una fila
+ * de esa regla cuenta para la racha de salida, sea cual sea el tipo de la fila. Un
+ * "Lista" en el detalle sin tocar el selector, sobre una fila que ya traía tipo, no es
+ * una elección (`explicita: false`); un botón Exenta/Afecta en la lista, sí.
  */
 export function esCorreccionDeRegla(
   r: Pick<ReglaConHistorial, "estado" | "tipo_dte">,
-  f: { tipoFila: number | null | undefined; tipoNuevo: number },
+  f: { tipoFila: number | null | undefined; tipoNuevo: number; explicita?: boolean },
 ): boolean {
-  if (r.estado === "en_disputa") return true;
+  if (r.estado === "en_disputa") return f.explicita !== false;
   return r.tipo_dte != null && f.tipoFila === r.tipo_dte && f.tipoNuevo !== f.tipoFila;
 }
 

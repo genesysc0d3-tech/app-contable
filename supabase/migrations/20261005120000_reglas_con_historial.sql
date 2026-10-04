@@ -56,6 +56,7 @@ alter table public.clasificacion_reglas
   add column if not exists corregida_at         timestamptz,
   add column if not exists disputa_eleccion     smallint,
   add column if not exists disputa_racha        integer not null default 0,
+  add column if not exists disputa_ultima_propuesta uuid,  -- sin FK: la propuesta puede borrarse
   add column if not exists ligada_a_cartolas    boolean not null default false;
 
 -- Desde ahora, una regla nueva nace a prueba y ligada a sus cartolas (las de arriba ya
@@ -212,6 +213,38 @@ create trigger trg_regla_soportes_al_borrar
   after delete on public.clasificacion_regla_soportes
   for each row execute function public.clasificacion_regla_soportes_al_borrar();
 
+-- Zombies: una regla LIGADA a cartolas que se quedó sin soportes y sin filas vivas por
+-- otro camino (se borraron las cartolas donde clasificó sin dejar soporte) → huérfana,
+-- igual que el trigger. Nunca toca reglas no ligadas (las existentes), deshechas ni
+-- recién nacidas (1 día de gracia: el soporte del nacimiento es best-effort). La llama
+-- el cron nocturno por empresa. Devuelve cuántas dejó huérfanas.
+create or replace function public.huerfanas_sin_evidencia(p_empresa_id uuid)
+returns integer
+language sql
+security invoker
+set search_path = public, pg_temp
+as $$
+  with u as (
+    update public.clasificacion_reglas r
+       set estado = 'huerfana',
+           activa = false,
+           nombre = case
+             when r.tipo_dte in (41, 34) then 'Contraparte de una cartola borrada · Exenta'
+             when r.tipo_dte in (39, 33) then 'Contraparte de una cartola borrada · Afecta'
+             else 'Contraparte de una cartola borrada'
+           end,
+           estado_cambiado_at = now()
+     where r.empresa_id = p_empresa_id
+       and r.ligada_a_cartolas
+       and r.estado not in ('huerfana', 'deshecha')
+       and r.created_at < now() - interval '1 day'
+       and not exists (select 1 from public.clasificacion_regla_soportes s where s.regla_id = r.id)
+       and not exists (select 1 from public.propuestas_ia p where p.regla_id = r.id)
+    returning 1
+  )
+  select count(*)::int from u;
+$$;
+
 -- ── (e) uso atómico ─────────────────────────────────────────────────────────────
 -- Un id repetido N veces suma N. Sin leer-y-escribir: dos cartolas en paralelo no se pisan.
 create or replace function public.incrementar_uso_reglas(p_regla_ids uuid[])
@@ -356,6 +389,8 @@ revoke all on function public.clasificacion_regla_soportes_al_borrar() from publ
 revoke all on function public.incrementar_uso_reglas(uuid[]) from public, anon, authenticated;
 revoke all on function public.evidencia_reglas(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.incrementar_uso_reglas(uuid[]) to service_role;
+revoke all on function public.huerfanas_sin_evidencia(uuid) from public, anon, authenticated;
+grant execute on function public.huerfanas_sin_evidencia(uuid) to service_role;
 grant execute on function public.evidencia_reglas(uuid, uuid[]) to service_role;
 revoke all on function public.evidencia_reglas_lote(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.evidencia_reglas_lote(uuid, uuid[]) to service_role;

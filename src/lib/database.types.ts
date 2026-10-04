@@ -463,6 +463,7 @@ export type Database = {
           corregidas_en_ventana: number
           disputa_eleccion: number | null
           disputa_racha: number
+          disputa_ultima_propuesta: string | null
           evidencia_desde: string | null
           ligada_a_cartolas: boolean
           deshecha_por: string | null
@@ -498,6 +499,7 @@ export type Database = {
           corregidas_en_ventana?: number
           disputa_eleccion?: number | null
           disputa_racha?: number
+          disputa_ultima_propuesta?: string | null
           evidencia_desde?: string | null
           ligada_a_cartolas?: boolean
           deshecha_por?: string | null
@@ -533,6 +535,7 @@ export type Database = {
           corregidas_en_ventana?: number
           disputa_eleccion?: number | null
           disputa_racha?: number
+          disputa_ultima_propuesta?: string | null
           evidencia_desde?: string | null
           ligada_a_cartolas?: boolean
           deshecha_por?: string | null

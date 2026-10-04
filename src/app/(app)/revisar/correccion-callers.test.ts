@@ -15,9 +15,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { aprenderSpy, corregirSpy, buscarSpy, RESP } = vi.hoisted(() => ({
+const { aprenderSpy, corregirSpy, buscarSpy, buscarLoteSpy, RESP } = vi.hoisted(() => ({
   corregirSpy: vi.fn(async () => ({ efectos: new Map(), avisos: [] as string[] })),
   buscarSpy: vi.fn(async (): Promise<string | null> => null),
+  buscarLoteSpy: vi.fn(async (): Promise<Map<string, string>> => new Map()),
   aprenderSpy: vi.fn(async () => ({ creada: true, actualizada: false, propagadas: 0, patron: "x" })),
   RESP: {} as Record<string, { select?: unknown; update?: unknown }>,
 }));
@@ -36,7 +37,10 @@ vi.mock("@/lib/ai/aprender-regla", async () => {
   return { ...actual, aprenderReglaDesdeResolucion: aprenderSpy };
 });
 
-vi.mock("@/lib/ai/reglas-historial", () => ({ registrarCorrecciones: corregirSpy, buscarReglaPorContraparte: buscarSpy }));
+vi.mock("@/lib/ai/reglas-historial", async () => {
+  const real = await vi.importActual<typeof import("../../../lib/ai/reglas-historial")>("../../../lib/ai/reglas-historial");
+  return { registrarCorrecciones: corregirSpy, buscarReglaPorContraparte: buscarSpy, buscarReglasPorContrapartes: buscarLoteSpy, claveContraparte: real.claveContraparte };
+});
 
 // Cliente de AUTH: usuario válido con rol de emisión ("r", que casa con el mock de ROLES_EMISION).
 vi.mock("@/lib/supabase/server", () => ({
@@ -77,6 +81,8 @@ beforeEach(() => {
   corregirSpy.mockClear();
   buscarSpy.mockReset();
   buscarSpy.mockResolvedValue(null);
+  buscarLoteSpy.mockReset();
+  buscarLoteSpy.mockResolvedValue(new Map());
   for (const k of Object.keys(RESP)) delete RESP[k];
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://x");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "k");
@@ -101,8 +107,8 @@ describe("Fase 3 — correcciones desde Check", () => {
     expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), {
       empresaId: "E1", tipoNuevo: 39, mirada: true, // check_lote de 3 filas (≤ 25) = mirada
       filas: [
-        { reglaId: "r1", tipoFila: 41, documentoId: "d1", glosa: "TRANSFERENCIA DE JUAN PEREZ" },
-        { reglaId: "r1", tipoFila: 41, documentoId: "d1", glosa: "ABONO JUAN PEREZ" },
+        { reglaId: "r1", tipoFila: 41, documentoId: "d1", glosa: "TRANSFERENCIA DE JUAN PEREZ", propuestaId: "p1" },
+        { reglaId: "r1", tipoFila: 41, documentoId: "d1", glosa: "ABONO JUAN PEREZ", propuestaId: "p2" },
       ],
     });
     // antes de acuñar, y el acuñar lleva canal + movimiento (nacio_carril / soporte)
@@ -153,15 +159,16 @@ describe("Fase 3 — correcciones desde Check", () => {
       { id: "m1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" },
       { id: "m2", descripcion: "ABONO JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" },
     ] } };
-    buscarSpy.mockResolvedValue("r7");
+    const { claveContraparte } = await import("../../../lib/ai/reglas-historial");
+    buscarLoteSpy.mockResolvedValue(new Map([[claveContraparte("TRANSFERENCIA DE JUAN PEREZ", "entrada")!, "r7"]]));
     await cambiarTipoPropuestas(["p1", "p2"], "afecta", "boleta", "check_fila");
-    expect(buscarSpy).toHaveBeenCalledTimes(1); // una consulta por contraparte, no por fila
-    expect(buscarSpy).toHaveBeenCalledWith(expect.anything(), { empresaId: "E1", descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipoFlujo: "entrada" });
+    expect(buscarLoteSpy).toHaveBeenCalledTimes(1); // UNA consulta para todas las filas sin regla_id
+    expect(buscarSpy).not.toHaveBeenCalled();
     expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       tipoNuevo: 39, mirada: true,
       filas: [
-        { reglaId: "r7", tipoFila: 41, documentoId: "d1", glosa: "TRANSFERENCIA DE JUAN PEREZ" },
-        { reglaId: "r7", tipoFila: 41, documentoId: "d1", glosa: "ABONO JUAN PEREZ" },
+        { reglaId: "r7", tipoFila: 41, documentoId: "d1", glosa: "TRANSFERENCIA DE JUAN PEREZ", propuestaId: "p1" },
+        { reglaId: "r7", tipoFila: 41, documentoId: "d1", glosa: "ABONO JUAN PEREZ", propuestaId: "p2" },
       ],
     }));
   });
@@ -174,8 +181,18 @@ describe("Fase 3 — correcciones desde Check", () => {
     await editarPropuesta("p1", { tipo_dte: 39 });
     expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), {
       empresaId: "E1", tipoNuevo: 39, mirada: true,
-      filas: [{ reglaId: "r7", documentoId: "d1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ" }],
+      filas: [{ reglaId: "r7", documentoId: "d1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ", propuestaId: "p1", explicita: true }],
     });
+  });
+
+  it("MEDIO: «Lista» en el detalle SIN tocar el selector (la fila ya traía 41) → la corrección va como NO explícita", async () => {
+    RESP["empresas"] = { select: { data: { tipo_contribuyente: "afecto" } } };
+    RESP["propuestas_ia"] = { select: { data: { tipo_dte: 41, movimiento_id: "m1", regla_id: "rD" } }, update: { error: null, count: 1 } };
+    RESP["movimientos_raw"] = { select: { data: { descripcion: "TRANSFERENCIA DE JUAN PEREZ", tipo_flujo: "entrada", documento_id: "d1" } } };
+    await editarPropuesta("p1", { tipo_dte: 41 });
+    expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      filas: [expect.objectContaining({ reglaId: "rD", propuestaId: "p1", explicita: false })],
+    }));
   });
 
   it("sin regla_id NI regla viva de esa contraparte → no corrige", async () => {
@@ -194,7 +211,7 @@ describe("Fase 3 — correcciones desde Check", () => {
     const r = await editarPropuesta("p1", { tipo_dte: 39 });
     expect(corregirSpy).toHaveBeenCalledWith(expect.anything(), {
       empresaId: "E1", tipoNuevo: 39, mirada: true,
-      filas: [{ reglaId: "r1", documentoId: "d1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ" }],
+      filas: [{ reglaId: "r1", documentoId: "d1", tipoFila: 41, glosa: "TRANSFERENCIA DE JUAN PEREZ", propuestaId: "p1", explicita: true }],
     });
     // M3: el aviso llega a Check
     expect(r).toMatchObject({ ok: true, aviso: "Aprendí: desde ahora Juan Perez va como Afecta." });

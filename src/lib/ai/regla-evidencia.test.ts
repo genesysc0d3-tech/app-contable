@@ -143,6 +143,21 @@ describe("regla-evidencia: corrección (A1 — no empeorar lo que hoy aprende al
     expect(avisoCorreccion("racha_disputa", "Juan Perez", 41)).toBe("Una vez más y lo aprendo: Juan Perez como Exenta.");
     expect(avisoCorreccion("disputa_a_ciegas", "Juan Perez", 41)).toBe("Para enseñarme Juan Perez, elígelo en una fila.");
   });
+  it("MEDIO (vuelta 4): firme 39 → disputa por 41 mirado → «Lista» 2 veces sin tocar el selector → NO sale de disputa", () => {
+    const d = aplicarCorreccion(regla({ estado: "firme", tipo_dte: 39 }), { tipoNuevo: 41, confirmadas: 2, mirada, propuestaId: "p0" });
+    expect(d.estado).toBe("en_disputa");
+    const enDisputa = regla({ estado: "en_disputa", tipo_dte: 39, veces_corregida: d.veces_corregida });
+    // «Lista» sin tocar el selector sobre filas que ya traen 41: no es una elección
+    expect(esCorreccionDeRegla(enDisputa, { tipoFila: 41, tipoNuevo: 41, explicita: false })).toBe(false);
+    // y aunque llegara, la MISMA fila no suma dos veces a la racha
+    const a = aplicarCorreccion(enDisputa, { tipoNuevo: 41, confirmadas: 0, mirada, propuestaId: "p1" });
+    expect(a).toMatchObject({ efecto: "racha_disputa", disputa_racha: 1, disputa_ultima_propuesta: "p1" });
+    const otraVez = aplicarCorreccion(regla({ ...enDisputa, disputa_eleccion: 41, disputa_racha: 1, disputa_ultima_propuesta: "p1" }), { tipoNuevo: 41, confirmadas: 0, mirada, propuestaId: "p1" });
+    expect(otraVez).toMatchObject({ efecto: "ninguno", estado: "en_disputa", disputa_racha: 1 });
+    // una fila DISTINTA, elegida, sí la saca
+    const otraFila = aplicarCorreccion(regla({ ...enDisputa, disputa_eleccion: 41, disputa_racha: 1, disputa_ultima_propuesta: "p1" }), { tipoNuevo: 41, confirmadas: 0, mirada, propuestaId: "p2" });
+    expect(otraFila).toMatchObject({ efecto: "sale_de_disputa", estado: "a_prueba", tipo_dte: 41, disputa_ultima_propuesta: null });
+  });
   it("MEDIO 5: más de 3 avisos se resumen", () => {
     const tres = Array.from({ length: 3 }, (_, i) => ({ efecto: "se_da_vuelta" as const, texto: `t${i}` }));
     expect(resumirAvisos(tres)).toEqual(["t0", "t1", "t2"]);

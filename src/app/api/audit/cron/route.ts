@@ -24,9 +24,14 @@ async function recalcularReglasDeTodas(sb: NonNullable<ReturnType<typeof service
     for (const r of data ?? []) if (r.empresa_id) empresas.add(r.empresa_id);
     if (!data || data.length < 1000) break;
   }
-  let revisadas = 0, cambiadas = 0, errores = 0;
+  let revisadas = 0, cambiadas = 0, errores = 0, huerfanas = 0;
   for (const empresaId of empresas) {
     try {
+      // Zombies: reglas ligadas sin soportes ni filas vivas → huérfanas (no toca las viejas).
+      const { data: h } = await (sb.rpc as unknown as (f: string, a: Record<string, unknown>) => Promise<{ data: number | null }>)(
+        "huerfanas_sin_evidencia", { p_empresa_id: empresaId },
+      );
+      huerfanas += Number(h ?? 0);
       const r = await recalcularEstadoReglas(sb, empresaId);
       revisadas += r.revisadas;
       cambiadas += r.cambiadas;
@@ -35,7 +40,7 @@ async function recalcularReglasDeTodas(sb: NonNullable<ReturnType<typeof service
       errores += 1;
     }
   }
-  return { empresas: empresas.size, revisadas, cambiadas, errores };
+  return { empresas: empresas.size, revisadas, cambiadas, errores, huerfanas };
 }
 
 // Purga de retención (auditoría #11, Ley 21.719 — limitación de conservación).

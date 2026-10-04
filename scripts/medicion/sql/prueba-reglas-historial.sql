@@ -309,6 +309,37 @@ begin
     round(extract(epoch from clock_timestamp() - t0) * 1000);
 end $$;
 
+-- [11] zombies: una regla LIGADA sin soportes ni filas vivas queda huérfana (la función
+--      del cron); una con filas vivas, una recién nacida, una deshecha y las VIEJAS, no
+do $$
+declare n int; r record;
+begin
+  insert into public.clasificacion_reglas (id, empresa_id, nombre, patron, patron_tipo, tipo_flujo_match, tipo_propuesto, tipo_dte, created_at)
+  values ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
+          '(^|[^a-zà-ÿ])zoe zombie([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41, now() - interval '3 days'),
+         ('00000000-0000-4000-8000-0000000000d2', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
+          '(^|[^a-zà-ÿ])nina nueva([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41, now()),
+         ('00000000-0000-4000-8000-0000000000d3', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
+          '(^|[^a-zà-ÿ])vivi viva([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41, now() - interval '3 days'),
+         ('00000000-0000-4000-8000-0000000000d4', '00000000-0000-4000-8000-0000000000f1', 'Contraparte aprendida · Exenta',
+          '(^|[^a-zà-ÿ])dina deshecha([^a-zà-ÿ]|$)', 'regex', 'entrada', 'exenta', 41, now() - interval '3 days');
+  update public.clasificacion_reglas set estado = 'deshecha', activa = false where id = '00000000-0000-4000-8000-0000000000d4';
+  update public.propuestas_ia set regla_id = '00000000-0000-4000-8000-0000000000d3', decision_canal = 'sistema', decision_lote = gen_random_uuid()
+   where id = '00000000-0000-4000-8000-000000010300';
+  n := public.huerfanas_sin_evidencia('00000000-0000-4000-8000-0000000000f1');
+  select * into r from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000d1';
+  if r.estado <> 'huerfana' or r.activa or r.patron <> '(^|[^a-zà-ÿ])zoe zombie([^a-zà-ÿ]|$)' then
+    raise exception '[11] FALLA: el zombie quedó estado=% activa=%', r.estado, r.activa;
+  end if;
+  if (select estado from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000d2') <> 'a_prueba'
+     or (select estado from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000d3') <> 'a_prueba'
+     or (select estado from public.clasificacion_reglas where id = '00000000-0000-4000-8000-0000000000d4') <> 'deshecha'
+     or exists (select 1 from public.clasificacion_reglas where id::text like '00000000-0000-4000-9000-%' and (not activa or estado <> 'firme')) then
+    raise exception '[11] FALLA: tocó una regla que no debía';
+  end if;
+  raise notice '[11] OK: % zombie(s) → huérfana (patrón intacto); recién nacida, con filas vivas, deshecha y las 500 viejas: intactas', n;
+end $$;
+
 -- [7] privilegios: la clienta solo LEE sus soportes; las funciones son del service role
 do $$
 begin
