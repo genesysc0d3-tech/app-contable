@@ -18,8 +18,9 @@ import {
   ExpandedDetail, RowActionBtn, tipoMeta, fmt, fmtShort, ALTA, MEDIA, BULK_MIN_CONFIANZA,
   type Propuesta, type ClienteResumen,
 } from "./revisar-shared";
-import { cambiarTipoPropuestas, ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas, volverAPendientes } from "../../revisar/actions";
+import { cambiarTipoPropuestas, decidirVenta, ponerListo, rechazarPropuesta, rechazarPropuestas, restaurarPropuesta, restaurarPropuestas, volverAPendientes } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
+import { destinoPropuesta } from "@/lib/sii/destino";
 import RefChip from "@/components/boletas/RefChip";
 import { agruparFilas, type SectionKey, type Terminada } from "./cartola-filas";
 
@@ -139,7 +140,7 @@ export default function CartolaEditor({
   // Cuántas pendientes se prepararían realmente en bulk (el resto, < BULK_MIN_CONFIANZA,
   // se revisan a mano). El label del botón bulk muestra este número, no el total.
   const pendElegibles = useMemo(
-    () => groups.pendientes.filter((p) => esJuzgable(p) && (p.confianza ?? 0) >= BULK_MIN_CONFIANZA).length,
+    () => groups.pendientes.filter((p) => esJuzgable(p) && (p.confianza ?? 0) >= BULK_MIN_CONFIANZA && destinoPropuesta(p) !== "preguntar").length,
     [groups.pendientes],
   );
 
@@ -149,7 +150,7 @@ export default function CartolaEditor({
   const pendientesAgrupadas = useMemo(() => {
     const por = new Map<string, { sigla: string; label: string; color: string; bg: string; items: Propuesta[] }>();
     for (const p of groups.pendientes) {
-      const m = tipoMeta(p.tipo_propuesto);
+      const m = tipoMeta(p);
       let g = por.get(m.sigla);
       if (!g) { g = { sigla: m.sigla, label: m.label, color: m.color, bg: m.bg, items: [] }; por.set(m.sigla, g); }
       g.items.push(p);
@@ -221,7 +222,7 @@ export default function CartolaEditor({
         // tachado-en-su-lugar es solo para el ✕ individual, que protege el
         // contexto bajo el cursor — bug cazado por el fundador 2026-09-02).
         toast(accion === "listo"
-          ? `${r.count} marcadas listas`
+          ? `${r.count} marcadas listas${"aviso" in r && r.aviso ? ` · ${r.aviso}` : ""}`
           : `${r.count} marcadas sin boleta (tachadas, recuperables)${"aviso" in r && r.aviso ? ` · ${r.aviso}` : ""}`);
       }
       setSel(new Set());
@@ -322,7 +323,8 @@ export default function CartolaEditor({
 
   async function stagePendientes() {
     // Bulk salta las < BULK_MIN_CONFIANZA: esas se revisan 1×1 (safety).
-    const elegibles = groups.pendientes.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA);
+    // Las "¿?" (por decidir) nunca entran al bulk: no se adivina exenta ni afecta.
+    const elegibles = groups.pendientes.filter((p) => (p.confianza ?? 0) >= BULK_MIN_CONFIANZA && destinoPropuesta(p) !== "preguntar");
     const saltadas = groups.pendientes.length - elegibles.length;
     if (elegibles.length === 0) {
       toast(saltadas > 0 ? `Revisa las ${saltadas} de baja confianza a mano` : "Nada por preparar", "error");
@@ -331,7 +333,7 @@ export default function CartolaEditor({
     setBusyBulk(true);
     const r = await ponerListo(elegibles.map((p) => p.id), undefined, "check_lote");
     if (r.error) toast(r.error, "error");
-    else toast(saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`);
+    else toast(`${saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`}${r.aviso ? ` · ${r.aviso}` : ""}`);
     onAction();
     setBusyBulk(false);
   }
@@ -411,6 +413,24 @@ export default function CartolaEditor({
     if (p.estado === "listo") return "listas";
     if (p.estado === "aprobado") return "emision";
     return "pendientes";
+  }
+  // Fila "¿?" (destino "preguntar": arriendo/comisión o conflicto regla↔marca). El
+  // cliente decide en un toque (decidirVenta → cambiarTipoPropuestas /
+  // rechazarPropuestas): Exenta/Afecta = cambio de tipo (aprende la contraparte), No es
+  // venta = juicio sin boleta (recuperable). Vale también si quedó aprobada.
+  async function decidirUna(p: Propuesta, decision: "exenta" | "afecta" | "no_es_venta") {
+    if (actingRef.current.has(p.id)) return;
+    actingRef.current.add(p.id);
+    try {
+      const casa = seccionDe(p);
+      const r = await decidirVenta([p.id], decision, mesa === "factura" ? "factura" : "boleta");
+      if (r.error) toast(r.error, "error");
+      else if (decision === "no_es_venta") {
+        setJuzgadasEnSesion((prev) => new Map(prev).set(p.id, casa));
+        toast("Listo: no es venta (queda tachada, recuperable)");
+      } else toast(`Quedó como venta ${decision}${r.aviso ? ` · ${r.aviso}` : ""}`);
+      onAction();
+    } finally { actingRef.current.delete(p.id); }
   }
   async function rejectOne(p: Propuesta) {
     if (actingRef.current.has(p.id)) return;
@@ -580,6 +600,7 @@ export default function CartolaEditor({
                       onReject={() => rejectOne(row.p)}
                       onRestore={() => restoreOne(row.p)}
                       onVolver={row.p.estado === "listo" ? () => volverUna(row.p) : undefined}
+                      onDecidir={(d) => decidirUna(row.p, d)}
                       selected={sel.has(row.p.id) || selJuz.has(row.p.id) || selListas.has(row.p.id)}
                       onSelect={terminadas.has(row.p.id) ? undefined
                         : row.section === "pendientes" && esJuzgable(row.p)
@@ -695,23 +716,28 @@ function SectionHeader({ section, count, open, onToggle, onStageAll, stageableCo
 }
 
 /* ─── Fila de tx (colapsada) ─── */
-function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, onVolver, selected = false, onSelect }: {
+function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, onVolver, onDecidir, selected = false, onSelect }: {
   p: Propuesta;
   /** Emitida o a medias: fila tachada, sin casilla, sin detalle y sin acciones. */
   terminada?: Terminada;
   isOpen: boolean; onToggle: () => void; onStage: () => void; onReject: () => void; onRestore: () => void;
   /** Solo listas: ↩ vuelve a pendiente (fundador 2026-09-02: cambio de estado individual en toda sección). */
   onVolver?: () => void;
+  /** Fila "¿?" (por decidir): Exenta / Afecta / No es venta. */
+  onDecidir?: (d: "exenta" | "afecta" | "no_es_venta") => void;
   selected?: boolean;
   /** Casilla de selección múltiple (pendientes, listas y juzgadas — cada una con su lote). */
   onSelect?: (shift: boolean) => void;
 }) {
   if (terminada) return <TxRowTerminada p={p} terminada={terminada} />;
-  const tm = tipoMeta(p.tipo_propuesto);
+  const tm = tipoMeta(p);
   const conf = Math.round((p.confianza ?? 0) * 100);
   // 'aprobado' = comprometida a Emitir → sin ✎ (auditoría #21).
   const enEmision = p.estado === "aprobado";
   const rechazada = p.estado === "rechazado" || p.estado === "descartado";
+  // "¿Es venta? · decide tú": sin ✓ (no se adivina exenta ni afecta), con las 3 respuestas.
+  // También si quedó aprobada / en emisión: un «¿?» nunca sale a emitirse sin decidir.
+  const porDecidir = tm.destino === "preguntar" && !rechazada && !!onDecidir;
   return (
     <div className="ce-row" onClick={onToggle} style={selected ? { background: "color-mix(in srgb, var(--accent) 7%, transparent)" } : undefined}>
       {/* Casilla estilo explorador: seleccionar para juzgar en grupo (shift = rango).
@@ -737,10 +763,20 @@ function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, o
       <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 750, fontVariantNumeric: "tabular-nums", letterSpacing: "-.01em", color: rechazada ? "var(--text3)" : "var(--text)", minWidth: 76, textAlign: "right" }}>{fmt(p.total ?? p.movimientos_raw?.monto)}</span>
       <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: confColor(p.confianza), minWidth: 34, textAlign: "right" }}>{conf}%</span>
       {p.estado === "listo" && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--green)", letterSpacing: ".06em", padding: "3px 8px", borderRadius: 99, background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.3)" }}>LISTO</span>}
-      {enEmision && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--blue)", letterSpacing: ".06em", padding: "3px 8px", borderRadius: 99, background: "rgba(96,165,250,.1)", border: "1px solid rgba(96,165,250,.3)" }}>EN EMISIÓN</span>}
+      {enEmision && !porDecidir && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: "var(--blue)", letterSpacing: ".06em", padding: "3px 8px", borderRadius: 99, background: "rgba(96,165,250,.1)", border: "1px solid rgba(96,165,250,.3)" }}>EN EMISIÓN</span>}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* ✓ solo en borradores (pendiente/editado): nunca demotar una 'listo' (ya staged) ni una 'aprobado' (ya en Emitir) */}
-        {(p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
+        {porDecidir && onDecidir && (
+          <span role="group" aria-label="¿Es venta?" style={{ display: "inline-flex", gap: 4, marginRight: 4 }}>
+            {([["exenta", "Exenta"], ["afecta", "Afecta"], ["no_es_venta", "No es venta"]] as const).map(([d, label]) => (
+              <button key={d} onClick={() => onDecidir(d)}
+                style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 9px", borderRadius: 99, border: "1px solid var(--border)", background: "var(--surface2)", color: d === "no_es_venta" ? "var(--text2)" : "var(--text)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
+        {!porDecidir && (p.estado === "pendiente" || p.estado === "editado") && <RowActionBtn type="aprove" icon="✓" onClick={onStage} />}
         {onVolver && <RowActionBtn type="edit" icon="↩" onClick={onVolver} />}
         {rechazada ? (
           /* Restaurar reemplaza al ✎ en rechazadas: el detalle acá solo llevaba a un error engañoso */
@@ -766,7 +802,7 @@ function TxRow({ p, terminada, isOpen, onToggle, onStage, onReject, onRestore, o
    Regla del fundador (2026-09-29): "las emitidas nunca vuelven" y "quedan tachadas
    en Check de agregados". Sin casilla, sin ▶ (no abre detalle), sin ✓/↩/✎/✕. */
 function TxRowTerminada({ p, terminada }: { p: Propuesta; terminada: Terminada }) {
-  const tm = tipoMeta(p.tipo_propuesto);
+  const tm = tipoMeta(p);
   const emitida = terminada.tipo === "emitida";
   const tachado = { color: "var(--text3)", textDecoration: "line-through" } as const;
   return (

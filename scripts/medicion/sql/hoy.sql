@@ -1,6 +1,6 @@
 -- Medición del clasificador HOY (Fase 0/1, solo lectura, sin log): cobertura al
 -- nacer, abstención y FALSOS SEGUROS (cota inferior) por empresa × fuente × banda.
--- Funciona con o sin la migración 20261004140000 (lee orig_* y es_prueba vía
+-- Funciona con o sin la migración 20261004160000 (lee orig_* y es_prueba vía
 -- to_jsonb: si la columna no existe, cae al valor actual / false).
 -- Exactitud: confianza, fuente_clasificacion y regla_id no los modifica ninguna
 -- escritura después del insert → la banda "al nacer" es exacta. Los cambios

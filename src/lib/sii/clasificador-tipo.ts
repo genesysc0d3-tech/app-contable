@@ -398,7 +398,7 @@ export function decidirTipoDteAuto(
 
 /** Por qué `decidirTipoDteAuto` decidió lo que decidió (Fase 1 medición: se graba
  *  como `orig_tipo_dte_fuente = auto_<motivo>`). Lista cerrada, espejo del CHECK de
- *  la migración 20261004140000. */
+ *  la migración 20261004160000. */
 export type MotivoTipoDteAuto =
   | "empresa_exenta"        // emisor exento → siempre 41
   | "no_firme"              // sin hint y confianza < 0.85 → a revisar

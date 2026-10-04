@@ -25,7 +25,7 @@
 -- metadata (instantáneos); los CHECK van NOT VALID (no escanean). lock_timeout para
 -- no hacer cola detrás de una transacción larga: si no obtiene el lock, falla y se
 -- reintenta en horario bajo.
--- Rollback: 20261004140000_propuestas_foto_y_decisiones_DOWN.sql (respalda antes).
+-- Rollback: 20261004160000_propuestas_foto_y_decisiones_DOWN.sql (respalda antes).
 
 set lock_timeout = '5s';
 
@@ -57,6 +57,7 @@ alter table public.propuestas_ia drop constraint if exists propuestas_ia_orig_ti
 alter table public.propuestas_ia add constraint propuestas_ia_orig_tipo_dte_fuente_check check (
   orig_tipo_dte_fuente is null or orig_tipo_dte_fuente in (
     'salida_o_no_boletar', 'categoria_exenta', 'regla', 'regla_forzada_exenta', 'no_venta',
+    'conflicto_marca_cartola',
     'auto_empresa_exenta', 'auto_no_firme', 'auto_glosa_exenta', 'auto_sin_tipo',
     'auto_contribuyente_afecto', 'auto_glosa_afecta', 'auto_hint_afecta', 'auto_sin_evidencia_afecta',
     'telegram_comprobante', 'telegram_asegurada', 'telegram_manual',

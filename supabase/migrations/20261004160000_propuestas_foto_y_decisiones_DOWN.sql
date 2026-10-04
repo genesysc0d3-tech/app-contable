@@ -1,4 +1,4 @@
--- Revierte 20261004140000_propuestas_foto_y_decisiones.sql.
+-- Revierte 20261004160000_propuestas_foto_y_decisiones.sql.
 --
 -- ORDEN: revertir PRIMERO el código (el código nuevo escribe decision_* y
 -- orig_tipo_dte_fuente; sin las columnas, sus updates/inserts fallarían). Antes de

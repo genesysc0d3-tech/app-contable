@@ -78,6 +78,17 @@ export function clasificarStartJob(status: number, json: Record<string, unknown>
         ?? "Una de las que faltaban cambió en otra pestaña o la cambió otra persona, así que no la emití. Las que ya salieron quedaron guardadas. Vuelve a abrir Emitir para ver los datos al día y sigue con las que faltan.",
     };
   }
+  // Destino único (2026-10-04): un «¿?» (arriendo/comisión o regla que choca con la
+  // marca de la cartola) no se emite sin que la persona diga si es venta. Solo llega
+  // acá desde una pestaña vieja (la cola ya lo excluye): se frena con el texto del
+  // server — no el genérico "falló" — y lo que falta queda para seguir.
+  if (status === 409 && (j.error === "TIPO_POR_DECIDIR" || j.error === "NO_ES_VENTA")) {
+    const detalle = typeof j.detalle === "string" && j.detalle.trim() ? j.detalle : null;
+    return {
+      tipo: "frenada",
+      motivo: detalle ?? "Una de las que faltaban espera que decidas en Check si es venta exenta, afecta o no es venta. Lo que falta queda guardado.",
+    };
+  }
   if (status === 409 && j.error === "EMISION_EN_CURSO") {
     return { tipo: "frenada", motivo: "Esta boleta ya se está emitiendo en otra pestaña. Lo que falta queda guardado para seguir." };
   }

@@ -1,5 +1,5 @@
 -- PRECISIÓN real del clasificador (Fase 1, ~2 semanas después del deploy de la
--- migración 20261004140000). Solo filas CON FOTO (orig_capturada_at no nulo = nacidas
+-- migración 20261004160000). Solo filas CON FOTO (orig_capturada_at no nulo = nacidas
 -- después del deploy) en cartolas CERRADAS, empresas no es_prueba, abonos de boleta.
 -- Por empresa × orig_tipo_dte_fuente × banda al nacer:
 --   n_mirada            filas que un humano MIRÓ (algún evento check_fila/check_detalle o abierta=true)

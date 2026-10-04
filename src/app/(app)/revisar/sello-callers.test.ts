@@ -45,7 +45,7 @@ vi.mock("@supabase/supabase-js", () => ({
       const l: Llamada = { tabla, op: "select" };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const q: any = {};
-      for (const m of ["select", "eq", "in", "neq", "is", "order", "range", "limit"]) q[m] = () => q;
+      for (const m of ["select", "eq", "in", "neq", "is", "order", "range", "limit", "or", "not", "gte", "lt"]) q[m] = () => q;
       q.update = (v: Record<string, unknown>) => { l.op = "update"; l.valores = v; return q; };
       q.delete = () => { l.op = "delete"; return q; };
       q.maybeSingle = () => q;
@@ -158,6 +158,20 @@ describe("sello en cada acción de Check", () => {
     estado.selectPropuestas = ids(7).map((id) => ({ id }));
     await A.devolverCartola("D1");
     exigirSello("devolver_cartola", 7, false);
+  });
+  it("decidirVenta («¿?»): reset a pendiente + decisión comparten UN lote y canal", async () => {
+    estado.selectPropuestas = [{ id: "P1", total: 1000, movimiento_id: null }];
+    await A.decidirVenta(["P1"], "exenta", "boleta");
+    expect(updates().length).toBeGreaterThanOrEqual(2);
+    exigirSello("check_fila", 1, false);
+    estado.llamadas = [];
+    await A.decidirVenta(["P1"], "no_es_venta", "boleta");
+    exigirSello("check_fila", 1, false);
+  });
+  it("un lote que llega del navegador y no es uuid se ignora", async () => {
+    await A.rechazarPropuestas(["P1", "P2"], "check_lote", "no-es-uuid");
+    exigirSello("check_lote", 2);
+    expect(updates()[0].decision_lote).not.toBe("no-es-uuid");
   });
   it("editarMovimientoPropuesta → check_detalle", async () => {
     estado.selectPropuestas = { estado: "pendiente" } as never;

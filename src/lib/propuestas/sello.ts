@@ -3,7 +3,7 @@
  * medir antes de mover — docs/plan-clasificador-cirujano-2026-10-03.md).
  *
  * Cada escritura a propuestas_ia lleva, en el MISMO UPDATE, quién decidió, por qué
- * canal y en qué gesto (lote). La base (migración 20261004140000) copia antes/
+ * canal y en qué gesto (lote). La base (migración 20261004160000) copia antes/
  * después a `propuesta_decisiones` con un trigger: atómico y sin viajes extra.
  * Una escritura que no sella queda `sin_sello` (lo marca el trigger): por eso un
  * test estático (escrituras-propuestas.test.ts) exige `sello(` en cada .update().

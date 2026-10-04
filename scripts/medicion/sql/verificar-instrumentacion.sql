@@ -1,5 +1,5 @@
 -- Verificación SOLO LECTURA de la instrumentación (Fase 1 medición) después de
--- aplicar 20261004140000. Sirve en local, staging y prod (envolver en
+-- aplicar 20261004160000. Sirve en local, staging y prod (envolver en
 -- `begin transaction read only; … rollback;` si se corre por la Management API).
 -- Devuelve solo códigos y conteos: nada de glosas, nombres ni RUT.
 

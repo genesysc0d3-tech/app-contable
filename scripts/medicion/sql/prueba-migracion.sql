@@ -1,4 +1,4 @@
--- Prueba funcional de 20261004140000_propuestas_foto_y_decisiones.sql.
+-- Prueba funcional de 20261004160000_propuestas_foto_y_decisiones.sql.
 -- Corre TODO dentro de una transacción y hace ROLLBACK al final: no deja nada.
 -- Pensada para el Postgres local desechable (scripts/medicion/probar-migracion-local.sh)
 -- o STAGING. JAMÁS prod: el runner se niega (guard por ref/host).
@@ -6,14 +6,42 @@
 \set ON_ERROR_STOP on
 begin;
 
+-- Inserta una fila con las columnas dadas y rellena las NOT NULL sin default con un
+-- valor neutro por tipo: sirve igual sobre el fixture mínimo y sobre el esquema REAL
+-- (reproducir-esquema-local.sh), que exige muchas más columnas.
+create function pg_temp.ins(p_tabla text, p_vals jsonb) returns void language plpgsql as $f$
+declare v_cols text := ''; v_exprs text := ''; r record; v jsonb := p_vals;
+begin
+  for r in select column_name, data_type from information_schema.columns
+            where table_schema = 'public' and table_name = p_tabla
+              and is_nullable = 'NO' and column_default is null and is_identity = 'NO'
+              and not (p_vals ? column_name) loop
+    v := v || jsonb_build_object(r.column_name, case
+      when r.data_type in ('text', 'character varying') then to_jsonb('x'::text)
+      when r.data_type = 'uuid' then to_jsonb(gen_random_uuid())
+      when r.data_type in ('integer', 'bigint', 'smallint', 'numeric', 'double precision', 'real') then to_jsonb(0)
+      when r.data_type = 'boolean' then to_jsonb(false)
+      when r.data_type = 'date' then to_jsonb(current_date)
+      when r.data_type like 'timestamp%' then to_jsonb(now())
+      when r.data_type in ('jsonb', 'json') then '{}'::jsonb
+      else to_jsonb('x'::text) end);
+  end loop;
+  select string_agg(quote_ident(k), ', '), string_agg(format('(%L::jsonb ->> %L)', v, k) || '::' ||
+           (select format_type(a.atttypid, a.atttypmod) from pg_attribute a
+             where a.attrelid = ('public.' || p_tabla)::regclass and a.attname = k), ', ')
+    into v_cols, v_exprs
+  from jsonb_object_keys(v) k
+  where exists (select 1 from information_schema.columns c   -- claves que el esquema no tiene se ignoran
+                 where c.table_schema = 'public' and c.table_name = p_tabla and c.column_name = k);
+  execute format('insert into public.%I (%s) values (%s)', p_tabla, v_cols, v_exprs);
+end $f$;
+
 -- Empresa/documento/300 movimientos y 300 propuestas de prueba.
-insert into public.empresas (id, razon_social, rut, es_prueba)
-  values ('00000000-0000-4000-8000-0000000000e1', 'EMPRESA PRUEBA MEDICION', '76.000.000-0', true);
-insert into public.documentos_subidos (id, empresa_id)
-  values ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000e1');
-insert into public.movimientos_raw (id, empresa_id, documento_id, descripcion, monto, tipo_flujo)
-  select gen_random_uuid(), '00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000d1',
-         'TRANSF DE PERSONA ' || g, 1000 + g, 'entrada'
+select pg_temp.ins('empresas', '{"id":"00000000-0000-4000-8000-0000000000e1","razon_social":"EMPRESA PRUEBA MEDICION","rut":"76.000.000-0","es_prueba":true}');
+select pg_temp.ins('documentos_subidos', '{"id":"00000000-0000-4000-8000-0000000000d1","empresa_id":"00000000-0000-4000-8000-0000000000e1","estado":"procesado","tipo":"cartola"}');
+select pg_temp.ins('movimientos_raw', jsonb_build_object('empresa_id', '00000000-0000-4000-8000-0000000000e1',
+         'documento_id', '00000000-0000-4000-8000-0000000000d1', 'descripcion', 'TRANSF DE PERSONA ' || g,
+         'monto', 1000 + g, 'tipo_flujo', 'entrada', 'fecha', current_date))
   from generate_series(1, 300) g;
 
 create temp table _t_ids on commit drop as
@@ -172,9 +200,9 @@ do $$
 declare v_id uuid; v_canal text; v_edit timestamptz; v_cli uuid := gen_random_uuid(); v_reg uuid := gen_random_uuid(); v_tx uuid := gen_random_uuid();
 begin
   select p.id into v_id from public.propuestas_ia p join _t_ids t on t.movimiento_id = p.movimiento_id where t.n = 7;
-  insert into public.clientes (id, empresa_id) values (v_cli, '00000000-0000-4000-8000-0000000000e1');
-  insert into public.clasificacion_reglas (id) values (v_reg);
-  insert into public.transacciones (id) values (v_tx);
+  perform pg_temp.ins('clientes', jsonb_build_object('id', v_cli, 'empresa_id', '00000000-0000-4000-8000-0000000000e1'));
+  perform pg_temp.ins('clasificacion_reglas', jsonb_build_object('id', v_reg, 'empresa_id', '00000000-0000-4000-8000-0000000000e1'));
+  perform pg_temp.ins('transacciones', jsonb_build_object('id', v_tx, 'empresa_id', '00000000-0000-4000-8000-0000000000e1'));
   update public.propuestas_ia set cliente_id = v_cli, regla_id = v_reg, transaccion_id = v_tx,
          decision_canal = 'check_detalle', decision_lote = gen_random_uuid(), decision_lote_n = 1
    where id = v_id;
@@ -217,6 +245,15 @@ declare v_id uuid; v_por uuid; v_log int;
 begin
   select p.id into v_id from public.propuestas_ia p join _t_ids t on t.movimiento_id = p.movimiento_id where t.n = 5;
   perform set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-0000000000bb', true);
+  -- Desde 20261004150000 (Fase 2) authenticated ya NO tiene UPDATE: se informa y se
+  -- concede SOLO dentro de esta transacción (rollback) para ejercitar el trigger.
+  if not has_table_privilege('authenticated', 'public.propuestas_ia', 'update') then
+    raise notice '[5b] (authenticated sin UPDATE sobre propuestas_ia: revocado por 20261004150000; se concede solo en esta prueba)';
+    grant update on public.propuestas_ia to authenticated;
+  end if;
+  -- El RLS real (empresa_autorizada) exige usuario+cuenta: para ejercitar SOLO el
+  -- trigger, una policy permisiva que vive dentro de esta transacción (rollback).
+  create policy _prueba_5b on public.propuestas_ia for all to authenticated using (true) with check (true);
   set local role authenticated;
   update public.propuestas_ia set estado = 'rechazado' where id = v_id;
   reset role;

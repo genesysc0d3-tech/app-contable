@@ -173,7 +173,7 @@ AND NOT EXISTS (
     AND (d.progreso_ia ->> 'boleta_id') = b.id::text
 );
 
--- Log de decisiones (migracion 20261004140000): sin FK a propuestas a proposito
+-- Log de decisiones (migracion 20261004160000): sin FK a propuestas a proposito
 -- (el rastro sobrevive al borrado), asi que se limpia aparte y DESPUES de los
 -- DELETE de arriba (que dejan filas 'borrado'). Se conserva el de las propuestas
 -- que siguen vivas (las que trazan boletas reales o emisiones abiertas).

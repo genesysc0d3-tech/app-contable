@@ -7,10 +7,10 @@
 
 import { useState, useEffect, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta, editarGlosaEmitible } from "../../revisar/actions";
+import { rechazarPropuesta, ponerListo, crearClienteDesdeRevisar, editarPropuesta, editarGlosaEmitible, decidirVenta } from "../../revisar/actions";
 import { useToast } from "@/components/Toast";
 import TermHint from "@/components/ui/TermHint";
-import { esTipoPropuestoExento } from "@/lib/sii/tipos-propuesta";
+import { destino, esAfectoPorTipo, esExentoPorTipo } from "@/lib/sii/destino";
 import type { Tables } from "@/lib/database.types";
 import { formatShortDateEsCl } from "@/lib/display-date";
 import { validarRut, RECEPTOR_OBLIGATORIO_DESDE } from "@/lib/sii/validation";
@@ -46,16 +46,10 @@ export function fmtShort(d: string | null | undefined): string {
   return formatShortDateEsCl(d, true);
 }
 
-// Tipo de la propuesta para decisión rápida: visible tanto en la fila
-// colapsada (sigla) como en el detalle expandido (label completo).
-export function tipoMeta(tipoPropuesto: string | null) {
-  if (tipoPropuesto === "gasto_egreso") return { sigla: "GASTO", label: "Gasto · no se boletea", bg: "rgba(245,158,11,.12)", color: "var(--amber)" };
-  if (tipoPropuesto === "no_comercial") return { sigla: "N/C", label: "No comercial · no se boletea", bg: "color-mix(in srgb, var(--text) 7%, transparent)", color: "var(--text2)" };
-  const afecta = tipoPropuesto === "boleta" || tipoPropuesto === "factura";
-  return afecta
-    ? { sigla: "AFE", label: "Boleta · afecta", bg: "rgba(180,240,39,.1)", color: "var(--lime)" }
-    : { sigla: "EXE", label: "Boleta · exenta", bg: "rgba(91,156,246,.1)", color: "var(--blue)" };
-}
+// tipoMeta (sigla/label del tipo) vive en ./tipo-meta (puro, testeable por el censo
+// del destino único). Re-exportado para los importadores existentes.
+import { tipoMeta } from "./tipo-meta";
+export { tipoMeta };
 
 export function RevisarEmpty() {
   return (
@@ -153,7 +147,7 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       style={{display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
                     >
                       <span className="exp" style={{transform:isExpanded?"rotate(90deg)":"none",color:isExpanded?"var(--accent)":"var(--text2)",fontSize:10,transition:"transform .2s",flexShrink:0}}>▶</span>
-                      {(() => { const tm = tipoMeta(p.tipo_propuesto); return (
+                      {(() => { const tm = tipoMeta(p); return (
                         <span title={tm.label} style={{flexShrink:0,minWidth:38,textAlign:"center",fontSize:7,fontWeight:800,letterSpacing:".04em",padding:"2px 5px",borderRadius:8,background:tm.bg,color:tm.color}}>{tm.sigla}</span>
                       ); })()}
                       <div className="info" style={{flex:1,minWidth:0}}>
@@ -169,7 +163,18 @@ export function ConfianzaGroupSection({ tipo, label, propuestas, color, clientes
                       {p.estado === "listo" && <span style={{fontSize:8,fontWeight:800,color:"var(--green)",flexShrink:0,letterSpacing:".05em"}}>LISTO</span>}
                       {enEmision && <span style={{fontSize:8,fontWeight:800,color:"var(--blue)",flexShrink:0,letterSpacing:".05em"}}>EN EMISIÓN</span>}
                       <div className="ac" style={{display:"flex",gap:2,flexShrink:0}} onClick={e => e.stopPropagation()}>
-                        {!enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
+                        {tipoMeta(p).destino === "preguntar" ? (
+                          /* «¿?»: en vez del ✓, las 3 respuestas (también si quedó aprobada). */
+                          <span role="group" aria-label="¿Es venta?" style={{display:"inline-flex",gap:3}}>
+                            {([["exenta","Exenta"],["afecta","Afecta"],["no_es_venta","No es venta"]] as const).map(([d,label]) => (
+                              <button key={d} onClick={async () => {
+                                const r = await decidirVenta([p.id], d, (p as unknown as { mesa?: string | null }).mesa === "factura" ? "factura" : "boleta");
+                                if (r.error) toast(r.error, "error"); else toast(d === "no_es_venta" ? "No es venta" : `Venta ${d}`);
+                                onAction();
+                              }} style={{fontSize:8.5,fontWeight:700,padding:"2px 7px",borderRadius:99,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+                            ))}
+                          </span>
+                        ) : !enEmision && <RowActionBtn type="aprove" onClick={async () => {const r=await ponerListo([p.id]);if(r.error) toast(r.error,"error");else toast("Lista");onAction();}} icon="✓" />}
                         <RowActionBtn type="edit" onClick={() => toggleRow(p.id)} icon="✎" />{/* EN EMISIÓN: abre el editor solo-glosa (corregir el Detalle sin degradar la boleta) */}
                         {!enEmision && (
                           <span className="rs-reject">
@@ -223,7 +228,7 @@ function BlockApproveBtn({ ids, label }: { ids: string[]; label: string }) {
     if (ids.length === 0) return;
     setLoading(true);
     const r = await ponerListo(ids, undefined, "check_lote");
-    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas`);
+    if (r.error) toast(r.error, "error"); else toast(`${r.count} listas${r.aviso ? ` · ${r.aviso}` : ""}`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }
@@ -251,7 +256,7 @@ function ApproveAllBtn({ propuestas }: { propuestas: Propuesta[] }) {
     setLoading(true);
     const r = await ponerListo(elegibles.map((p) => p.id), undefined, "check_lote");
     if (r.error) toast(r.error, "error");
-    else toast(saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`);
+    else toast(`${saltadas > 0 ? `${r.count} listas · ${saltadas} quedan para revisar` : `${r.count} listas`}${r.aviso ? ` · ${r.aviso}` : ""}`);
     if (ctxReload) ctxReload(); else router.refresh();
     setLoading(false);
   }
@@ -352,9 +357,8 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   // entero: hablaba de "boleta" y, peor, al aprobar escribía tipo_propuesto
   // "boleta"/tipo_dte 39 — convertía una FACTURA en boleta (2026-09-03). El
   // carril se decide igual que en EditorAmpliado: la mesa manda.
-  const esFactura = (propuesta as unknown as { mesa?: string | null }).mesa === "factura"
-    || propuesta.tipo_propuesto === "factura_afecta"
-    || propuesta.tipo_propuesto === "factura_exenta";
+  const enMesaFactura = (propuesta as unknown as { mesa?: string | null }).mesa === "factura";
+  const esFactura = enMesaFactura || destino(propuesta.tipo_propuesto) === "factura";
   const doc = esFactura ? "factura" : "boleta";
 
   // Campos editables (editable, sin lock). El tipo lo decide PRIMERO la clasificación
@@ -362,12 +366,11 @@ export function ExpandedDetail({ propuesta, clientes, empresaId, onAction, onClo
   // sugerencia de la empresa. Un default de empresa 'afecto'/'auto' NUNCA puede pisar
   // una exención POR LEY (cripto/forex/P2P, Of. SII 963/2018): eso fabricaría IVA
   // inexistente sobre una venta exenta (el footgun que el clasificador ya prohíbe).
-  const AFECTOS_POR_TIPO = ["boleta", "factura", "factura_afecta"];
   const tipoInicial: "afecta" | "exenta" =
     propuesta.tipo_dte === 41 ? "exenta"
       : propuesta.tipo_dte === 39 ? "afecta"
-        : esTipoPropuestoExento(propuesta.tipo_propuesto) ? "exenta"
-          : AFECTOS_POR_TIPO.includes(propuesta.tipo_propuesto) ? "afecta"
+        : esExentoPorTipo(propuesta.tipo_propuesto) ? "exenta"
+          : esAfectoPorTipo(propuesta.tipo_propuesto) ? "afecta"
             : empresaTipoContribuyente === "exento" ? "exenta"
               : empresaTipoContribuyente === "afecto" ? "afecta"
                 : "exenta"; // default seguro: nunca fabricar IVA sobre algo sin clasificar

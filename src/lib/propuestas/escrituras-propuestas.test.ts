@@ -22,7 +22,7 @@ const SRC = join(RAIZ, "src");
 /** archivo → operación → cuántas. Fuente: inventario del plan (35 puntos) + grep. */
 const INVENTARIO: Record<string, Record<string, number>> = {
   "src/app/(app)/escritorio/v5/cuadre-actions.ts": { upsert: 1 },
-  "src/app/(app)/revisar/actions.ts": { update: 16, delete: 1 },
+  "src/app/(app)/revisar/actions.ts": { update: 17, delete: 1 },
   "src/app/api/intermediaria/factura-unica/route.ts": { insert: 1 },
   "src/app/api/mcp/route.ts": { update: 2 },
   "src/lib/ai/aprender-regla.ts": { update: 1 },
@@ -152,7 +152,7 @@ describe("escrituras a propuestas_ia — inventario cerrado", () => {
 });
 
 describe("listas cerradas: código ⇄ CHECK de la migración", () => {
-  const sql = readFileSync(join(RAIZ, "supabase/migrations/20261004140000_propuestas_foto_y_decisiones.sql"), "utf8");
+  const sql = readFileSync(join(RAIZ, "supabase/migrations/20261004160000_propuestas_foto_y_decisiones.sql"), "utf8");
   const listaDelCheck = (constraint: string) => {
     const bloque = sql.slice(sql.indexOf(`add constraint ${constraint}`));
     const dentro = bloque.slice(bloque.indexOf(" in ("), bloque.indexOf(")\n) not valid"));

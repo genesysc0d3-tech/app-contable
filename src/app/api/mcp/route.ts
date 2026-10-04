@@ -1,3 +1,4 @@
+import { MSG_DECIDE_SI_ES_VENTA, PG_OR_SIN_CONFLICTO_MARCA, PG_TIPOS_POR_DECIDIR } from "@/lib/sii/destino";
 import { NextResponse } from "next/server";
 import { requireMcpAccess } from "@/lib/mcp/auth";
 import { handleMcpRpc, type McpTools } from "@/lib/mcp/server";
@@ -248,6 +249,9 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           .in("id", ids)
           .eq("empresa_id", ctx.empresaId)
           .in("estado", ["pendiente", "editado", "listo"])
+          // Destino único: un «¿?» (¿es venta?) lo decide la persona, nunca el conector.
+          .not("tipo_propuesto", "in", PG_TIPOS_POR_DECIDIR)
+          .or(PG_OR_SIN_CONFLICTO_MARCA)
           .select("id");
         if (error) throw new Error("No se pudieron dejar listas las propuestas");
 
@@ -271,7 +275,7 @@ function construirTools(ctx: Awaited<ReturnType<typeof requireMcpAccess>> & { ok
           nota:
             listas === ids.length
               ? "Documentos listos y esperando en la pestaña Emitir. Aprobar y emitir es del usuario, en la app."
-              : `${listas} dejada(s) lista(s); el resto no estaba en estado pre-emisión (quizás ya se emitió o fue descartada).`,
+              : `${listas} dejada(s) lista(s); el resto no estaba en estado pre-emisión (quizás ya se emitió o fue descartada) o es un «¿?»: ${MSG_DECIDE_SI_ES_VENTA} Eso lo decide el usuario en Check.`,
         };
       },
     },

@@ -1,4 +1,4 @@
--- Fixture MÍNIMO para probar la migración 20261004140000 en un Postgres local
+-- Fixture MÍNIMO para probar la migración 20261004160000 en un Postgres local
 -- desechable (Mac mini), sin Supabase. Reproduce solo lo que la migración toca:
 -- roles anon/authenticated/service_role, auth.uid(), y las tablas con sus FK reales
 -- (empresas → documentos_subidos → movimientos_raw → propuestas_ia, todo CASCADE,

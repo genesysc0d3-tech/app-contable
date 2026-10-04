@@ -37,6 +37,8 @@ vi.mock("@supabase/supabase-js", () => ({
       q.select = () => q;
       q.update = (v: unknown) => { l.op = "update"; l.valores = v; return q; };
       for (const m of ["eq", "in", "neq"]) q[m] = (c: string, v: unknown) => { l.filtros[`${m}:${c}`] = v; return q; };
+      q.not = (c: string, _op: string, v: unknown) => { l.filtros[`not:${c}`] = v; return q; };
+      q.or = (f: string) => { l.filtros.or = f; return q; };
       q.then = (ok: (v: unknown) => unknown) => {
         estado.llamadas.push(l);
         return Promise.resolve({ error: null, count: estado.count }).then(ok);
@@ -64,6 +66,9 @@ describe("aprobarPropuesta — solo desde el estado esperado", () => {
     const upd = estado.llamadas.find((l) => l.tabla === "propuestas_ia" && l.op === "update");
     expect(upd?.filtros["eq:id"]).toBe("P1");
     expect(upd?.filtros["in:estado"]).toEqual(ESPERADOS);
+    // Destino único: un «¿?» no se aprueba (arriendo/comisión y conflicto regla↔marca).
+    expect(upd?.filtros["not:tipo_propuesto"]).toBe("(arriendo,comision)");
+    expect(upd?.filtros.or).toEqual(expect.stringContaining("fuente_clasificacion.neq.conflicto_marca_cartola"));
   });
 
   it("si no calzó (rechazada/emitida por otra persona con vista vieja) → error honesto", async () => {
@@ -78,6 +83,24 @@ describe("aprobarTodas — filtra por estado en la propia consulta", () => {
     await aprobarTodas(Array.from({ length: 60 }, (_, i) => `P${i}`));
     const upds = estado.llamadas.filter((l) => l.tabla === "propuestas_ia" && l.op === "update");
     expect(upds).toHaveLength(2);
-    for (const u of upds) expect(u.filtros["in:estado"]).toEqual(ESPERADOS);
+    for (const u of upds) {
+      expect(u.filtros["in:estado"]).toEqual(ESPERADOS);
+      expect(u.filtros["not:tipo_propuesto"]).toBe("(arriendo,comision)");
+      expect(u.filtros.or).toEqual(expect.stringContaining("fuente_clasificacion.neq.conflicto_marca_cartola"));
+    }
+  });
+});
+
+describe("aprobarTodas — avisa cuántas «¿?» quedaron sin enviar (B1)", () => {
+  it("si quedaron filas por decidir, el resultado trae «N quedaron por decidir»", async () => {
+    // El fake devuelve count=1 por consulta: 2 lotes de UPDATE → 2 aprobadas de 60, y
+    // el conteo de «¿?» (2 lotes de 50) → 2.
+    const r = await aprobarTodas(Array.from({ length: 60 }, (_, i) => `P${i}`));
+    expect(r).toMatchObject({ ok: true, count: 2, porDecidir: 2, aviso: "2 quedaron por decidir («¿?»)" });
+  });
+  it("si se aprobaron todas, no hay aviso", async () => {
+    estado.count = 1;
+    const r = await aprobarTodas(["P1"]);
+    expect(r).not.toHaveProperty("aviso");
   });
 });
