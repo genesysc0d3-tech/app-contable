@@ -2,7 +2,7 @@
  * Check agrupado (Fase 4) — el motor puro que arma las preguntas en grupo.
  */
 import { describe, expect, it } from "vitest";
-import { armarPreguntas, filaDePropuesta, MIN_FILAS_TARJETA, ORDEN_RIESGO, type ContextoPreguntas, type FilaPregunta } from "./preguntas-grupo";
+import { armarPreguntas, filaDePropuesta, MIN_FILAS_TARJETA, noAbreLista, ORDEN_RIESGO, type ContextoPreguntas, type FilaPregunta } from "./preguntas-grupo";
 
 let n = 0;
 function fila(desc: string, extra: Partial<FilaPregunta> = {}): FilaPregunta {
@@ -13,7 +13,7 @@ function fila(desc: string, extra: Partial<FilaPregunta> = {}): FilaPregunta {
   };
 }
 const muchas = (k: number, desc: string, extra: Partial<FilaPregunta> = {}) => Array.from({ length: k }, () => fila(desc, extra));
-const CTX: ContextoPreguntas = { mesa: "boleta", truncada: false, carril: "auto", marca: null, razonSocial: "Comercial Los Andes SpA" };
+const CTX: ContextoPreguntas = { mesa: "boleta", truncada: false, carril: "auto", marca: null, razonSocial: "Comercial Los Andes Puerto SpA" };
 const kinds = (r: ReturnType<typeof armarPreguntas>) => r.tarjetas.map((t) => t.kind);
 
 describe("qué filas se preguntan", () => {
@@ -60,7 +60,7 @@ describe("tarjetas", () => {
       ...muchas(3, "ABONO MERCADOPAGO"),
       ...muchas(3, "TRANSFERENCIA DE JUAN PEREZ"),
       ...muchas(3, "TRANSFERENCIA PRESTAMO DE TIO PEPE"),
-      ...muchas(3, "TRANSF DE COMERCIAL LOS ANDES"),
+      ...muchas(3, "TRANSF DE COMERCIAL LOS ANDES PUERTO"),
       ...muchas(3, "TRANSFERENCIA DE ROSA DIAZ"),
     ];
     const historial = [fila("TRANSFERENCIA DE ROSA DIAZ", { estado: "rechazado", id: "h1" })];
@@ -106,12 +106,53 @@ describe("lo que parece no-venta NUNCA cae en ventas", () => {
   });
 });
 
+describe("lo que el sistema clasificó como NO venta nunca se vende en grupo", () => {
+  it("las 4 glosas del revisor (honorarios, sueldo, donación, intereses) con nombre de persona", () => {
+    const filas = [
+      fila("TRANSFERENCIA DE JUAN PEREZ HONORARIOS", { tipo_propuesto: "boleta_honorarios" }),
+      fila("TRANSFERENCIA DE ANA ROJAS", { tipo_propuesto: "remuneracion" }),
+      fila("TRANSFERENCIA DE PEDRO DIAZ", { tipo_propuesto: "donacion" }),
+      fila("TRANSFERENCIA DE LUIS MORA", { tipo_propuesto: "interes" }),
+      ...muchas(3, "TRANSFERENCIA DE ROSA VERA", { tipo_propuesto: "no_comercial" }),
+      ...muchas(3, "TRANSFERENCIA DE TOMAS SILVA", { tipo_propuesto: "gasto" }),
+      ...muchas(3, "TRANSFERENCIA DE EVA LUNA", { tipo_propuesto: "dividendo" }),
+    ];
+    const r = armarPreguntas(filas, CTX);
+    expect(r.tarjetas.find((t) => t.kind === "ventas")).toBeUndefined();
+    const nv = r.tarjetas.find((t) => t.kind === "no_venta_probable")!;
+    expect(nv.ids).toHaveLength(filas.length);
+    expect(nv.respuestas.map((x) => x.accion)).toEqual(["no_venta", "mirar"]);
+  });
+});
+
+describe("cuenta propia: sin respuesta de un toque", () => {
+  it("muestra los nombres y obliga a marcar persona por persona", () => {
+    const r = armarPreguntas(muchas(3, "TRANSF DE AGRICOLA ANDES SUR"), { ...CTX, razonSocial: "Agricola Andes Sur SpA" });
+    const t = r.tarjetas[0];
+    expect(t.kind).toBe("propia");
+    expect(t.muestra).toBe("Agricola Andes Sur");
+    expect(t.respuestas.map((x) => x.accion)).toEqual(["algunas", "mirar"]);
+    expect(t.ventaPorDefecto).toBe(false);
+  });
+});
+
+describe("'No' en una tarjeta grande abre la lista", () => {
+  it("más de 3 personas → lista; 3 o menos → de un toque", () => {
+    const grande = armarPreguntas(["ANA ROJAS", "LUIS MORA", "EVA LUNA", "JUAN PEREZ"].flatMap((nom) => muchas(1, `TRANSFERENCIA DE ${nom}`)), CTX).tarjetas[0];
+    expect(noAbreLista(grande)).toBe(true);
+    const chica = armarPreguntas(["ANA ROJAS", "LUIS MORA", "EVA LUNA"].flatMap((nom) => muchas(1, `TRANSFERENCIA DE ${nom}`)), CTX).tarjetas[0];
+    expect(noAbreLista(chica)).toBe(false);
+  });
+});
+
 describe("P2P y el IVA", () => {
   it("cartola P2P: pregunta la excepción y NUNCA el IVA", () => {
     const r = armarPreguntas(muchas(4, "TRANSFERENCIA DE JUAN PEREZ"), { ...CTX, marca: "p2p_cripto" });
     const t = r.tarjetas[0];
     expect(t.pregunta).toBe("¿Alguna NO fue una venta?");
-    expect(t.respuestas.map((x) => x.accion)).toEqual(["venta", "algunas", "no_venta"]);
+    // sin doble negación: no hay "Ninguna fue venta"
+    expect(t.respuestas.map((x) => x.texto)).toEqual(["No, todas fueron ventas", "Sí, algunas"]);
+    expect(armarPreguntas(muchas(3, "ABONO MERCADOPAGO"), { ...CTX, marca: "p2p_cripto" }).tarjetas[0].respuestas.map((x) => x.accion)).toEqual(["venta", "algunas"]);
     expect(t.preguntaIva).toBe(false);
     expect(t.ventaPorDefecto).toBe(true);
   });
@@ -124,7 +165,8 @@ describe("P2P y el IVA", () => {
     expect(armarPreguntas(sinTipo, { ...CTX, carril: "afecto" }).tarjetas[0].preguntaIva).toBe(false);
     expect(armarPreguntas(sinTipo, { ...CTX, carril: "exento" }).tarjetas[0].preguntaIva).toBe(false);
     expect(armarPreguntas(muchas(3, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 }), CTX).tarjetas[0].preguntaIva).toBe(false);
-    expect(armarPreguntas(muchas(3, "TRANSFERENCIA DE JUAN PEREZ", { tipo_propuesto: "transferencia_p2p" }), CTX).tarjetas[0].preguntaIva).toBe(false);
+    // sin marca, el "p2p" del clasificador no es ley: se pregunta
+    expect(armarPreguntas(muchas(3, "TRANSFERENCIA DE JUAN PEREZ", { tipo_propuesto: "transferencia_p2p" }), CTX).tarjetas[0].preguntaIva).toBe(true);
   });
   it("las tarjetas que no venden nunca preguntan IVA", () => {
     const r = armarPreguntas(muchas(3, "PAGO LUZ", { tipo_flujo: "salida" }), CTX);

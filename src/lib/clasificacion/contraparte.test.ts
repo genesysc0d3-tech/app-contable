@@ -43,6 +43,8 @@ describe("RUT (módulo 11)", () => {
     expect(rutEnGlosa("TEF 12.345.678-4 MARIA")).toBeNull(); // DV malo
     expect(rutEnGlosa("OPERACION 123456785")).toBeNull(); // sin guion
     expect(rutEnGlosa("REF 0012345678-5X")).toBeNull();
+    // un número de operación con guion no es un RUT
+    for (const g of ["OP 12345678-5", "OPERACION 12345678-5", "N° 12345678-5", "FOLIO 12345678-5", "NRO: 12345678-5"]) expect(rutEnGlosa(g), g).toBeNull();
   });
 });
 
@@ -51,7 +53,7 @@ describe("plataformas de pago = canal", () => {
     for (const [g, clave] of [
       ["ABONO MERCADOPAGO 76.123", "MERCADOPAGO"], ["TRANSF MERCADO PAGO SPA", "MERCADOPAGO"], ["PAGO FLOW", "FLOW"],
       ["KHIPU TRANSFER", "KHIPU"], ["WEBPAY PLUS", "WEBPAY"], ["GETNET LIQ", "GETNET"], ["SUMUP PAYOUT", "SUMUP"],
-      ["BINANCE P2P", "BINANCE"], ["GLOBAL66 ENVIO", "GLOBAL66"], ["PAYPAL *VENTA", "PAYPAL"], ["MACH ABONO", "MACH"], ["TENPO ABONO", "TENPO"],
+      ["BINANCE P2P", "BINANCE"], ["MERCADOLIBRE LIQ", "MERCADOLIBRE"], ["MERCADO LIBRE VENTA", "MERCADOLIBRE"], ["GLOBAL66 ENVIO", "GLOBAL66"], ["PAYPAL *VENTA", "PAYPAL"], ["MACH ABONO", "MACH"], ["TENPO ABONO", "TENPO"],
     ] as const) expect(plataformaEnGlosa(g)?.clave, g).toBe(clave);
   });
   it("no confunde un apellido con una plataforma", () => {
@@ -72,6 +74,20 @@ describe("claveContraparte", () => {
   it("con y sin acento es la misma persona", () => {
     expect(claveContraparte("TRANSFERENCIA DE JOSÉ PÉREZ")?.clave).toBe(claveContraparte("TRANSF JOSE PEREZ")?.clave);
   });
+  it("glosas genéricas NO son personas (bancos, efectivo, parentescos, bonos…) → una por una", () => {
+    const genericas = [
+      "DEPOSITO EFECTIVO", "DEPOSITO EN EFECTIVO", "TRANSFERENCIA INTERBANCARIA", "TRASPASO DE FONDOS", "TRASPASO FONDOS CUENTA VISTA",
+      "ABONO CUENTA VISTA", "TRANSF BANCO DE CHILE", "TRANSF BANCOESTADO", "TRANSFERENCIA BANCO ESTADO", "TRANSF SANTANDER",
+      "TRANSF BCI", "TRANSF ITAU", "TRANSF SCOTIABANK", "TRANSF BICE", "TRANSF SECURITY", "TRANSF FALABELLA", "TRANSF RIPLEY",
+      "TRANSF BANCO INTERNACIONAL", "TRANSF CONSORCIO", "BONO GOBIERNO", "PAGO IFE", "ABONO BONO", "TRANSFERENCIA DE MAMA",
+      "TRANSF DE PAPA", "TRANSFERENCIA HIJO", "TRANSF HIJA", "TRANSF DE MAMÁ", "TRANSF A PAPÁ", "COMPRA DIVISAS",
+      "ABONO DEPOSITO", "DEPOSITO CHEQUE", "TRANSFERENCIA FONDOS", "ABONO INTERBANCARIO", "COMPRA EFECTIVO", "DEPOSITO VISTA",
+    ];
+    expect(genericas).toHaveLength(35);
+    for (const g of genericas) expect(claveContraparte(g), g).toBeNull();
+    // ...pero la persona detrás de la palabra genérica sí se reconoce
+    expect(claveContraparte("TRANSF BANCO ESTADO DE JUAN PEREZ")?.clave).toBe("nombre:JUAN PEREZ");
+  });
   it("sin nadie reconocible → null", () => {
     expect(claveContraparte("TRANSFERENCIA 0012345")).toBeNull();
     expect(claveContraparte("")).toBeNull();
@@ -80,14 +96,17 @@ describe("claveContraparte", () => {
 
 describe("cuenta propia y empresas", () => {
   it("la glosa nombra a la propia empresa", () => {
-    expect(pareceCuentaPropia("TRANSF DE COMERCIAL LOS ANDES", "Comercial Los Andes SpA")).toBe(true);
+    expect(pareceCuentaPropia("TRANSF DE AGRICOLA LOS ANDES", "Agricola Los Andes Sur SpA")).toBe(false);
+    expect(pareceCuentaPropia("TRANSF DE AGRICOLA ANDES SUR", "Agricola Andes Sur SpA")).toBe(true);
     expect(pareceCuentaPropia("TRASPASO CTA PROPIA", "Lo que sea SpA")).toBe(true);
     expect(pareceCuentaPropia("TRANSFERENCIA DE JUAN PEREZ", "Comercial Los Andes SpA")).toBe(false);
     // Solo palabras genéricas o muy cortas: no se puede saber → no se adivina.
     expect(pareceCuentaPropia("TRANSF INVERSIONES MV", "Inversiones MV SpA")).toBe(false);
-    // Con 3+ palabras propias basta que falte una.
-    expect(pareceCuentaPropia("TEF MARIA JOSE SOTO", "Maria Jose Soto Rojas EIRL")).toBe(true);
-    expect(pareceCuentaPropia("TEF MARIA SOTO", "Maria Jose Soto Rojas EIRL")).toBe(false);
+    // Nombre COMPLETO, nunca un apellido suelto ni "casi todo".
+    expect(pareceCuentaPropia("TEF MARIA JOSE SOTO ROJAS", "Maria Jose Soto Rojas EIRL")).toBe(true);
+    expect(pareceCuentaPropia("TEF MARIA JOSE SOTO", "Maria Jose Soto Rojas EIRL")).toBe(false);
+    expect(pareceCuentaPropia("TRANSF DE PEDRO SOTO", "Soto SpA")).toBe(false); // un token suelto nunca
+    expect(pareceCuentaPropia("TRANSF DE ANDES", "Comercial Los Andes SpA")).toBe(false);
   });
   it("forma jurídica en la glosa", () => {
     expect(pareceEmpresa("TRANSF DE AGRICOLA SUR SPA")).toBe(true);

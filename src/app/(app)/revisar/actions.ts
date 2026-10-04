@@ -17,7 +17,7 @@ import { esErrorCandadoBD } from "@/lib/emission/bloqueo-borrado";
 import { avisoSeQuedan, clasificarIntocables, contarIntocables, resumenRetroceso, type MotivoIntocable } from "@/lib/emission/propuestas-intocables";
 import { canalDeOrigen, nuevoLote, sello, type CanalDecision } from "@/lib/propuestas/sello";
 import { resumenPropuestasABorrar } from "@/lib/propuestas/resumen-borrado";
-import { deshacerRespuestaGrupo, ejecutarRespuestaGrupo, type ResultadoDeshacerGrupo, type ResultadoGrupo } from "@/lib/clasificacion/responder-grupo";
+import { deshacerRespuestaGrupo, ejecutarRespuestaGrupo, ultimoGrupoDeshacible, type ResultadoDeshacerGrupo, type ResultadoGrupo } from "@/lib/clasificacion/responder-grupo";
 
 const BATCH_SIZE = 50;
 
@@ -533,6 +533,13 @@ export async function deshacerGrupo(grupoId: unknown): Promise<ResultadoDeshacer
     revalidatePath("/massdte");
   }
   return r;
+}
+
+/** La última respuesta en grupo de la cartola que todavía se puede deshacer (Deshacer tras recargar). */
+export async function ultimoGrupo(documentoId: unknown): Promise<{ grupoId: string | null; filas: number }> {
+  const ctx = await getEmpresaAndService({ soloLectura: true });
+  if ("error" in ctx) return { grupoId: null, filas: 0 };
+  return ultimoGrupoDeshacible(ctx.sb, { empresaId: ctx.empresaId, userId: ctx.userId, soporte: ctx.soporte }, documentoId);
 }
 
 export async function rechazarPropuesta(propuestaId: string, origen?: string) {

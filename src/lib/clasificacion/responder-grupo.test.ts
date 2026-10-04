@@ -4,7 +4,7 @@
  * simulado) para ver el efecto real de cada escritura, no solo que se llamó.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deshacerRespuestaGrupo, ejecutarRespuestaGrupo, tipoDeVenta, validarRespuesta, type DepsGrupo } from "./responder-grupo";
+import { deshacerRespuestaGrupo, ejecutarRespuestaGrupo, tipoDeVenta, ultimoGrupoDeshacible, validarRespuesta, type DepsGrupo } from "./responder-grupo";
 import { esDecisionMirada } from "@/lib/ai/regla-evidencia";
 
 type Row = Record<string, unknown>;
@@ -25,6 +25,7 @@ function fakeSb() {
       let valores: Row = {};
       let single = false;
       let rango: [number, number] | null = null;
+      let orden: { col: string; asc: boolean } | null = null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const q: any = {
         select: () => q,
@@ -33,12 +34,13 @@ function fakeSb() {
         neq: (c: string, v: unknown) => { filtros.push((r) => r[c] !== v); return q; },
         in: (c: string, a: unknown[]) => { filtros.push((r) => a.includes(r[c])); return q; },
         is: (c: string, v: unknown) => { filtros.push((r) => (r[c] ?? null) === v); return q; },
-        order: () => q,
+        order: (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return q; },
         limit: () => q,
         range: (a: number, b: number) => { rango = [a, b]; return q; },
         maybeSingle: () => { single = true; return q; },
         then(ok: (v: unknown) => unknown) {
           const filas = (db[tabla] ??= []).filter((r) => filtros.every((f) => f(r)));
+          if (orden) { const o = orden; filas.sort((a, b) => (Number(a[o.col]) - Number(b[o.col])) * (o.asc ? 1 : -1)); }
           if (op === "update") {
             for (const r of filas) {
               const antes = { ...r };
@@ -50,13 +52,14 @@ function fakeSb() {
                   lote_id: r.decision_lote, lote_n: r.decision_lote_n, abierta: r.decision_abierta,
                   antes_estado: antes.estado, despues_estado: r.estado, antes_tipo_propuesto: antes.tipo_propuesto,
                   antes_tipo_dte: antes.tipo_dte, despues_tipo_dte: r.tipo_dte,
+                  documento_id: db.movimientos_raw.find((m) => m.id === r.movimiento_id)?.documento_id ?? null,
                 });
               }
             }
             return Promise.resolve({ error: null, count: filas.length }).then(ok);
           }
           const data = single ? filas[0] ?? null : rango ? filas.slice(rango[0], rango[1] + 1) : filas;
-          return Promise.resolve({ error: null, data }).then(ok);
+          return Promise.resolve({ error: null, data, count: filas.length }).then(ok);
         },
       };
       return q;
@@ -98,8 +101,8 @@ beforeEach(() => {
   };
 });
 
-const responder = (items: Array<{ ids: string[]; venta: boolean; tocada?: boolean }>, iva: string | null = null, documentoId = DOC) =>
-  ejecutarRespuestaGrupo(fakeSb() as never, ctx, { documentoId, items, iva }, deps);
+const responder = (items: Array<{ ids: string[]; venta: boolean; tocada?: boolean }>, iva: string | null = null, documentoId = DOC, grupoId?: string) =>
+  ejecutarRespuestaGrupo(fakeSb() as never, ctx, { documentoId, items, iva, ...(grupoId ? { grupoId } : {}) }, deps);
 
 describe("candados", () => {
   it("lo emitido queda intacto", async () => {
@@ -122,6 +125,19 @@ describe("candados", () => {
     expect([1, 2, 3, 4].map((k) => fila(k).estado)).toEqual(["aprobado", "pendiente", "pendiente", "pendiente"]);
     expect(fila(5).estado).toBe("listo");
     expect(r).toMatchObject({ ventas: 1, quedan: 4 });
+  });
+  it("no re-decide una fila ya lista (ni para rechazarla)", async () => {
+    propuesta(1, "TRANSFERENCIA DE JUAN PEREZ", { estado: "listo", tipo_dte: 41 });
+    const r = await responder([{ ids: [id(1)], venta: false }]);
+    expect(fila(1).estado).toBe("listo");
+    expect(r).toMatchObject({ noVentas: 0, quedan: 1 });
+  });
+  it("nunca vende lo que el sistema clasificó como NO venta (las 4 del revisor y más)", async () => {
+    const tipos = ["boleta_honorarios", "remuneracion", "donacion", "interes", "no_comercial", "dividendo", "gasto"];
+    tipos.forEach((t, i) => propuesta(i + 1, "TRANSFERENCIA DE JUAN PEREZ", { tipo_propuesto: t, tipo_dte: null }));
+    const r = await responder([{ ids: tipos.map((_, i) => id(i + 1)), venta: true }], "afecta");
+    expect(r.ventas).toBe(0);
+    expect(db.propuestas_ia.every((f) => f.estado === "pendiente" && f.tipo_dte == null)).toBe(true);
   });
   it("una fila de OTRO documento rechaza la respuesta entera (no se cambia nada)", async () => {
     propuesta(1, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });
@@ -165,7 +181,10 @@ describe("el tipo de una venta", () => {
     expect(fila(1)).toMatchObject({ estado: "listo", tipo_dte: 39, tipo_propuesto: "boleta", monto_neto: 10000, iva: 1900 });
   });
   it("tipoDeVenta: la exención por naturaleza manda", () => {
-    expect(tipoDeVenta({ tipo_propuesto: "transferencia_p2p", tipo_dte: 39 }, { carril: "afecto", p2p: false, iva: "afecta" })).toBe(41);
+    // sin la marca P2P de la cartola, el tipo "p2p" del clasificador no obliga 41
+    expect(tipoDeVenta({ tipo_propuesto: "transferencia_p2p", tipo_dte: 39 }, { carril: "afecto", p2p: false, iva: "afecta" })).toBe(39);
+    expect(tipoDeVenta({ tipo_propuesto: "transferencia_p2p", tipo_dte: null }, { carril: "auto", p2p: false, iva: null })).toBeNull();
+    expect(tipoDeVenta({ tipo_propuesto: "transferencia_p2p", tipo_dte: 39 }, { carril: "afecto", p2p: true, iva: "afecta" })).toBe(41);
     expect(tipoDeVenta({ tipo_propuesto: "exenta", tipo_dte: null }, { carril: "afecto", p2p: false, iva: null })).toBe(39);
     expect(tipoDeVenta({ tipo_propuesto: "exenta", tipo_dte: null }, { carril: "auto", p2p: false, iva: "depende" })).toBeNull();
   });
@@ -197,6 +216,19 @@ describe("reglas", () => {
     expect(aprender.mock.calls[0][1]).toMatchObject({ tipoDte: 41, canal: "check_grupo", propagar: false, nacioLote: r.grupoId, documentoId: DOC });
     expect(r.reglas).toBe(1);
   });
+  it("un 'Sí' a ciegas sobre más de 5 personas no enseña (lo tocado a mano sí)", async () => {
+    const nombres = ["JUAN PEREZ", "ANA ROJAS", "LUIS MORA", "EVA LUNA", "ROSA VERA", "TOMAS SILVA"];
+    let k = 0;
+    for (const nom of nombres) { propuesta(++k, `TRANSFERENCIA DE ${nom}`, { tipo_dte: 41 }); propuesta(++k, `TRANSFERENCIA DE ${nom}`, { tipo_dte: 41 }); }
+    await responder([{ ids: Array.from({ length: k }, (_, i) => id(i + 1)), venta: true }]);
+    expect(aprender).not.toHaveBeenCalled();
+  });
+  it("glosas genéricas no crean regla aunque se repitan", async () => {
+    propuesta(1, "DEPOSITO EFECTIVO", { tipo_dte: 41 });
+    propuesta(2, "DEPOSITO EFECTIVO", { tipo_dte: 41 });
+    await responder([{ ids: [id(1), id(2)], venta: true }]);
+    expect(aprender).not.toHaveBeenCalled();
+  });
   it("las plataformas no crean regla", async () => {
     propuesta(1, "ABONO MERCADOPAGO", { tipo_dte: 41 });
     propuesta(2, "ABONO MERCADOPAGO", { tipo_dte: 41 });
@@ -213,6 +245,26 @@ describe("reglas", () => {
 });
 
 describe("Deshacer", () => {
+  it("el grupo lo pone el navegador: con la conexión cortada igual se deshace (y Reintentar no duplica)", async () => {
+    const g = id(777);
+    propuesta(1, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });
+    propuesta(2, "TRANSFERENCIA DE ANA ROJAS", { tipo_dte: 41 });
+    const r = await responder([{ ids: [id(1), id(2)], venta: true }], null, DOC, g);
+    expect(r.grupoId).toBe(g);
+    const r2 = await responder([{ ids: [id(1), id(2)], venta: true }], null, DOC, g); // reintento
+    expect(r2.ventas).toBe(0);
+    expect(validarRespuesta({ documentoId: DOC, items: [{ ids: [id(1)], venta: true }], grupoId: "x" })).toHaveProperty("error");
+    expect((await deshacerRespuestaGrupo(fakeSb() as never, ctx, g, deps)).devueltas).toBe(2);
+  });
+  it("tras recargar: la última respuesta deshacible de la cartola (un deshacer no cuenta)", async () => {
+    for (const k of [1, 2, 3]) propuesta(k, "TRANSFERENCIA DE JUAN PEREZ", { tipo_dte: 41 });
+    const a = await responder([{ ids: [id(1)], venta: true }]);
+    const b = await responder([{ ids: [id(2), id(3)], venta: false }]);
+    expect(await ultimoGrupoDeshacible(fakeSb() as never, ctx, DOC)).toEqual({ grupoId: b.grupoId, filas: 2 });
+    await deshacerRespuestaGrupo(fakeSb() as never, ctx, b.grupoId, deps);
+    expect(await ultimoGrupoDeshacible(fakeSb() as never, ctx, DOC)).toEqual({ grupoId: a.grupoId, filas: 1 });
+    expect(await ultimoGrupoDeshacible(fakeSb() as never, ctx, OTRO_DOC)).toEqual({ grupoId: null, filas: 0 });
+  });
   it("devuelve cada fila a como estaba, NUNCA revive una aprobada, y apaga las reglas del grupo", async () => {
     propuesta(1, "TRANSFERENCIA DE JUAN PEREZ");
     propuesta(2, "TRANSFERENCIA DE JUAN PEREZ");

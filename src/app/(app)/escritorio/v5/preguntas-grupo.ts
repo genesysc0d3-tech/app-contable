@@ -29,7 +29,7 @@
  */
 import { claveContraparte, pareceCuentaPropia, pareceEmpresa, type TipoClave } from "@/lib/clasificacion/contraparte";
 import { detectaNoBoletar } from "@/lib/sii/clasificador-tipo";
-import { destino, destinoPropuesta, esExentoPorNaturaleza } from "@/lib/sii/destino";
+import { destino, destinoPropuesta } from "@/lib/sii/destino";
 import { terminadaDe, type BoletaEmbebida } from "./cartola-filas";
 
 export type KindTarjeta = "propia" | "no_venta_probable" | "sigue_igual" | "ventas" | "canal" | "salidas" | "empresas";
@@ -180,8 +180,12 @@ export function kindDeFila(f: FilaPregunta, razonSocial: string | null | undefin
   if (f.tipo_flujo === "salida") return "salidas";
   if (f.tipo_flujo !== "entrada") return null;
   if (pareceCuentaPropia(f.descripcion, razonSocial)) return "propia";
-  if (detectaNoBoletar(f.descripcion)) return "no_venta_probable";
+  // Lo que el sistema clasificó como NO venta (sueldo, honorarios, donación, interés,
+  // gasto…) o cuya glosa lo dice: nunca entra a una tarjeta que vende.
+  if (detectaNoBoletar(f.descripcion) || destino(f.tipo_propuesto) === "no_es_venta") return "no_venta_probable";
   if (destino(f.tipo_propuesto) === "factura" || pareceEmpresa(f.descripcion)) return "empresas";
+  // Solo una venta de boleta puede venderse en grupo.
+  if (destinoPropuesta(f) !== "boleta") return null;
   const c = claveDe(f);
   if (!c) return null;
   if (c.tipo === "canal") return "canal";
@@ -195,13 +199,14 @@ function textos(kind: KindTarjeta, n: number, personas: Persona[], p2p: boolean)
     case "propia":
       return {
         titulo: `${plural(n, "transferencia", "transferencias")} desde tus propias cuentas`,
-        pregunta: "Parece plata tuya que moviste entre cuentas. ¿Es así?",
-        respuestas: [{ accion: "no_venta", texto: "Sí, es plata mía" }, { accion: "mirar", texto: "Prefiero mirarlas" }],
+        pregunta: "Parece plata tuya que moviste entre cuentas. Márcalas persona por persona.",
+        // Sin respuesta de un toque: un apellido parecido no puede esconder ventas.
+        respuestas: [{ accion: "algunas", texto: "Revisar persona por persona" }, { accion: "mirar", texto: "Prefiero mirarlas" }],
         ventaPorDefecto: false,
       };
     case "no_venta_probable":
       return {
-        titulo: `${plural(n, "movimiento", "movimientos")} que parecen préstamos, sueldos o devoluciones`,
+        titulo: `${plural(n, "movimiento", "movimientos")} que no parecen ventas`,
         pregunta: "Esto normalmente no lleva boleta. ¿Es así?",
         respuestas: [{ accion: "no_venta", texto: "Sí, no son ventas" }, { accion: "mirar", texto: "Prefiero mirarlas" }],
         ventaPorDefecto: false,
@@ -222,10 +227,10 @@ function textos(kind: KindTarjeta, n: number, personas: Persona[], p2p: boolean)
         ? {
             titulo: `${plural(n, "transferencia", "transferencias")} de ${plural(np, "persona", "personas")}`,
             pregunta: "¿Alguna NO fue una venta?",
+            // Sin "Ninguna fue venta" (doble negación): lo que no fue venta se marca en la lista.
             respuestas: [
               { accion: "venta", texto: "No, todas fueron ventas" },
               { accion: "algunas", texto: "Sí, algunas" },
-              { accion: "no_venta", texto: "Ninguna fue venta" },
             ],
             ventaPorDefecto: true,
           }
@@ -246,7 +251,7 @@ function textos(kind: KindTarjeta, n: number, personas: Persona[], p2p: boolean)
         titulo: `${plural(n, "pago", "pagos")} que te llegaron por ${por}`,
         pregunta: p2p ? "¿Alguno NO fue una venta?" : "¿Son ventas tuyas?",
         respuestas: p2p
-          ? [{ accion: "venta", texto: "No, todos fueron ventas" }, { accion: "algunas", texto: "Sí, algunos" }, { accion: "no_venta", texto: "Ninguno fue venta" }]
+          ? [{ accion: "venta", texto: "No, todos fueron ventas" }, { accion: "algunas", texto: "Sí, algunos" }]
           : [{ accion: "venta", texto: "Sí, son ventas" }, { accion: "algunas", texto: "Algunos" }, { accion: "no_venta", texto: "No son ventas" }],
         ventaPorDefecto: true,
       };
@@ -266,6 +271,15 @@ function textos(kind: KindTarjeta, n: number, personas: Persona[], p2p: boolean)
         ventaPorDefecto: false,
       };
   }
+}
+
+/**
+ * "No" de un toque en una tarjeta de ventas grande (más de 3 personas) no rechaza todo:
+ * abre la lista con todas desmarcadas para que confirme persona por persona.
+ */
+export const MAX_PERSONAS_NO_DE_UN_TOQUE = 3;
+export function noAbreLista(t: Pick<Tarjeta, "kind" | "personas">): boolean {
+  return (t.kind === "ventas" || t.kind === "canal") && t.personas.length > MAX_PERSONAS_NO_DE_UN_TOQUE;
 }
 
 /** Respuestas que terminan en VENTA (para saber si hace falta la pregunta del IVA). */
@@ -317,7 +331,8 @@ export function armarPreguntas(filas: FilaPregunta[], ctx: ContextoPreguntas): R
     }
     const personas = [...porPersona.values()].sort((a, b) => b.ids.length - a.ids.length || b.total - a.total || a.etiqueta.localeCompare(b.etiqueta));
     const t = textos(kind, rows.length, personas, p2p);
-    const ventaSinTipo = rows.some((f) => f.tipo_dte == null && !esExentoPorNaturaleza(f.tipo_propuesto));
+    // Sin marca P2P/forex, ni el tipo "p2p" que puso el clasificador es ley: se pregunta.
+    const ventaSinTipo = rows.some((f) => f.tipo_dte == null);
     tarjetas.push({
       id: kind,
       kind,

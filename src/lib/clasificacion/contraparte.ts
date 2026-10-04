@@ -155,6 +155,9 @@ export function rutEnGlosa(descripcion: string | null | undefined): string | nul
   const re = /(?:^|[^\d.])(\d{1,2}\.\d{3}\.\d{3}|\d{7,8})\s?-\s?([\dkK])(?![\dA-Za-z])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(g))) {
+    // "OP 12345678-5", "N° 12345678-5", "FOLIO 12345678-5": un número de operación, no un RUT.
+    const antes = deAccent(g.slice(0, m.index + 1)).toUpperCase();
+    if (/\b(OP|OPER|OPERACION|N|NO|NRO|NUM|NUMERO|FOLIO|REF|COMPROBANTE|TRX|ID)\s*[.°º:#-]*\s*$/.test(antes)) continue;
     const ok = normalizarRut(`${m[1]}${m[2]}`);
     if (ok) return ok;
   }
@@ -166,6 +169,7 @@ export function rutEnGlosa(descripcion: string | null | undefined): string | nul
 /** Plataformas que juntan pagos de muchos compradores: la "contraparte" es el canal. */
 export const PLATAFORMAS: ReadonlyArray<{ clave: string; nombre: string; re: RegExp }> = [
   { clave: "MERCADOPAGO", nombre: "Mercado Pago", re: /\bMERCADO\s?PAGO\b|\bMERPAGO\b/ },
+  { clave: "MERCADOLIBRE", nombre: "Mercado Libre", re: /\bMERCADO\s?LIBRE\b/ },
   { clave: "FLOW", nombre: "Flow", re: /\bFLOW\b/ },
   { clave: "KHIPU", nombre: "Khipu", re: /\bKHIPU\b/ },
   { clave: "WEBPAY", nombre: "Webpay", re: /\bWEBPAY\b|\bTRANSBANK\b/ },
@@ -199,6 +203,30 @@ export interface ClaveContraparte {
   patron: string | null;
 }
 
+/**
+ * Palabras que, solas, NO nombran a una persona en una glosa: medios, bancos, programas
+ * del Estado, parentescos. Solo para AGRUPAR (Check agrupado): la clave de las reglas
+ * (extraerPatronContraparte) no cambia. Si al sacarlas no queda un nombre → una por una.
+ */
+const RUIDO_AGRUPAR = new Set<string>([
+  "efectivo", "interbancaria", "interbancario", "fondos", "fondo", "traspaso", "traspasos", "vista", "cuenta", "cuentas",
+  "chile", "estado", "santander", "bci", "itau", "scotiabank", "scotia", "bice", "security", "falabella", "ripley",
+  "internacional", "consorcio", "bancoestado", "edwards", "corpbanca", "coopeuch",
+  "bono", "bonos", "ife", "gobierno", "tesoreria", "subsidio",
+  "hijo", "hija", "mama", "papa", "mami", "papi",
+  "divisas", "divisa", "compra", "abono", "deposito", "depositos",
+]);
+
+/** Patrón para AGRUPAR: el de la regla menos RUIDO_AGRUPAR, con la misma exigencia de especificidad. */
+function patronParaAgrupar(patron: string | null): string | null {
+  if (!patron) return null;
+  const tokens = patron.split(" ").filter((t) => !RUIDO_AGRUPAR.has(deAccent(t).toLowerCase()));
+  if (tokens.length === 0) return null;
+  const especifico = tokens.length >= 2 || tokens[0].length >= 5;
+  const out = tokens.join(" ");
+  return especifico && deAccent(out).replace(/[^A-Z]/g, "").length >= 5 ? out : null;
+}
+
 function titulo(s: string): string {
   return s.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_m, esp: string, l: string) => esp + l.toUpperCase());
 }
@@ -217,9 +245,10 @@ export function claveContraparte(
   const patron = extra?.patron ?? null;
   const canal = plataformaEnGlosa(descripcion);
   if (canal) return { clave: `canal:${canal.clave}`, tipo: "canal", etiqueta: canal.nombre, patron };
+  const nombre = patronParaAgrupar(patron);
   const rut = rutEnGlosa(descripcion) ?? normalizarRut(receptorRut);
-  if (rut) return { clave: `rut:${rut}`, tipo: "rut", etiqueta: patron ? titulo(patron) : rut, patron };
-  if (patron) return { clave: `nombre:${deAccent(patron).toUpperCase()}`, tipo: "nombre", etiqueta: titulo(patron), patron };
+  if (rut) return { clave: `rut:${rut}`, tipo: "rut", etiqueta: nombre ? titulo(nombre) : rut, patron: nombre ? patron : null };
+  if (nombre) return { clave: `nombre:${deAccent(nombre).toUpperCase()}`, tipo: "nombre", etiqueta: titulo(nombre), patron };
   return null;
 }
 
@@ -244,18 +273,18 @@ function tokensLetras(s: string | null | undefined): string[] {
 
 /**
  * ¿La glosa nombra a la PROPIA empresa? (plata movida entre sus cuentas). Conservador:
- * las palabras propias de la razón social (sin genéricas ni forma jurídica) deben sumar
- * ≥5 letras y aparecer TODAS en la glosa (con 3 o más palabras, basta que falte una).
- * También la frase explícita "cuenta propia" / "entre cuentas".
+ * el nombre COMPLETO — todas las palabras propias de la razón social, sin genéricas ni
+ * forma jurídica, al menos 2 y ≥5 letras — debe aparecer en la glosa. Un apellido suelto
+ * nunca basta (una clienta "Soto" no es la empresa "Maria Soto EIRL"). También la frase
+ * explícita "cuenta propia" / "entre cuentas".
  */
 export function pareceCuentaPropia(descripcion: string | null | undefined, razonSocial: string | null | undefined): boolean {
   const g = deAccent(String(descripcion ?? "")).toUpperCase();
   if (/\b(CUENTA PROPIA|CTA PROPIA|ENTRE CUENTAS|MISMA CUENTA|MISMO TITULAR)\b/.test(g)) return true;
   const propias = tokensLetras(razonSocial).filter((t) => t.length >= 2 && !GENERICAS_EMPRESA.has(t.toLowerCase()));
-  if (propias.length === 0 || propias.join("").length < 5) return false;
+  if (propias.length < 2 || propias.join("").length < 5) return false;
   const enGlosa = new Set(tokensLetras(descripcion));
-  const calzan = propias.filter((t) => enGlosa.has(t)).length;
-  return calzan === propias.length || (propias.length >= 3 && calzan >= propias.length - 1);
+  return propias.every((t) => enGlosa.has(t));
 }
 
 /** ¿La glosa trae una forma jurídica (SPA, LTDA, S.A., EIRL)? → probablemente una empresa. */

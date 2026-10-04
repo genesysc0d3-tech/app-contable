@@ -164,6 +164,8 @@ export async function aprenderReglaDesdeResolucion(
           nombre: nombreReglaAprendida(args.tipoDte), veces_acunada: (existente.veces_acunada ?? 0) + 1,
           veces_corregida: 0, veces_confirmada: 0, evidencia_desde: new Date().toISOString(),
           aprendida_bajo_marca: senalMarca, confianza: 0.95, deshecha_por: null,
+          // Renació en una respuesta en grupo: Deshacer esa respuesta la vuelve a apagar.
+          ...(args.nacioLote ? { nacio_lote: args.nacioLote } : {}),
         };
       } else if (existente.tipo_dte == null || existente.tipo_dte === args.tipoDte) {
         // Misma enseñanza: suma acuñación (no uso). La señal de marca no se pisa.

@@ -10,12 +10,12 @@
 // Piel: la misma de las filas del editor (.ce-row, ./cartola-piel). Botones de igual
 // peso (ninguna respuesta "empujada"). En móvil (<480px) se apilan a 44px.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/Toast";
-import { responderGrupo, deshacerGrupo } from "../../revisar/actions";
+import { responderGrupo, deshacerGrupo, ultimoGrupo } from "../../revisar/actions";
 import { CE_CSS } from "./cartola-piel";
 import {
-  armarPreguntas, filaDePropuesta, MAX_TARJETAS_VISIBLES,
+  armarPreguntas, filaDePropuesta, MAX_TARJETAS_VISIBLES, noAbreLista,
   type AccionRespuesta, type Persona, type PropuestaParaPreguntas, type Tarjeta,
 } from "./preguntas-grupo";
 
@@ -27,10 +27,10 @@ type Item = { ids: string[]; venta: boolean; tocada: boolean };
 
 type Fase =
   | { fase: "pregunta" }
-  | { fase: "lista_personas"; venta: Record<string, boolean>; filas: Record<string, boolean>; tocadas: string[]; abiertas: string[]; buscar: string }
+  | { fase: "lista_personas"; venta: Record<string, boolean>; filas: Record<string, boolean>; tocadas: string[]; abiertas: string[]; buscar: string; marcar?: boolean }
   | { fase: "pregunta_iva"; items: Item[]; volver: Fase }
   | { fase: "aplicando" }
-  | { fase: "error"; mensaje: string; items: Item[]; iva: Iva | null };
+  | { fase: "error"; mensaje: string; items: Item[]; iva: Iva | null; grupoId: string };
 
 type Hecha = { id: string; titulo: string; texto: string; grupoId: string | null; estado: "hecha" | "deshaciendo" | "deshecha" };
 
@@ -85,10 +85,14 @@ export default function PreguntasGrupo({
   onUnaPorUna: () => void;
 }) {
   const { toast } = useToast();
+  // Filas ya respondidas: fuera de las preguntas hasta que la mesa recargue (no se
+  // vuelve a mostrar la misma tarjeta con los mismos ids mientras llega el reload).
+  const [respondidas, setRespondidas] = useState<{ base: PropuestaParaPreguntas[]; ids: ReadonlySet<string> }>({ base: propuestas, ids: new Set() });
+  const yaRespondidas = respondidas.base === propuestas ? respondidas.ids : null;
   const res = useMemo(() => armarPreguntas(
-    propuestas.map((p) => filaDePropuesta(p, aMediasIds)),
+    propuestas.filter((p) => !yaRespondidas?.has(p.id)).map((p) => filaDePropuesta(p, aMediasIds)),
     { mesa: "boleta", truncada, carril, marca, razonSocial, historial: historial.map((p) => filaDePropuesta(p, aMediasIds)) },
-  ), [propuestas, historial, aMediasIds, truncada, carril, marca, razonSocial]);
+  ), [propuestas, yaRespondidas, historial, aMediasIds, truncada, carril, marca, razonSocial]);
   const [fases, setFases] = useState<Record<string, Fase>>({});
   const [hechas, setHechas] = useState<Hecha[]>([]);
   const faseDe = (id: string): Fase => fases[id] ?? { fase: "pregunta" };
@@ -98,11 +102,28 @@ export default function PreguntasGrupo({
     return n;
   });
 
-  async function enviar(t: Tarjeta, items: Item[], iva: Iva | null) {
+  // Deshacer sobrevive a una recarga: la última respuesta en grupo de esta cartola que
+  // todavía se puede deshacer (una lectura al abrir la pantalla).
+  useEffect(() => {
+    let vivo = true;
+    ultimoGrupo(documentoId).then((u) => {
+      if (!vivo || !u.grupoId) return;
+      setHechas((prev) => prev.some((h) => h.grupoId === u.grupoId) ? prev : [...prev, {
+        id: `ultimo-${u.grupoId}`, titulo: "Tu última respuesta en grupo",
+        texto: u.filas === 1 ? "Cambió 1 movimiento." : `Cambió ${u.filas} movimientos.`, grupoId: u.grupoId!, estado: "hecha",
+      }]);
+    }).catch(() => { /* sin Deshacer previo: no pasa nada */ });
+    return () => { vivo = false; };
+  }, [documentoId]);
+
+  async function enviar(t: Tarjeta, items: Item[], iva: Iva | null, grupoPrevio?: string) {
+    // El grupo nace ACÁ: si se corta la conexión a mitad de una respuesta grande, lo que
+    // alcanzó a guardarse igual se puede deshacer (y Reintentar reusa el mismo grupo).
+    const grupoId = grupoPrevio ?? globalThis.crypto.randomUUID();
     poner(t.id, { fase: "aplicando" });
     try {
-      const r = await responderGrupo({ documentoId, items, iva });
-      if (r.error && r.ventas + r.noVentas === 0) { poner(t.id, { fase: "error", mensaje: r.error, items, iva }); return; }
+      const r = await responderGrupo({ documentoId, items, iva, grupoId });
+      if (r.error && r.ventas + r.noVentas === 0) { poner(t.id, { fase: "error", mensaje: r.error, items, iva, grupoId }); return; }
       const partes: string[] = [];
       if (r.ventas > 0) partes.push(`${r.ventas === 1 ? "1 quedó lista" : `${r.ventas} quedaron listas`} para boleta`);
       if (r.noVentas > 0) partes.push(`${r.noVentas} sin boleta`);
@@ -110,11 +131,24 @@ export default function PreguntasGrupo({
       if (r.quedan > 0) texto += ` ${r.quedan === 1 ? "1 queda" : `${r.quedan} quedan`} para mirar una por una.`;
       if (r.reglas > 0) texto += ` La próxima vez ${r.reglas === 1 ? "esa persona va" : "esas personas van"} directo.`;
       if (r.error) toast(r.error, "error");
-      setHechas((prev) => [{ id: `${t.id}-${Date.now()}`, titulo: t.titulo, texto, grupoId: r.grupoId ?? null, estado: "hecha" }, ...prev]);
+      setHechas((prev) => [{ id: `${t.id}-${Date.now()}`, titulo: t.titulo, texto, grupoId: r.grupoId ?? grupoId, estado: "hecha" }, ...prev.filter((h) => h.grupoId !== grupoId)]);
+      setRespondidas((prev) => ({ base: propuestas, ids: new Set([...(prev.base === propuestas ? prev.ids : []), ...items.flatMap((i) => i.ids)]) }));
       poner(t.id, null);
       onAction();
     } catch {
-      poner(t.id, { fase: "error", mensaje: "Error de conexión. Intenta de nuevo.", items, iva });
+      poner(t.id, { fase: "error", mensaje: "Se cortó la conexión. Puede que una parte se haya guardado: reintenta o deshazlo.", items, iva, grupoId });
+    }
+  }
+
+  async function deshacerError(t: Tarjeta, grupoId: string) {
+    try {
+      const r = await deshacerGrupo(grupoId);
+      // "No encontramos esa respuesta" = no alcanzó a guardarse nada: no hay qué deshacer.
+      toast(r.error ? "No se había guardado nada: quedó como antes." : "Deshecho: quedó como antes.");
+      poner(t.id, null);
+      onAction();
+    } catch {
+      toast("Error de conexión. Intenta de nuevo.", "error");
     }
   }
 
@@ -143,6 +177,13 @@ export default function PreguntasGrupo({
       const venta: Record<string, boolean> = {};
       for (const p of t.personas) venta[p.clave] = p.antesNoVenta ? false : t.ventaPorDefecto;
       poner(t.id, { fase: "lista_personas", venta, filas: {}, tocadas: [], abiertas: [], buscar: "" });
+      return;
+    }
+    if (accion === "no_venta" && noAbreLista(t)) {
+      // Muchas personas: "No" no rechaza todo de un toque; abre la lista sin ninguna marcada.
+      const venta: Record<string, boolean> = {};
+      for (const p of t.personas) venta[p.clave] = false;
+      poner(t.id, { fase: "lista_personas", venta, filas: {}, tocadas: [], abiertas: [], buscar: "", marcar: true });
       return;
     }
     const items: Item[] = [{ ids: t.ids, venta: accion === "venta", tocada: false }];
@@ -216,7 +257,8 @@ export default function PreguntasGrupo({
                 else void enviar(t, items, null);
               }}
               onIva={(items, iva) => void enviar(t, items, iva)}
-              onReintentar={(items, iva) => void enviar(t, items, iva)}
+              onReintentar={(items, iva, grupoId) => void enviar(t, items, iva, grupoId)}
+              onDeshacerError={(grupoId) => void deshacerError(t, grupoId)}
             />
           ))}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "14px 22px 0", fontSize: 11.5, color: "var(--text3)" }}>
@@ -241,14 +283,15 @@ function Vacio({ texto, onUnaPorUna }: { texto: string; onUnaPorUna: () => void 
   );
 }
 
-function TarjetaPregunta({ t, f, onResponder, onFase, onListo, onIva, onReintentar }: {
+function TarjetaPregunta({ t, f, onResponder, onFase, onListo, onIva, onReintentar, onDeshacerError }: {
   t: Tarjeta;
   f: Fase;
   onResponder: (a: AccionRespuesta) => void;
   onFase: (f: Fase | null) => void;
   onListo: (f: Extract<Fase, { fase: "lista_personas" }>) => void;
   onIva: (items: Item[], iva: Iva) => void;
-  onReintentar: (items: Item[], iva: Iva | null) => void;
+  onReintentar: (items: Item[], iva: Iva | null, grupoId: string) => void;
+  onDeshacerError: (grupoId: string) => void;
 }) {
   const riesgo = t.kind === "propia" || t.kind === "no_venta_probable" || t.kind === "sigue_igual";
   return (
@@ -299,8 +342,8 @@ function TarjetaPregunta({ t, f, onResponder, onFase, onListo, onIva, onReintent
         <>
           <div role="alert" style={{ fontSize: 12.5, color: "var(--red)", fontWeight: 600 }}>{f.mensaje}</div>
           <div className="pg-btns">
-            <button className="pg-btn" onClick={() => onReintentar(f.items, f.iva)}>Reintentar</button>
-            <button className="pg-btn" onClick={() => onFase(null)}>Volver a la pregunta</button>
+            <button className="pg-btn" onClick={() => onReintentar(f.items, f.iva, f.grupoId)}>Reintentar</button>
+            <button className="pg-btn" onClick={() => onDeshacerError(f.grupoId)}>Deshacer</button>
           </div>
         </>
       )}
@@ -323,7 +366,7 @@ function ListaPersonas({ t, f, onFase, onListo }: {
   return (
     <>
       <div className="pg-preg" style={{ fontSize: 13.5 }}>
-        {t.ventaPorDefecto ? "Desmarca las que NO fueron venta." : "Marca las que SÍ fueron venta."}
+        {t.ventaPorDefecto && !f.marcar ? "Desmarca las que NO fueron venta." : "Marca las que SÍ fueron venta."}
       </div>
       {t.personas.length > 15 && (
         <input className="pg-in" type="search" placeholder="Buscar por nombre" value={f.buscar} onChange={(e) => set({ buscar: e.target.value })} aria-label="Buscar persona" />

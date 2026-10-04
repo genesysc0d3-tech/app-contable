@@ -6,12 +6,14 @@
  * El navegador manda SOLO qué filas son venta y cuáles no (y si las tocó a mano). Todo
  * lo demás se decide acá, con los mismos candados que el resto de Check:
  *  - lo emitido / a medias / en vuelo no se toca (clasificarIntocables);
- *  - solo filas pendiente/editado/listo — NUNCA aprobado (ya está en Emitir);
+ *  - solo filas pendiente/editado — ni listo (ya decidida) ni aprobado (en Emitir);
  *  - solo filas de ESTA cartola y de esta empresa, mesa boleta (otra cartola → error);
  *  - un «¿?» (arriendo/comisión, conflicto regla↔marca) no se decide en grupo;
- *  - venta solo en abonos y nunca sobre lo que parece no-venta (detectaNoBoletar);
- *  - emisor exento en boletas, marca P2P/forex de la cartola (leída ACÁ, no del
- *    navegador) o tipo exento por naturaleza → 41, sin excepción;
+ *  - venta solo en abonos de destino "boleta" (nunca una fila que el sistema clasificó
+ *    como no-venta: sueldo, honorarios, donación…) y nunca sobre lo que parece no-venta
+ *    (detectaNoBoletar);
+ *  - emisor exento en boletas o marca P2P/forex de la cartola (leída ACÁ, no del
+ *    navegador) → 41, sin excepción;
  *  - venta = tipo + montos + 'listo' en UNA escritura; no venta = 'rechazado'.
  *
  * Sello: canal 'check_grupo', lote = UN uuid por respuesta (el "grupoId" con que se
@@ -27,16 +29,19 @@ import { clasificarIntocables as clasificarIntocablesReal } from "@/lib/emission
 import { aprenderReglaDesdeResolucion } from "@/lib/ai/aprender-regla";
 import { deshacerRegla as deshacerReglaReal } from "@/lib/ai/reglas-historial";
 import { carrilEsExento, tipoDelCarril } from "@/lib/sii/tipo-por-carril";
-import { destino, destinoPropuesta, esAfectoPorTipo, esExentoPorNaturaleza } from "@/lib/sii/destino";
+import { destinoPropuesta, esAfectoPorTipo, esExentoPorNaturaleza } from "@/lib/sii/destino";
 import { detectaNoBoletar } from "@/lib/sii/clasificador-tipo";
 import { derivarMontosDte } from "@/lib/sii/montos-dte";
-import { extraerPatronContraparte, plataformaEnGlosa } from "./contraparte";
+import { claveContraparte, extraerPatronContraparte } from "./contraparte";
 import { nuevoLote, sello } from "@/lib/propuestas/sello";
 
 const TROZO = 50;
 /** Una respuesta no puede traer más filas que esto (una cartola grande cabe holgada). */
 export const MAX_FILAS_RESPUESTA = 2000;
-const ESTADOS_TOCABLES = ["pendiente", "editado", "listo"] as const;
+/** Una respuesta en grupo solo decide filas con juicio pendiente (no re-decide una lista). */
+const ESTADOS_TOCABLES = ["pendiente", "editado"] as const;
+/** Un "Sí" a ciegas sobre más personas que esto no enseña reglas (solo lo tocado a mano). */
+export const MAX_PERSONAS_REGLA_CIEGA = 5;
 const MARCAS_EXENTAS = new Set(["p2p_cripto", "forex_divisas"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -51,6 +56,8 @@ export interface ItemRespuesta {
 
 export interface RespuestaGrupo {
   documentoId: string;
+  /** Lo genera el navegador ANTES de enviar: si se corta la conexión, igual se deshace. */
+  grupoId?: string;
   items: ItemRespuesta[];
   /** Respuesta a "¿Lo que vendes lleva IVA?" (si se preguntó). */
   iva?: IvaRespuesta | null;
@@ -118,7 +125,8 @@ export function validarRespuesta(r: unknown): { ok: RespuestaGrupo } | { error: 
   if (vistos.size === 0) return { error: "No llegó ninguna respuesta." };
   if (vistos.size > MAX_FILAS_RESPUESTA) return { error: "Son demasiadas filas para una sola respuesta." };
   const iva = x.iva === "afecta" || x.iva === "exenta" || x.iva === "depende" ? x.iva : null;
-  return { ok: { documentoId: x.documentoId, items, iva } };
+  if (x.grupoId !== undefined && (typeof x.grupoId !== "string" || !UUID.test(x.grupoId))) return { error: "Respuesta inválida." };
+  return { ok: { documentoId: x.documentoId, items, iva, ...(x.grupoId ? { grupoId: x.grupoId } : {}) } };
 }
 
 /**
@@ -129,7 +137,9 @@ export function tipoDeVenta(
   f: { tipo_propuesto: string | null; tipo_dte: number | null },
   c: { carril: string; p2p: boolean; iva: IvaRespuesta | null | undefined },
 ): 39 | 41 | null {
-  if (c.carril === "exento" || c.p2p || esExentoPorNaturaleza(f.tipo_propuesto)) return 41;
+  // La exención "por naturaleza" (p2p/cripto/forex) manda SOLO con la marca de la
+  // cartola: sin ella, ese tipo es lo que adivinó el clasificador, no la ley.
+  if (c.carril === "exento" || c.p2p) return 41;
   if (f.tipo_dte === 39 || f.tipo_dte === 41) return f.tipo_dte;
   if (c.iva === "afecta") return 39;
   if (c.iva === "exenta") return 41;
@@ -206,13 +216,13 @@ export async function ejecutarRespuestaGrupo(
   if ("error" in sep) return vacio(sep.error);
   const intocables = new Set(sep.intocables.keys());
 
-  const grupoId = nuevoLote();
+  const grupoId = r.grupoId ?? nuevoLote();
   const loteN = ids.length;
   const selloDe = (abierta: boolean) => sello("check_grupo", { usuarioId: ctx.userId, loteN, lote: grupoId, abierta, soporte: ctx.soporte });
 
   let ventas = 0;
   let noVentas = 0;
-  const vendidas: Array<{ fila: Fila; mov: Mov; tipo: 39 | 41 }> = [];
+  const vendidas: Array<{ fila: Fila; mov: Mov; tipo: 39 | 41; tocada: boolean }> = [];
   const noVenta: { mirada: string[]; ciega: string[] } = { mirada: [], ciega: [] };
 
   for (const f of filas) {
@@ -224,7 +234,7 @@ export async function ejecutarRespuestaGrupo(
     if (!d.venta) { (d.tocada ? noVenta.mirada : noVenta.ciega).push(f.id); continue; }
     if (mov.tipo_flujo !== "entrada") continue;
     if (detectaNoBoletar(mov.descripcion)) continue;
-    if (destino(f.tipo_propuesto) === "factura") continue;
+    if (destinoPropuesta(f) !== "boleta") continue; // no-venta clasificada o factura: una por una
     const tipo = tipoDeVenta(f, { carril, p2p, iva: r.iva });
     if (tipo == null) continue;
     const afecta = tipo === 39;
@@ -237,7 +247,7 @@ export async function ejecutarRespuestaGrupo(
       .eq("id", f.id)
       .in("estado", [...ESTADOS_TOCABLES]);
     if (error) return { error: "Se guardó una parte. Intenta de nuevo con lo que falta.", grupoId, ventas, noVentas, quedan: ids.length - ventas - noVentas, reglas: 0 };
-    if ((count ?? 0) > 0) { ventas++; vendidas.push({ fila: f, mov, tipo }); }
+    if ((count ?? 0) > 0) { ventas++; vendidas.push({ fila: f, mov, tipo, tocada: d.tocada }); }
   }
 
   for (const [abierta, lista] of [[true, noVenta.mirada], [false, noVenta.ciega]] as const) {
@@ -257,9 +267,16 @@ export async function ejecutarRespuestaGrupo(
   // respuesta y un solo tipo. Best-effort: lo decidido ya quedó guardado.
   let reglas = 0;
   try {
-    const porPatron = new Map<string, Array<{ fila: Fila; mov: Mov; tipo: 39 | 41 }>>();
+    // Un "Sí" a ciegas sobre muchas personas no enseña: solo cuentan las tocadas a mano.
+    const personasCiegas = new Set(vendidas.filter((x) => !x.tocada).map((x) => claveContraparte(x.mov.descripcion)?.clave ?? `?${x.fila.id}`));
+    const ciegasEnsenan = personasCiegas.size <= MAX_PERSONAS_REGLA_CIEGA;
+    const porPatron = new Map<string, Array<{ fila: Fila; mov: Mov; tipo: 39 | 41; tocada: boolean }>>();
     for (const x of vendidas) {
-      if (plataformaEnGlosa(x.mov.descripcion)) continue;
+      if (!x.tocada && !ciegasEnsenan) continue;
+      // Solo personas reconocibles (nombre o RUT con nombre): ni plataformas ni glosas
+      // genéricas ("DEPOSITO EFECTIVO", "TRANSF DE MAMA").
+      const c = claveContraparte(x.mov.descripcion);
+      if (!c || c.tipo === "canal" || !c.patron) continue;
       const pat = extraerPatronContraparte(x.mov.descripcion);
       if (!pat) continue;
       porPatron.set(pat.patron, [...(porPatron.get(pat.patron) ?? []), x]);
@@ -349,7 +366,9 @@ export async function deshacerRespuestaGrupo(
   if ("error" in sep) return nada(sep.error);
 
   const lote = nuevoLote();
-  const selloDeshacer = sello("check_grupo", { usuarioId: ctx.userId, loteN: ids.length, lote, abierta: false, soporte: ctx.soporte });
+  // abierta=null marca el gesto como DESHACER (no una respuesta): ultimoGrupo lo salta y
+  // la evidencia no lo cuenta como mirado.
+  const selloDeshacer = sello("check_grupo", { usuarioId: ctx.userId, loteN: ids.length, lote, abierta: null, soporte: ctx.soporte });
   let devueltas = 0;
   for (const f of filas) {
     const e = antes.get(f.id)!;
@@ -388,4 +407,43 @@ export async function deshacerRespuestaGrupo(
     } catch { /* best-effort */ }
   }
   return { ok: true, devueltas, sinTocar: ids.length - devueltas, reglas };
+}
+
+// ── Deshacer después de recargar ────────────────────────────────────────────────
+
+/**
+ * La última respuesta en grupo de esta cartola que TODAVÍA se puede deshacer (alguna de
+ * sus filas sigue con su sello). Lee el log: los deshacer (abierta null) no cuentan.
+ */
+export async function ultimoGrupoDeshacible(
+  sb: SbMin,
+  ctx: CtxGrupo,
+  documentoId: unknown,
+): Promise<{ grupoId: string | null; filas: number }> {
+  const nada = { grupoId: null, filas: 0 };
+  if (typeof documentoId !== "string" || !UUID.test(documentoId)) return nada;
+  const { data } = await sb
+    .from("propuesta_decisiones")
+    .select("lote_id, abierta")
+    .eq("empresa_id", ctx.empresaId)
+    .eq("documento_id", documentoId)
+    .eq("canal", "check_grupo")
+    .eq("accion", "cambio")
+    .order("id", { ascending: false })
+    .range(0, 199);
+  const lotes: string[] = [];
+  for (const e of (data ?? []) as Array<{ lote_id: string | null; abierta: boolean | null }>) {
+    if (e.lote_id && e.abierta !== null && !lotes.includes(e.lote_id)) lotes.push(e.lote_id);
+  }
+  // La más reciente que todavía tenga filas con su sello (las ya deshechas no cuentan).
+  for (const lote of lotes.slice(0, 5)) {
+    const { count } = await sb
+      .from("propuestas_ia")
+      .select("id", { count: "exact", head: true })
+      .eq("empresa_id", ctx.empresaId)
+      .eq("decision_lote", lote)
+      .in("estado", ["pendiente", "editado", "listo", "rechazado"]);
+    if ((count ?? 0) > 0) return { grupoId: lote, filas: count ?? 0 };
+  }
+  return nada;
 }

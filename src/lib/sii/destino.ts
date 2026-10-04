@@ -2,7 +2,7 @@
  * DESTINO ÚNICO de una propuesta: ¿este movimiento es una venta, y de qué carril?
  *
  * ── Reglas tributarias de massDTE ──────────────────────────────────────────────
- * Versión: 2026-10-04.1
+ * Versión: 2026-10-06.1
  * Dueño:   Matías (contador). Pendiente validar: arriendo y comisión (ver abajo).
  * Regla:   ante la duda → "preguntar" (requiere acción del cliente), NUNCA adivinar.
  * ───────────────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@
 export type Destino = "boleta" | "factura" | "no_es_venta" | "preguntar";
 
 /** Versión de las reglas tributarias (subirla al cambiar cualquier tabla de abajo). */
-export const VERSION_REGLAS_TRIBUTARIAS = "2026-10-04.1";
+export const VERSION_REGLAS_TRIBUTARIAS = "2026-10-06.1";
 
 /**
  * Tabla canónica: CADA tipo_propuesto válido (los del CHECK de propuestas_ia) con su
@@ -108,9 +108,10 @@ export function esExentoPorTipo(tipo: string | null | undefined): boolean {
 }
 
 /**
- * Ventas exentas POR NATURALEZA (por ley: P2P, cripto, divisas — Of. SII 963/2018). A
- * diferencia de "exenta" (que puede ser solo la suposición del clasificador), ninguna
- * configuración del emisor ni respuesta de la clienta las vuelve afectas.
+ * Tipos que el CLASIFICADOR marcó como exentos por su naturaleza (P2P, cripto, divisas).
+ * Ojo: es lo que clasificó el sistema, no la ley — solo obligan 41 cuando la cartola
+ * trae la marca P2P/forex (decisión de la clienta al subirla). Dueño: Matías.
+ * 2026-10-06.1: se agrega esta tabla (Check agrupado conserva este tipo al vender en 41).
  */
 export const TIPOS_EXENTOS_POR_NATURALEZA = [
   "transferencia_p2p",
